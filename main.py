@@ -1,20 +1,17 @@
 """
 Backend Python per la Generazione Gratuita di Piante tramite AI.
-Ospitabile gratuitamente su:
- - Hugging Face Spaces (Docker / FastAPI SDK)
- - Render.com (Web Service Gratuito)
+Adatto al nuovo frontend "Apple Style" con planimetrie architettoniche dettagliate.
 """
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import math
 
 app = FastAPI(
-    title="Open FloorPlan Generator API",
-    description="API Gratuita basata su algoritmi di layout procedurale e Modelli AI Open-Source",
-    version="1.0.0"
+    title="Planify AI - FloorPlan Generator API",
+    description="Generatore di layout architettonici e posizionamento arredi con esportazione vettoriale",
+    version="2.0.0"
 )
 
 # Abilita le chiamate dal Frontend Vercel (CORS)
@@ -25,6 +22,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- PYDANTIC MODELS (Definizione della struttura dati) ---
 
 class PlanRequest(BaseModel):
     width: float
@@ -41,94 +40,178 @@ class Room(BaseModel):
     w: float
     h: float
     color: str
-    border: str
 
-class FurnitureItem(BaseModel):
-    name: str
+class Wall(BaseModel):
     x: float
     y: float
+    w: float
+    h: float
+
+class Door(BaseModel):
+    x: float
+    y: float
+    w: float
+    rot: float
+    openDir: int
+
+class Window(BaseModel):
+    x: float
+    y: float
+    w: float
+    rot: float
+
+class FurnitureItem(BaseModel):
     type: str
+    x: float
+    y: float
+    w: float
+    h: float
+    rot: float
 
 class PlanResponse(BaseModel):
     dimensions: dict
     svgWidth: float
     svgHeight: float
+    scale: float
+    wallThickness: float
     rooms: List[Room]
+    walls: List[Wall]
+    doors: List[Door]
+    windows: List[Window]
     furniture: List[FurnitureItem]
+
 
 @app.get("/")
 def read_root():
     return {
         "status": "online",
-        "message": "AI Floor Plan Backend operational. Send POST requests to /generate-plan"
+        "engine": "Architectural Generator v2",
+        "message": "AI Floor Plan Backend operativo."
     }
 
 @app.post("/generate-plan", response_model=PlanResponse)
 def generate_floor_plan(request: PlanRequest):
     """
-    Genera la disposizione ottimizzata in base alle dimensioni ricevute.
-    Se integrato con modelli AI come HouseDiffusion o Graph2Plan, qui avviene l'inference del modello.
+    Algoritmo procedurale (Predisposto per AI):
+    Calcola la suddivisione ottimale dello spazio, erige i muri, apre varchi (porte/finestre)
+    e posiziona gli arredi in base alla tipologia di ambiente.
     """
     try:
-        w = max(2.0, request.width)
-        l = max(2.0, request.length)
-        scale = 25.0  # pixel per meter scale factor
+        # Assicuriamoci che non vengano inserite misure troppo piccole
+        w = max(3.0, request.width)
+        l = max(3.0, request.length)
+        
+        # Parametri di visualizzazione per il frontend vettoriale
+        scale = 45.0
+        wt = 0.2  # Spessore dei muri reali (20 cm)
 
-        # Algoritmo di Generazione procedurale dei vani (Adattabile ad AI Inference)
         rooms = []
+        walls = []
+        doors = []
+        windows = []
         furniture = []
 
-        if request.room_type == "single-room" or request.num_rooms == 1:
-            rooms.append(Room(
-                id=1, name="Stanza Principale",
-                x=0, y=0, w=w, h=l,
-                color="rgba(59, 130, 246, 0.15)", border="#3b82f6"
-            ))
-            furniture.append(FurnitureItem(name="Scrivania", x=w*0.1, y=l*0.1, type="desk"))
-            furniture.append(FurnitureItem(name="Letto", x=w*0.6, y=l*0.6, type="bed"))
+        # LOGICA 1: Stanza Singola / Ufficio
+        if request.room_type in ["single-room", "open-space", "office"] or request.num_rooms == 1:
+            rooms = [Room(id=1, name="Open Space", x=0, y=0, w=w, h=l, color="#f8fafc")]
+            
+            # 4 Muri perimetrali
+            walls = [
+                Wall(x=0, y=0, w=w, h=wt),          # Nord
+                Wall(x=0, y=l-wt, w=w, h=wt),       # Sud
+                Wall(x=0, y=0, w=wt, h=l),          # Ovest
+                Wall(x=w-wt, y=0, w=wt, h=l),       # Est
+            ]
+            
+            # Porta d'ingresso
+            doors = [Door(x=w/2 - 0.45, y=l-wt, w=0.9, rot=0, openDir=-1)]
+            
+            # Finestre ampie
+            windows = [
+                Window(x=w*0.2, y=0, w=w*0.6, rot=0), # Grande vetrata a nord
+            ]
 
+            if request.room_type == "office":
+                furniture = [
+                    FurnitureItem(type="table", x=w*0.3, y=l*0.3, w=1.6, h=0.8, rot=0),
+                    FurnitureItem(type="table", x=w*0.3, y=l*0.6, w=1.6, h=0.8, rot=0),
+                    FurnitureItem(type="sofa", x=w*0.7, y=l*0.1, w=1.8, h=0.9, rot=90),
+                ]
+            else:
+                furniture = [
+                    FurnitureItem(type="bed", x=wt, y=l*0.2, w=1.8, h=2.1, rot=0),
+                    FurnitureItem(type="sofa", x=w*0.5, y=l*0.6, w=2.2, h=0.9, rot=0),
+                    FurnitureItem(type="tv", x=w*0.5, y=l*0.9, w=1.5, h=0.3, rot=0),
+                    FurnitureItem(type="kitchen_counter", x=w-wt-0.6, y=wt, w=0.6, h=2.5, rot=0),
+                ]
+
+        # LOGICA 2: Appartamento Completo Multi-stanza
         else:
-            # Suddivisione razionale standard per Appartamenti
-            rooms.append(Room(
-                id=1, name="Soggiorno / Living",
-                x=0, y=0, w=w*0.6, h=l*0.5,
-                color="rgba(59, 130, 246, 0.15)", border="#3b82f6"
-            ))
-            rooms.append(Room(
-                id=2, name="Cucina",
-                x=w*0.6, y=0, w=w*0.4, h=l*0.4,
-                color="rgba(16, 185, 129, 0.15)", border="#10b981"
-            ))
-            rooms.append(Room(
-                id=3, name="Camera da Letto",
-                x=0, y=l*0.5, w=w*0.5, h=l*0.5,
-                color="rgba(139, 92, 246, 0.15)", border="#8b5cf6"
-            ))
-            rooms.append(Room(
-                id=4, name="Bagno",
-                x=w*0.5, y=l*0.4, w=w*0.5, h=l*0.3,
-                color="rgba(245, 158, 11, 0.15)", border="#f59e0b"
-            ))
+            # Calcolo le proporzioni per i divisori interni
+            cx = w * 0.55  # Divisorio centrale verticale
+            cy_living = l * 0.55 # Divisorio orizzontale zona giorno
+            cy_bath = l * 0.45   # Divisorio orizzontale bagni
 
-            if request.num_rooms > 4:
-                rooms.append(Room(
-                    id=5, name="Studio / Ingresso",
-                    x=w*0.5, y=l*0.7, w=w*0.5, h=l*0.3,
-                    color="rgba(107, 114, 128, 0.15)", border="#6b7280"
-                ))
+            rooms = [
+                Room(id=1, name="Soggiorno", x=0, y=0, w=cx, h=cy_living, color="#f8fafc"),
+                Room(id=2, name="Cucina", x=cx, y=0, w=w-cx, h=cy_bath, color="#f8fafc"),
+                Room(id=3, name="Camera", x=0, y=cy_living, w=cx, h=l-cy_living, color="#f8fafc"),
+                Room(id=4, name="Bagno", x=cx, y=cy_bath, w=w-cx, h=(l-cy_bath)*0.5, color="#f8fafc"),
+                Room(id=5, name="Ingresso", x=cx, y=cy_bath+((l-cy_bath)*0.5), w=w-cx, h=(l-cy_bath)*0.5, color="#f8fafc"),
+            ]
 
-            # Arredi di prova inseriti nelle posizioni calcolate
-            furniture.extend([
-                FurnitureItem(name="Divano", x=w*0.1, y=l*0.1, type="sofa"),
-                FurnitureItem(name="Tavolo", x=w*0.65, y=l*0.1, type="table"),
-                FurnitureItem(name="Letto Matrimoniale", x=w*0.1, y=l*0.6, type="bed"),
-            ])
+            # Generazione strutturale Muri
+            walls = [
+                Wall(x=0, y=0, w=w, h=wt),                # Nord (Perimetro)
+                Wall(x=0, y=l-wt, w=w, h=wt),             # Sud (Perimetro)
+                Wall(x=0, y=0, w=wt, h=l),                # Ovest (Perimetro)
+                Wall(x=w-wt, y=0, w=wt, h=l),             # Est (Perimetro)
+                Wall(x=cx, y=0, w=wt, h=l),               # Divisorio Verticale Centrale
+                Wall(x=0, y=cy_living, w=cx, h=wt),       # Divisorio Orizzontale Camera
+                Wall(x=cx, y=cy_bath, w=w-cx, h=wt),      # Divisorio Orizzontale Cucina/Bagno
+                Wall(x=cx, y=cy_bath+((l-cy_bath)*0.5), w=w-cx, h=wt), # Divisorio Orizzontale Bagno/Ingresso
+            ]
 
+            # Porte (Varchi di 90cm = 0.9m)
+            doors = [
+                Door(x=cx - 0.9, y=l*0.75 - wt, w=0.9, rot=0, openDir=-1),  # Ingresso->Soggiorno
+                Door(x=wt, y=cy_living - wt, w=0.9, rot=0, openDir=-1),      # Soggiorno->Camera
+                Door(x=cx + wt, y=cy_bath - 0.9, w=0.9, rot=90, openDir=1),  # Ingresso->Bagno
+            ]
+
+            # Finestre
+            windows = [
+                Window(x=w*0.2, y=0, w=1.5, rot=0),          # Soggiorno
+                Window(x=w*0.7, y=0, w=1.2, rot=0),          # Cucina
+                Window(x=0, y=l*0.75, w=1.2, rot=90),        # Camera
+                Window(x=w-wt, y=cy_living, w=0.8, rot=90),  # Bagno
+            ]
+
+            # Arredamento avanzato e dimensionato per ogni stanza
+            furniture = [
+                # Camera
+                FurnitureItem(type="bed", x=wt*2, y=cy_living + wt*2, w=1.8, h=2.1, rot=0),
+                # Soggiorno
+                FurnitureItem(type="sofa", x=wt*2, y=wt*2, w=2.2, h=0.9, rot=0),
+                FurnitureItem(type="tv", x=wt*2, y=cy_living*0.7, w=1.5, h=0.3, rot=0),
+                # Cucina
+                FurnitureItem(type="table", x=cx + (w-cx)*0.2, y=cy_bath*0.2, w=1.6, h=0.9, rot=0),
+                FurnitureItem(type="kitchen_counter", x=cx + wt, y=wt, w=0.6, h=cy_bath*0.8, rot=0),
+                # Bagno
+                FurnitureItem(type="bath", x=cx + wt, y=cy_bath + wt, w=1.7, h=0.8, rot=0)
+            ]
+
+        # Costruisci il payload da inviare al front-end
         return PlanResponse(
             dimensions={"width": w, "length": l},
             svgWidth=w * scale,
             svgHeight=l * scale,
+            scale=scale,
+            wallThickness=wt * scale,
             rooms=rooms,
+            walls=walls,
+            doors=doors,
+            windows=windows,
             furniture=furniture
         )
 
