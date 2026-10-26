@@ -19,10 +19,13 @@ export default function App() {
   const [roomType, setRoomType] = useState('apartment');
   const [roomsCount, setRoomsCount] = useState(3);
   const [stylePreference, setStylePreference] = useState('modern');
-  const [backendUrl, setBackendUrl] = useState('');
+  
+  // Legge l'URL dal file .env o da Vercel, altrimenti lascia vuoto
+  const [backendUrl, setBackendUrl] = useState(import.meta.env.VITE_BACKEND_URL || '');
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+
   const [generatedPlan, setGeneratedPlan] = useState(null);
   const [error, setError] = useState(null);
 
