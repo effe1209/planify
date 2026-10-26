@@ -627,6 +627,7 @@ def _place_media_free(P: Placer, room: Room) -> bool:
         for w, h in dims + ((1.8, 0.9), (0.9, 1.8)):
             sofa = P.place_free(room, "sofa", w, h, near=near, gap=0.3, zone_gap=0.3, step=0.1)
             if sofa:
+                sofa.facing = OPP[tv.facing]
                 return True
         P.remove(tv)
     return False
@@ -1078,7 +1079,9 @@ def _export_opening(lay: Layout, o: Opening, is_door: bool) -> dict:
     if is_door:
         room = lay.room(o.swing_into)
         pos = room.rect.cy > o.line if o.orient == "h" else room.rect.cx > o.line
-        d["openDir"] = 1 if pos else -1
+        dirn = 1 if pos else -1
+        # il frontend usa rotate(rot): con rot=90 l'asse locale +y punta verso -x, quindi si inverte
+        d["openDir"] = dirn if o.orient == "h" else -dirn
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items()}
 
 
@@ -1090,7 +1093,11 @@ def generate(width: float, length: float, room_type: str = "apartment",
     Wn, Ln = (L0, W0) if transposed else (W0, L0)
     palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
     n = int(clamp(num_rooms, 1, 8))
-    rt = (room_type or "apartment").lower()
+    rt = (room_type or "apartment").strip().lower()
+    if rt in ("ufficio", "office", "workspace", "coworking"):
+        rt = "office"
+    elif rt in ("open-space", "open_space", "openspace", "loft", "monolocale", "studio"):
+        rt = "open-space"
 
     if rt == "office":
         lay = layout_office(Wn, Ln, n_closed=max(1, n - 1))
@@ -1153,7 +1160,8 @@ def to_svg(plan: dict) -> str:
             x0 = w["x"] * s - (t if ROT90_PIVOT_AT_WALL_RIGHT else 0)
             out.append(f'<rect x="{x0}" y="{w["y"] * s}" width="{t}" height="{w["w"] * s}" fill="#7dd3fc" stroke="#0369a1"/>')
     for d in plan["doors"]:
-        dr, w = d["openDir"], d["w"] * s
+        dr = d["openDir"] if d["rot"] == 0 else -d["openDir"]
+        w = d["w"] * s
         if d["rot"] == 0:
             x, y = d["x"] * s, d["y"] * s
             yc = y + t / 2
