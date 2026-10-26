@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Maximize2, 
   Home, 
@@ -13,6 +13,25 @@ import {
   Loader2,
   Info
 } from 'lucide-react';
+
+// Disegna un arredo (letto, divano) nella posizione canonica (schienale/testata in alto)
+// e lo ruota in base a `facing`, il lato verso cui è rivolto (N/E/S/W) calcolato dal backend.
+const ROT_BY_FACING = { S: 0, N: 180, E: -90, W: 90 };
+function Oriented({ item, scale, children }) {
+  const sw = item.w * scale;
+  const sh = item.h * scale;
+  const facing = item.facing || 'S';
+  const sideways = facing === 'E' || facing === 'W';
+  const cw = sideways ? sh : sw;
+  const ch = sideways ? sw : sh;
+  const cx = item.x * scale + sw / 2;
+  const cy = item.y * scale + sh / 2;
+  return (
+    <g transform={`translate(${cx},${cy}) rotate(${ROT_BY_FACING[facing] ?? 0}) translate(${-cw / 2},${-ch / 2})`}>
+      {children(cw, ch)}
+    </g>
+  );
+}
 
 export default function App() {
   const [dimensions, setDimensions] = useState({ width: 8, length: 10 });
@@ -37,83 +56,74 @@ export default function App() {
     "Rifinitura dettagli architettonici..."
   ];
 
-  // Generatore di Planimetrie Architettoniche Dettagliate
-  const generateDetailedLayout = () => {
-    const w = parseFloat(dimensions.width);
-    const l = parseFloat(dimensions.length);
-    const scale = 45; // Moltiplicatore per ingrandire la pianta
-    const wt = 0.2; // Spessore muri in metri (20 cm)
+  const svgRef = useRef(null);
 
-    return {
-      dimensions: { width: w, length: l },
-      svgWidth: w * scale,
-      svgHeight: l * scale,
-      scale: scale,
-      wallThickness: wt * scale,
-      rooms: [
-        { id: 1, name: 'Soggiorno', x: 0, y: 0, w: w * 0.55, h: l * 0.55, color: '#f8fafc' },
-        { id: 2, name: 'Cucina', x: w * 0.55, y: 0, w: w * 0.45, h: l * 0.45, color: '#f8fafc' },
-        { id: 3, name: 'Camera', x: 0, y: l * 0.55, w: w * 0.55, h: l * 0.45, color: '#f8fafc' },
-        { id: 4, name: 'Bagno', x: w * 0.55, y: l * 0.45, w: w * 0.45, h: l * 0.3, color: '#f8fafc' },
-        { id: 5, name: 'Ingresso', x: w * 0.55, y: l * 0.75, w: w * 0.45, h: l * 0.25, color: '#f8fafc' },
-      ],
-      walls: [
-        // Perimetrali
-        { x: 0, y: 0, w: w, h: wt }, // Nord
-        { x: 0, y: l-wt, w: w, h: wt }, // Sud
-        { x: 0, y: 0, w: wt, h: l }, // Ovest
-        { x: w-wt, y: 0, w: wt, h: l }, // Est
-        // Interni
-        { x: w*0.55, y: 0, w: wt, h: l }, // Verticale centrale
-        { x: 0, y: l*0.55, w: w*0.55, h: wt }, // Orizzontale camera
-        { x: w*0.55, y: l*0.45, w: w*0.45, h: wt }, // Orizzontale cucina/bagno
-        { x: w*0.55, y: l*0.75, w: w*0.45, h: wt }, // Orizzontale bagno/ingresso
-      ],
-      doors: [
-        { x: w*0.55 - 0.9, y: l*0.75 - wt, w: 0.9, rot: 0, openDir: -1 }, // Ingresso-Soggiorno
-        { x: wt, y: l*0.55 - wt, w: 0.9, rot: 0, openDir: -1 }, // Camera
-        { x: w*0.55 + wt, y: l*0.45 - 0.9, w: 0.9, rot: 90, openDir: 1 }, // Bagno
-      ],
-      windows: [
-        { x: w*0.2, y: 0, w: 1.5, rot: 0 }, // Soggiorno
-        { x: w*0.7, y: 0, w: 1.2, rot: 0 }, // Cucina
-        { x: 0, y: l*0.75, w: 1.2, rot: 90 }, // Camera
-        { x: w-wt, y: l*0.55, w: 0.8, rot: 90 }, // Bagno
-      ],
-      furniture: [
-        { type: 'bed', x: w*0.1, y: l*0.65, w: 1.8, h: 2.1, rot: 0 },
-        { type: 'sofa', x: w*0.1, y: l*0.1, w: 2.2, h: 0.9, rot: 0 },
-        { type: 'tv', x: w*0.1, y: l*0.4, w: 1.5, h: 0.3, rot: 0 },
-        { type: 'table', x: w*0.65, y: l*0.15, w: 1.6, h: 0.9, rot: 0 },
-        { type: 'kitchen_counter', x: w*0.55 + wt, y: wt, w: 0.6, h: 3, rot: 0 },
-        { type: 'bath', x: w*0.6, y: l*0.45 + wt, w: 1.7, h: 0.8, rot: 0 }
-      ]
-    };
-  };
-
+  // Chiamata reale al backend (Render). Nessun fallback "finto": se fallisce lo dice.
   const handleGenerate = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
-    setLoadingStep(0);
     setGeneratedPlan(null);
 
-    // Animazione progressiva di caricamento (4 step)
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      currentStep++;
-      if (currentStep > 3) {
-        clearInterval(interval);
-        // Simuliamo la risposta dopo aver fatto finta di chiamare l'API
-        setGeneratedPlan(generateDetailedLayout());
-        setIsLoading(false);
-        if (!backendUrl) {
-          setError('Nessun Backend collegato. Mostro la simulazione procedurale locale.');
-        }
-      } else {
-        setLoadingStep(currentStep);
+    const base = backendUrl.trim().replace(/\/+$/, '');
+    if (!base) {
+      setError("Inserisci l'URL del backend nel campo 'Connessione API' (oppure imposta VITE_BACKEND_URL su Vercel e rifai il deploy).");
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadingStep(0);
+    const interval = setInterval(() => setLoadingStep((st) => Math.min(st + 1, 3)), 800);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000); // Render gratuito può impiegare ~60s a svegliarsi
+
+    try {
+      const res = await fetch(`${base}/generate-plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          width: parseFloat(dimensions.width),
+          length: parseFloat(dimensions.length),
+          room_type: roomType,
+          num_rooms: Number(roomsCount),
+          style: stylePreference,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const j = await res.json();
+          detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+        } catch { /* risposta non JSON */ }
+        throw new Error(`HTTP ${res.status}${detail ? ' - ' + detail : ''}`);
       }
-    }, 800);
+      const plan = await res.json();
+      setGeneratedPlan(plan);
+      if (plan.notes && plan.notes.length) setError(plan.notes.join(' · '));
+    } catch (err) {
+      setError(
+        err.name === 'AbortError'
+          ? 'Il backend non ha risposto entro 90 secondi. Riprova: su Render gratuito la prima richiesta può essere lenta.'
+          : `Impossibile contattare il backend (${err.message}). Controlla l'URL e che il servizio Render sia attivo.`
+      );
+    } finally {
+      clearInterval(interval);
+      clearTimeout(timeout);
+      setIsLoading(false);
+    }
+  };
+
+  // Esporta davvero l'SVG
+  const handleDownload = () => {
+    if (!svgRef.current) return;
+    const xml = new XMLSerializer().serializeToString(svgRef.current);
+    const blob = new Blob([xml], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'planimetria.svg';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -131,7 +141,7 @@ export default function App() {
         </div>
         <div className="flex items-center space-x-2 bg-gray-100/80 px-3 py-1.5 rounded-full text-[13px] font-medium text-gray-500 border border-gray-200/50">
           <Cpu className="w-3.5 h-3.5 text-blue-500" />
-          <span>Local Engine Active</span>
+          <span>{backendUrl ? 'Engine collegato' : 'Backend non configurato'}</span>
         </div>
       </header>
 
@@ -151,7 +161,7 @@ export default function App() {
                 <div className="flex-1 relative">
                   <span className="absolute top-2 left-3 text-[11px] text-gray-400">Larghezza</span>
                   <input
-                    type="number" min="3" max="50" step="0.5" required
+                    type="number" min="5" max="60" step="0.5" required
                     value={dimensions.width}
                     onChange={(e) => setDimensions({ ...dimensions, width: e.target.value })}
                     className="w-full bg-gray-50/50 border border-gray-200 rounded-xl pt-6 pb-2 px-3 text-[15px] text-[#1D1D1F] font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -161,7 +171,7 @@ export default function App() {
                 <div className="flex-1 relative">
                   <span className="absolute top-2 left-3 text-[11px] text-gray-400">Lunghezza</span>
                   <input
-                    type="number" min="3" max="50" step="0.5" required
+                    type="number" min="5" max="60" step="0.5" required
                     value={dimensions.length}
                     onChange={(e) => setDimensions({ ...dimensions, length: e.target.value })}
                     className="w-full bg-gray-50/50 border border-gray-200 rounded-xl pt-6 pb-2 px-3 text-[15px] text-[#1D1D1F] font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -192,13 +202,13 @@ export default function App() {
 
                 <div className="bg-gray-50/50 border border-gray-200 rounded-xl p-3">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-[13px] text-gray-600">Vani</span>
+                    <span className="text-[13px] text-gray-600">Locali principali</span>
                     <span className="text-[13px] font-semibold">{roomsCount}</span>
                   </div>
                   <input
                     type="range" min="1" max="6"
                     value={roomsCount}
-                    onChange={(e) => setRoomsCount(e.target.value)}
+                    onChange={(e) => setRoomsCount(Number(e.target.value))}
                     className="w-full accent-blue-500 cursor-pointer"
                   />
                 </div>
@@ -277,6 +287,8 @@ export default function App() {
               {/* Viewport Planimetria */}
               <div className="bg-white border border-gray-200/60 rounded-3xl p-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)] overflow-auto max-w-full relative group">
                 <svg
+                  ref={svgRef}
+                  xmlns="http://www.w3.org/2000/svg"
                   width={Math.max(generatedPlan.svgWidth + 60, 400)}
                   height={Math.max(generatedPlan.svgHeight + 60, 400)}
                   className="bg-white"
@@ -298,40 +310,107 @@ export default function App() {
                       );
                     })}
 
-                    {/* Arredamento Dettagliato */}
+                    {/* Arredamento */}
                     {generatedPlan.furniture.map((item, idx) => {
-                      const sx = item.x * generatedPlan.scale;
-                      const sy = item.y * generatedPlan.scale;
-                      const sw = item.w * generatedPlan.scale;
-                      const sh = item.h * generatedPlan.scale;
-                      
+                      const sc = generatedPlan.scale;
+                      const sx = item.x * sc;
+                      const sy = item.y * sc;
+                      const sw = item.w * sc;
+                      const sh = item.h * sc;
+
                       if (item.type === 'bed') {
                         return (
-                          <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
-                            <rect width={sw} height={sh} fill="#e5e5ea" stroke="#d1d1d6" strokeWidth="1.5" rx="3" />
-                            <rect x={sw*0.1} y={sh*0.05} width={sw*0.35} height={sh*0.2} fill="#fff" stroke="#d1d1d6" rx="2" />
-                            <rect x={sw*0.55} y={sh*0.05} width={sw*0.35} height={sh*0.2} fill="#fff" stroke="#d1d1d6" rx="2" />
-                            <rect x={sw*0.05} y={sh*0.3} width={sw*0.9} height={sh*0.65} fill="#f4f4f5" stroke="#d1d1d6" rx="3" />
-                          </g>
+                          <Oriented key={`furn-${idx}`} item={item} scale={sc}>
+                            {(w, h) => (
+                              <>
+                                <rect width={w} height={h} fill="#e5e5ea" stroke="#d1d1d6" strokeWidth="1.5" rx="3" />
+                                {w > 40 ? (
+                                  <>
+                                    <rect x={w*0.1} y={h*0.05} width={w*0.35} height={h*0.2} fill="#fff" stroke="#d1d1d6" rx="2" />
+                                    <rect x={w*0.55} y={h*0.05} width={w*0.35} height={h*0.2} fill="#fff" stroke="#d1d1d6" rx="2" />
+                                  </>
+                                ) : (
+                                  <rect x={w*0.15} y={h*0.05} width={w*0.7} height={h*0.2} fill="#fff" stroke="#d1d1d6" rx="2" />
+                                )}
+                                <rect x={w*0.05} y={h*0.3} width={w*0.9} height={h*0.65} fill="#f4f4f5" stroke="#d1d1d6" rx="3" />
+                              </>
+                            )}
+                          </Oriented>
                         );
                       }
                       if (item.type === 'sofa') {
                         return (
-                          <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
-                            <rect width={sw} height={sh} fill="#f5f5f7" stroke="#c7c7cc" strokeWidth="1.5" rx="4" />
-                            <rect x="0" y="0" width={sw} height={sh*0.3} fill="#e5e5ea" stroke="#c7c7cc" rx="2" />
-                          </g>
+                          <Oriented key={`furn-${idx}`} item={item} scale={sc}>
+                            {(w, h) => (
+                              <>
+                                <rect width={w} height={h} fill="#f5f5f7" stroke="#c7c7cc" strokeWidth="1.5" rx="4" />
+                                <rect width={w} height={h*0.3} fill="#e5e5ea" stroke="#c7c7cc" rx="2" />
+                              </>
+                            )}
+                          </Oriented>
                         );
                       }
                       if (item.type === 'table') {
                         return (
                           <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
                             <rect width={sw} height={sh} fill="#fff" stroke="#a1a1a6" strokeWidth="1.5" rx="2" />
-                            {/* Sedie */}
-                            <circle cx={sw*0.25} cy={-5} r="4" fill="#d1d1d6" />
-                            <circle cx={sw*0.75} cy={-5} r="4" fill="#d1d1d6" />
-                            <circle cx={sw*0.25} cy={sh+5} r="4" fill="#d1d1d6" />
-                            <circle cx={sw*0.75} cy={sh+5} r="4" fill="#d1d1d6" />
+                            {sw > 1.3 * sc && (
+                              <>
+                                <circle cx={sw*0.25} cy={-5} r="4" fill="#d1d1d6" />
+                                <circle cx={sw*0.75} cy={-5} r="4" fill="#d1d1d6" />
+                                <circle cx={sw*0.25} cy={sh+5} r="4" fill="#d1d1d6" />
+                                <circle cx={sw*0.75} cy={sh+5} r="4" fill="#d1d1d6" />
+                              </>
+                            )}
+                          </g>
+                        );
+                      }
+                      if (item.type === 'desk') {
+                        return <rect key={`furn-${idx}`} x={sx} y={sy} width={sw} height={sh} fill="#fff" stroke="#a1a1a6" strokeWidth="1.2" rx="2" />;
+                      }
+                      if (item.type === 'toilet') {
+                        return (
+                          <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
+                            <rect width={sw} height={sh} fill="#fff" stroke="#a1a1a6" strokeWidth="1.2" rx="3" />
+                            <ellipse cx={sw/2} cy={sh/2} rx={sw*0.32} ry={sh*0.32} fill="#f4f4f5" stroke="#c7c7cc" />
+                          </g>
+                        );
+                      }
+                      if (item.type === 'sink') {
+                        return (
+                          <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
+                            <rect width={sw} height={sh} fill="#fff" stroke="#a1a1a6" strokeWidth="1.2" rx="3" />
+                            <ellipse cx={sw/2} cy={sh/2} rx={sw*0.28} ry={sh*0.28} fill="#e8f1fb" stroke="#c7c7cc" />
+                          </g>
+                        );
+                      }
+                      if (item.type === 'shower') {
+                        return (
+                          <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
+                            <rect width={sw} height={sh} fill="#eef5fc" stroke="#a1a1a6" strokeWidth="1.2" />
+                            <line x1="0" y1="0" x2={sw} y2={sh} stroke="#c7c7cc" />
+                            <line x1={sw} y1="0" x2="0" y2={sh} stroke="#c7c7cc" />
+                            <circle cx={sw/2} cy={sh/2} r="3" fill="#a1a1a6" />
+                          </g>
+                        );
+                      }
+                      if (item.type === 'kitchen_counter') {
+                        return (
+                          <g key={`furn-${idx}`} transform={`translate(${sx},${sy})`}>
+                            <rect width={sw} height={sh} fill="#f4f4f5" stroke="#c7c7cc" strokeWidth="1.2" />
+                            {sw >= sh ? (
+                              <>
+                                <circle cx={sw*0.2} cy={sh/2} r={Math.min(6, sh*0.2)} fill="none" stroke="#a1a1a6" />
+                                <circle cx={sw*0.32} cy={sh/2} r={Math.min(6, sh*0.2)} fill="none" stroke="#a1a1a6" />
+                                <rect x={sw*0.6} y={sh*0.2} width={sw*0.22} height={sh*0.6} fill="#e8f1fb" stroke="#c7c7cc" rx="2" />
+                              </>
+                            ) : (
+                              <>
+                                <circle cx={sw/2} cy={sh*0.2} r={Math.min(6, sw*0.2)} fill="none" stroke="#a1a1a6" />
+                                <circle cx={sw/2} cy={sh*0.32} r={Math.min(6, sw*0.2)} fill="none" stroke="#a1a1a6" />
+                                <rect x={sw*0.2} y={sh*0.6} width={sw*0.6} height={sh*0.22} fill="#e8f1fb" stroke="#c7c7cc" rx="2" />
+                              </>
+                            )}
                           </g>
                         );
                       }
@@ -385,7 +464,7 @@ export default function App() {
 
                 {/* Tasto Download in overlay su hover */}
                 <button
-                  onClick={() => alert('Planimetria esportata in formato SVG.')}
+                  onClick={handleDownload}
                   className="absolute bottom-6 right-6 bg-white/90 backdrop-blur border border-gray-200 text-[#1D1D1F] p-3 rounded-2xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50"
                   title="Esporta"
                 >
