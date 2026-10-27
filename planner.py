@@ -41,9 +41,23 @@ FLIP_Y = {"N": "S", "S": "N"}
 
 PALETTES = {
     "modern": {"living": "#f8fafc", "kitchen": "#f1f5f9", "bed": "#f8fafc", "bath": "#e0f2fe",
-               "corridor": "#e2e8f0", "office": "#f8fafc", "meeting": "#f1f5f9", "study": "#f1f5f9"},
+               "corridor": "#e2e8f0", "office": "#f8fafc", "meeting": "#f1f5f9", "study": "#f1f5f9",
+               "hotel_room": "#f8fafc"},
     "classic": {"living": "#fdf6e3", "kitchen": "#fef3c7", "bed": "#fef9ef", "bath": "#e7f0f7",
-                "corridor": "#efe7d6", "office": "#fdf6e3", "meeting": "#f5ecd7", "study": "#f5ecd7"},
+                "corridor": "#efe7d6", "office": "#fdf6e3", "meeting": "#f5ecd7", "study": "#f5ecd7",
+                "hotel_room": "#fef9ef"},
+    "nordic": {"living": "#fafaf9", "kitchen": "#f5f5f4", "bed": "#fafaf9", "bath": "#e8f5e9",
+               "corridor": "#f5f5f4", "office": "#fafaf9", "meeting": "#f0fdf4", "study": "#f0fdf4",
+               "hotel_room": "#fafaf9"},
+    "industrial": {"living": "#eceff1", "kitchen": "#e2e8f0", "bed": "#f1f5f9", "bath": "#cfd8dc",
+                  "corridor": "#e2e8f0", "office": "#eceff1", "meeting": "#e2e8f0", "study": "#e2e8f0",
+                  "hotel_room": "#eceff1"},
+    "japandi": {"living": "#f7f4ea", "kitchen": "#f3efe6", "bed": "#faf7f0", "bath": "#eaf0e8",
+                "corridor": "#f3efe6", "office": "#f7f4ea", "meeting": "#f3efe6", "study": "#faf7f0",
+                "hotel_room": "#f7f4ea"},
+    "luxury": {"living": "#f9f6f0", "kitchen": "#f5efe6", "bed": "#fbf8f5", "bath": "#e2e8f0",
+               "corridor": "#f3eee5", "office": "#f9f6f0", "meeting": "#f5efe6", "study": "#fbf8f5",
+               "hotel_room": "#fbf8f5"},
     "hotel": {"hotel_room": "#fdf8f2", "bath": "#e8f4f8", "corridor": "#f0ece4"},
 }
 KIND_GROUP = {"living": "living", "living_kitchen": "living", "zone_day": "living", "kitchen": "kitchen",
@@ -621,11 +635,13 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
     def attempt() -> bool:
         P.clear(room)
         sides = P.sides_far_from_door(room)
-        if shower and not P.place_corner(room, "shower", 0.9, 0.9):
+        if shower and not (P.place_corner(room, "shower", 0.9, 0.9) or P.place_corner(room, "shower", 0.8, 0.8)):
             return False
-        if not P.place_wall(room, "toilet", 0.4, 0.7, sides, gap=0.15, front=0.5):
+        if not (P.place_wall(room, "toilet", 0.4, 0.7, sides, gap=0.15, front=0.5) or
+                P.place_wall(room, "toilet", 0.4, 0.6, sides, gap=0.1, front=0.35)):
             return False
-        if not P.place_wall(room, "sink", 0.6, 0.5, sides, gap=0.1, front=0.4):
+        if not (P.place_wall(room, "sink", 0.6, 0.5, sides, gap=0.1, front=0.4) or
+                P.place_wall(room, "sink", 0.5, 0.4, sides, gap=0.05, front=0.3)):
             return False
         return True
 
@@ -849,7 +865,7 @@ def furnish(lay: Layout):
     P = Placer(lay)
     for r in lay.rooms:                     # prima i bagni (possono invertire il verso porta)
         if r.kind in ("bath", "wc"):
-            if lay.room_type == "hotel-room" and r.rect.w * r.rect.h >= 4.5:
+            if lay.room_type == "hotel-room":
                 furnish_hotel_bath(P, r)
             else:
                 furnish_bath(P, r, shower=(r.kind == "bath"))
@@ -857,6 +873,9 @@ def furnish(lay: Layout):
         k = r.kind
         if k == "bed":              furnish_bedroom(P, r)
         elif k == "hotel_room":     furnish_hotel_room(P, r)
+        elif k == "corridor" and lay.room_type == "hotel-room":
+            P.place_wall(r, "wardrobe", 1.4, 0.6, "EWNS", gap=0.1, zone_gap=0.2)
+            P.place_wall(r, "minibar", 0.8, 0.5, "EWNS", gap=0.1, zone_gap=0.1)
         elif k == "living":         furnish_living(P, r)
         elif k in ("living_kitchen", "zone_day"): furnish_living(P, r, with_kitchen=True)
         elif k == "kitchen":        furnish_kitchen(P, r)
@@ -874,37 +893,35 @@ def furnish(lay: Layout):
 # ----------------------------------------------------------------------------
 def layout_hotel_room(W: float, L: float, shape: str = "auto",
                       rng: Optional[random.Random] = None) -> Layout:
-    """Hotel room: main bedroom + en-suite bathroom + optional closet corridor."""
+    """Hotel room: foyer con guardaroba/minibar + bagno en-suite + camera matrimoniale."""
     rng = rng or random.Random(0)
     lay = Layout(W, L)
     lay.room_type = "hotel-room"
-
-    # Bathroom dimensions: standard hotel en-suite
-    bw = snap(clamp(W * rng.uniform(0.35, 0.45), 2.4, 3.6))
-    bh = snap(clamp(L * rng.uniform(0.28, 0.38), 2.2, 3.4))
-
-    # Bathroom in the back (north/top side)
-    bath = lay.add_room("Bagno en-suite", "bath", 0, 0, bw, bh)
-    # Main bedroom takes the rest
-    main = lay.add_room("Camera", "hotel_room", 0, bh, W, L)
-    # Entry corridor/closet area next to bathroom if there is room
-    closet = None
-    if W - bw >= 1.5:
-        closet = lay.add_room("Ingresso / Guardaroba", "corridor", bw, 0, W, bh)
-
     lay.shape = "rect"
 
-    # Entrance door on south wall of main room
-    lay.add_entrance(main.id, "S", DOOR_W, 0.3)
-    # Internal door between bathroom and main room
-    lay.add_door(bath.id, main.id, DOOR_W_BATH, 0.5, into=bath.id)
-    if closet is not None:
-        lay.add_door(closet.id, main.id, DOOR_W_BATH, 0.5, into=closet.id)
+    # Foyer / ingresso e bagno nella fascia nord (corridoio dell'albergo)
+    foyer_h = snap(clamp(L * rng.uniform(0.33, 0.38), 2.1, 2.7))
+    bath_w = snap(clamp(W * rng.uniform(0.50, 0.56), 2.0, 2.8))
+    foyer_w = snap(W - bath_w)
 
-    # Windows
-    lay.add_windows(main.id, "S", 2.0, 2)
-    lay.add_windows(main.id, "E", 1.6, 1)
-    lay.add_windows(main.id, "W", 1.6, 1)
+    bath = lay.add_room("Bagno en-suite", "bath", 0, 0, bath_w, foyer_h, group=2)
+    corridor = lay.add_room("Ingresso / Guardaroba", "corridor", bath_w, 0, W, foyer_h, group=1)
+    main = lay.add_room("Camera", "hotel_room", 0, foyer_h, W, L, group=3)
+
+    # Ingresso dalla parete Nord nel foyer/guardaroba
+    lay.add_entrance(corridor.id, "N", DOOR_W, 0.5)
+    # Porta tra foyer e bagno (si apre verso il foyer per non ingombrare il bagno)
+    lay.add_door(corridor.id, bath.id, DOOR_W_BATH, 0.5, into=corridor.id)
+    # Porta o passaggio tra foyer e camera
+    lay.add_door(corridor.id, main.id, DOOR_W, 0.5, into=main.id)
+
+    # Finestre panoramiche sulla parete Sud della camera
+    lay.add_windows(main.id, "S", 2.2 if W >= 4.0 else 1.6, 2)
+    if "E" in lay.ext_sides(main):
+        lay.add_windows(main.id, "E", 1.4, 1)
+    if "W" in lay.ext_sides(main):
+        lay.add_windows(main.id, "W", 1.4, 1)
+
     side = lay.best_ext_side(bath)
     if side:
         lay.add_windows(bath.id, side, 0.7, 1)
@@ -918,10 +935,11 @@ def furnish_hotel_room(P: Placer, room: Room):
     sides = P.sides_far_from_door(room)
     wins = P.window_sides(room)
 
-    # King bed against the far wall from entrance
+    # King bed contro una parete laterale (E o W preferibilmente)
+    bed_cands = [s for s in sides if s in "EW"] + [s for s in sides if s not in "EW"]
     bed = None
     for width in (1.8, 1.6):
-        bed = P.place_wall(room, "bed", width, 2.0, sides, gap=0.45,
+        bed = P.place_wall(room, "bed", width, 2.0, bed_cands, gap=0.45,
                            avoid_windows=True, zone_gap=0.35)
         if bed:
             break
@@ -942,37 +960,28 @@ def furnish_hotel_room(P: Placer, room: Room):
     desk_sides = wins + [s for s in "NSEW" if s not in wins]
     P.place_wall(room, "desk", 1.2, 0.6, desk_sides, gap=0.4, zone_gap=0.2)
 
-    # Minibar near entrance / closet area
-    door_sides = [s for s in "NSEW" if s not in sides]
-    entry_sides = door_sides + [s for s in sides if s not in door_sides]
-    P.place_wall(room, "minibar", 0.9, 0.6, entry_sides, gap=0.2, zone_gap=0.1)
-
     # Small sofa or armchair near window/TV area
-    if r.w * r.h >= 20:
+    if r.w * r.h >= 18:
         for w, h in ((1.4, 0.8), (0.8, 0.8)):
             if P.place_free(room, "sofa", w, h, gap=0.5, zone_gap=0.3):
                 break
 
-    # Wardrobe near entrance
-    P.place_wall(room, "wardrobe", 1.6, 0.6, entry_sides, gap=0.3, zone_gap=0.2)
-
 
 def furnish_hotel_bath(P: Placer, room: Room):
-    """Furnish hotel en-suite bathroom with bathtub."""
+    """Furnish hotel en-suite bathroom with bathtub or walk-in shower, toilet, sink."""
     P.clear(room)
     sides = P.sides_far_from_door(room)
-
-    # Bathtub/shower against far wall
-    for bw, bh in ((1.7, 0.8), (1.5, 0.75), (0.9, 0.9)):
-        ftype = "bathtub" if bw > 1.0 else "shower"
-        if P.place_wall(room, ftype, bw, bh, sides, gap=0.1):
-            break
-
-    # Toilet and sink
-    if not P.place_wall(room, "toilet", 0.4, 0.7, sides, gap=0.15, front=0.5):
-        P.lay.notes.append(f"{room.name}: sanitari non inseriti")
-        return
-    P.place_wall(room, "sink", 0.6, 0.5, sides, gap=0.1, front=0.4)
+    placed_tub = False
+    if room.rect.w * room.rect.h >= 4.5:
+        for bw, bh in ((1.4, 0.7), (1.3, 0.65)):
+            if P.place_wall(room, "bathtub", bw, bh, sides, gap=0.05):
+                if P.place_wall(room, "toilet", 0.4, 0.65, "NSEW", gap=0.1, front=0.3) and \
+                   P.place_wall(room, "sink", 0.55, 0.45, "NSEW", gap=0.05, front=0.3):
+                    placed_tub = True
+                    break
+                P.clear(room)
+    if not placed_tub:
+        furnish_bath(P, room, shower=True)
 
 
 # ----------------------------------------------------------------------------
@@ -1080,6 +1089,68 @@ def _pick_order(items: list, sl, rng: random.Random) -> list:
     return opts[0]
 
 
+def layout_compact_apartment(W: float, L: float, bedrooms: int = 1, shape: str = "auto",
+                             rng: Optional[random.Random] = None) -> Layout:
+    """Planimetria compatta ottimizzata per bilocali e trilocali (5-9m).
+    Tutte le camere da letto hanno pareti chiuse indipendenti, porte e finestre."""
+    rng = rng or random.Random(0)
+    lay = Layout(W, L)
+    lay.shape = "rect"
+
+    # Divisione tra zona giorno e zona notte
+    xw = snap(clamp(W * rng.uniform(0.48, 0.56), 3.2, W - 2.8))
+
+    # Lato sinistro: Zona giorno
+    liv = lay.add_room("Soggiorno con Cucina", "living_kitchen", 0, 0, xw, L, group=1)
+
+    # Lato destro: notte e servizi
+    bath_h = snap(clamp(L * 0.38, 2.3, 2.8))
+    bed_h = snap(L - bath_h)
+
+    if bedrooms >= 2 and L >= 7.5 and (W - xw) >= 3.0:
+        # Due camere chiuse separate
+        h1 = snap(bed_h * 0.55)
+        bed1 = lay.add_room("Camera Matrimoniale", "bed", xw, 0, W, h1, group=2, master=True)
+        bed2 = lay.add_room("Cameretta", "bed", xw, h1, W, bed_h, group=3)
+        corr_w = 1.2
+        corr = lay.add_room("Disimpegno", "corridor", xw, bed_h, xw + corr_w, L, group=4)
+        bath = lay.add_room("Bagno", "bath", xw + corr_w, bed_h, W, L, group=5)
+
+        lay.add_entrance(liv.id, "S", DOOR_W, 0.3)
+        lay.add_door(liv.id, corr.id, DOOR_W, 0.5, into=corr.id)
+        lay.add_door(corr.id, bed1.id, DOOR_W, 0.5, into=bed1.id)
+        lay.add_door(corr.id, bed2.id, DOOR_W, 0.5, into=bed2.id)
+        lay.add_door(corr.id, bath.id, DOOR_W_BATH, 0.2, into=corr.id)
+
+        lay.add_windows(bed1.id, "E", 1.5, 1)
+        lay.add_windows(bed2.id, "E", 1.4, 1)
+        lay.add_windows(bath.id, "S", 0.7, 1)
+    else:
+        # Bilocale: camera matrimoniale chiusa con muri e porta
+        bed = lay.add_room("Camera Matrimoniale", "bed", xw, 0, W, bed_h, group=2, master=True)
+        corr_w = 1.2
+        corr = lay.add_room("Disimpegno", "corridor", xw, bed_h, xw + corr_w, L, group=3)
+        bath = lay.add_room("Bagno", "bath", xw + corr_w, bed_h, W, L, group=4)
+
+        lay.add_entrance(liv.id, "S", DOOR_W, 0.3)
+        lay.add_door(liv.id, corr.id, DOOR_W, 0.5, into=corr.id)
+        lay.add_door(corr.id, bed.id, DOOR_W, 0.5, into=bed.id)
+        lay.add_door(corr.id, bath.id, DOOR_W_BATH, 0.2, into=corr.id)
+
+        lay.add_windows(bed.id, "E", 1.5, 2)
+        if "N" in lay.ext_sides(bed):
+            lay.add_windows(bed.id, "N", 1.4, 1)
+        lay.add_windows(bath.id, "S", 0.7, 1)
+
+    lay.add_windows(liv.id, "W", 1.8, 2)
+    lay.add_windows(liv.id, "S", 1.6, 2)
+    if "N" in lay.ext_sides(liv):
+        lay.add_windows(liv.id, "N", 1.6, 1)
+
+    lay.add_partial_windows()
+    return lay
+
+
 def layout_apartment(W: float, L: float, bedrooms: int, palette: dict,
                      shape: str = "auto", rng: Optional[random.Random] = None) -> Layout:
     rng = rng or random.Random(0)
@@ -1097,9 +1168,7 @@ def layout_apartment(W: float, L: float, bedrooms: int, palette: dict,
         if chosen:
             break
     if not chosen:
-        lay = layout_loft(W, L, office=False, shape=shape, rng=rng)
-        lay.notes.append("Superficie insufficiente per camere separate: generato un monolocale.")
-        return lay
+        return layout_compact_apartment(W, L, bedrooms=max(1, bedrooms), shape=shape, rng=rng)
 
     b, two, north, south, nmin = chosen
     lay = Layout(W, L)
@@ -1207,17 +1276,20 @@ def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
     if shape not in ("auto", "rect") and nd == 0:
         lay.notes.append("Con queste misure non è possibile una sagoma irregolare: pianta rettangolare.")
     yb = L - nd
-    gid = 1
     if office:
-        a = lay.add_room("Area Operativa", "office_open", 0, 0, W - bw, L, group=gid)
-        b = lay.add_room("Area Riunioni", "meeting", W - bw, bh, W, yb, group=gid)
-        bath = lay.add_room("Bagno", "wc", W - bw, 0, W, bh)
+        a = lay.add_room("Area Operativa", "office_open", 0, 0, W - bw, L, group=1)
+        b = lay.add_room("Area Riunioni", "meeting", W - bw, bh, W, yb, group=2)
+        bath = lay.add_room("Bagno", "wc", W - bw, 0, W, bh, group=3)
+        lay.add_entrance(a.id, "S", 1.0, 0.3)
+        lay.add_door(a.id, b.id, DOOR_W, 0.5, into=b.id)
+        lay.add_door(bath.id, a.id, DOOR_W_BATH, 0.2, into=bath.id)
     else:
-        a = lay.add_room("Zona Giorno", "zone_day", 0, 0, W - bw, L, group=gid)
-        b = lay.add_room("Zona Notte", "zone_night", W - bw, bh, W, yb, group=gid)
-        bath = lay.add_room("Bagno", "bath", W - bw, 0, W, bh)
-    lay.add_entrance(a.id, "S", 1.0 if office else DOOR_W, 0.3)
-    lay.add_door(bath.id, b.id, DOOR_W_BATH, 0.2, into=bath.id)
+        a = lay.add_room("Soggiorno e Cucina", "living_kitchen", 0, 0, W - bw, L, group=1)
+        b = lay.add_room("Camera da Letto", "bed", W - bw, bh, W, yb, group=2, master=True)
+        bath = lay.add_room("Bagno", "bath", W - bw, 0, W, bh, group=3)
+        lay.add_entrance(a.id, "S", DOOR_W, 0.3)
+        lay.add_door(a.id, b.id, DOOR_W, 0.5, into=b.id)
+        lay.add_door(bath.id, a.id, DOOR_W_BATH, 0.2, into=bath.id)
     lay.add_windows(a.id, "W", 2.0 if not office else 1.8, 3)
     lay.add_windows(a.id, "N", 1.8, 3)
     lay.add_windows(a.id, "S", 1.6, 2)
@@ -1442,19 +1514,14 @@ def _build_layout(Wn: float, Ln: float, rt: str, n: int, palette: dict, shape: s
         return layout_office(Wn, Ln, n_closed=max(1, n - 1), shape=shape, rng=rng)
     if rt == "hotel-room":
         return layout_hotel_room(Wn, Ln, shape=shape, rng=rng)
-    if rt == "open-space" or n <= 1:
+    if rt == "open-space":
         return layout_loft(Wn, Ln, office=False, shape=shape, rng=rng)
-    return layout_apartment(Wn, Ln, bedrooms=n - 1, palette=palette, shape=shape, rng=rng)
+    return layout_apartment(Wn, Ln, bedrooms=max(1, n - 1), palette=palette, shape=shape, rng=rng)
 
 
 def generate(width: float, length: float, room_type: str = "apartment",
              num_rooms: int = 3, style: str = "modern",
              shape: str = "auto", seed: Optional[int] = None) -> dict:
-    W0 = snap(clamp(width, 5.0, 60.0))
-    L0 = snap(clamp(length, 5.0, 60.0))
-    transposed = W0 < L0
-    Wn, Ln = (L0, W0) if transposed else (W0, L0)
-    n = int(clamp(num_rooms, 1, 8))
     rt = (room_type or "apartment").strip().lower()
     if rt in ("ufficio", "office", "workspace", "coworking"):
         rt = "office"
@@ -1462,6 +1529,13 @@ def generate(width: float, length: float, room_type: str = "apartment",
         rt = "open-space"
     elif rt in ("hotel-room", "hotel_room", "hotel", "camera hotel", "camera"):
         rt = "hotel-room"
+
+    min_dim = 3.5 if rt == "hotel-room" else 4.5
+    W0 = snap(clamp(width, min_dim, 60.0))
+    L0 = snap(clamp(length, min_dim, 60.0))
+    transposed = W0 < L0 and rt != "hotel-room"
+    Wn, Ln = (L0, W0) if transposed else (W0, L0)
+    n = int(clamp(num_rooms, 1, 8))
     base_palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
     palette = {**base_palette, **PALETTES["hotel"]} if rt == "hotel-room" else base_palette
     shape = _normalize_shape(shape)
@@ -1482,7 +1556,10 @@ def generate(width: float, length: float, room_type: str = "apartment",
     lay, rng = best
     if transposed:
         lay.transpose()
-    lay.flip(rng.random() < 0.5, rng.random() < 0.5)       # varianti speculari
+    if rt == "hotel-room":
+        lay.flip(rng.random() < 0.5, False)
+    else:
+        lay.flip(rng.random() < 0.5, rng.random() < 0.5)       # varianti speculari
     walls = build_walls(lay)
 
     kinds = [r.kind for r in lay.rooms]
@@ -1576,3 +1653,154 @@ def to_svg(plan: dict) -> str:
                    f'font-weight="bold" text-anchor="middle" fill="#0f172a" opacity="0.55">{r["name"]}</text>')
     out.append("</svg>")
     return "".join(out)
+
+
+# ----------------------------------------------------------------------------
+# IMPORTAZIONE DXF E ARREDO
+# ----------------------------------------------------------------------------
+def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
+    """Importa e arreda dettagliatamente una planimetria da un file DXF."""
+    lines = [l.strip() for l in dxf_content.splitlines()]
+    polylines = []
+    line_segs = []
+
+    i = 0
+    cur_type = None
+    cur_layer = ""
+    cur_pts = []
+    cur_p = {}
+
+    while i < len(lines):
+        try:
+            code = int(lines[i])
+            val = lines[i+1] if i + 1 < len(lines) else ""
+            i += 2
+        except (ValueError, IndexError):
+            i += 1
+            continue
+
+        if code == 0:
+            if cur_type == "LWPOLYLINE" and len(cur_pts) >= 3:
+                polylines.append({"layer": cur_layer, "pts": cur_pts})
+            elif cur_type == "LINE" and (10 in cur_p and 20 in cur_p and 11 in cur_p and 21 in cur_p):
+                line_segs.append({"layer": cur_layer, "p1": (cur_p[10], cur_p[20]), "p2": (cur_p[11], cur_p[21])})
+
+            cur_type = val.upper()
+            cur_layer = ""
+            cur_pts = []
+            cur_p = {}
+        elif cur_type:
+            if code == 8:
+                cur_layer = val
+            elif code in (10, 20, 11, 21):
+                try:
+                    fval = float(val)
+                    cur_p[code] = fval
+                    if cur_type == "LWPOLYLINE":
+                        if code == 10:
+                            cur_pts.append([fval, 0.0])
+                        elif code == 20 and cur_pts:
+                            cur_pts[-1][1] = fval
+                except ValueError:
+                    pass
+
+    all_x = []
+    all_y = []
+    for poly in polylines:
+        for x, y in poly["pts"]:
+            all_x.append(x)
+            all_y.append(y)
+    for seg in line_segs:
+        all_x.extend([seg["p1"][0], seg["p2"][0]])
+        all_y.extend([seg["p1"][1], seg["p2"][1]])
+
+    if not all_x or not all_y:
+        return generate(10.0, 8.0, "apartment", 3, style)
+
+    min_x, max_x = min(all_x), max(all_x)
+    min_y, max_y = min(all_y), max(all_y)
+    raw_w = max_x - min_x
+    raw_h = max_y - min_y
+
+    scale_factor = 1.0
+    if raw_w > 500 or raw_h > 500:
+        scale_factor = 0.001
+    elif raw_w > 50 or raw_h > 50:
+        scale_factor = 0.01
+
+    W = snap(clamp(raw_w * scale_factor, 5.0, 40.0))
+    L = snap(clamp(raw_h * scale_factor, 5.0, 40.0))
+
+    detected_rooms = []
+    for poly in polylines:
+        pts = poly["pts"]
+        xs = [p[0] * scale_factor for p in pts]
+        ys = [p[1] * scale_factor for p in pts]
+        rx0, rx1 = min(xs) - min_x * scale_factor, max(xs) - min_x * scale_factor
+        ry0, ry1 = min(ys) - min_y * scale_factor, max(ys) - min_y * scale_factor
+        rw = rx1 - rx0
+        rh = ry1 - ry0
+        if rw >= 1.5 and rh >= 1.5 and rw < W and rh < L:
+            detected_rooms.append((snap(rx0), snap(ry0), snap(rw), snap(rh)))
+
+    if len(detected_rooms) >= 2:
+        lay = Layout(W, L)
+        palette = PALETTES.get(style.lower(), PALETTES["modern"])
+        for idx, (rx, ry, rw, rh) in enumerate(detected_rooms):
+            area = rw * rh
+            if area >= 18:
+                nm, kd = "Soggiorno con Cucina", "living_kitchen"
+            elif area >= 11:
+                nm, kd = f"Camera {idx}", "bed"
+            elif area <= 5.5:
+                nm, kd = "Bagno", "bath"
+            else:
+                nm, kd = f"Locale {idx+1}", "study"
+            lay.add_room(nm, kd, rx, ry, rx + rw, ry + rh, group=idx+1)
+
+        if lay.rooms:
+            lay.add_entrance(lay.rooms[0].id, "S", DOOR_W, 0.3)
+            for r in lay.rooms[1:]:
+                lay.add_door(lay.rooms[0].id, r.id, DOOR_W_BATH if r.kind == "bath" else DOOR_W, 0.5)
+                lay.add_windows(r.id, lay.best_ext_side(r) or "E", 1.4, 2)
+            lay.add_windows(lay.rooms[0].id, "W", 1.8, 2)
+            furnish(lay)
+            walls = build_walls(lay)
+            kinds = [r.kind for r in lay.rooms]
+            stats = {
+                "grossArea": round(sum(r.rect.w * r.rect.h for r in lay.rooms), 2),
+                "boundingBox": round(lay.W * lay.L, 2),
+                "rooms": len(lay.rooms),
+                "bedrooms": kinds.count("bed"),
+                "bathrooms": kinds.count("bath"),
+                "doors": len(lay.doors),
+                "windows": len(lay.windows),
+                "furniture": len(lay.items),
+            }
+            return {
+                "dimensions": {"width": lay.W, "length": lay.L},
+                "svgWidth": lay.W * SCALE,
+                "svgHeight": lay.L * SCALE,
+                "scale": SCALE,
+                "wallThickness": WALL * SCALE,
+                "shape": "rect",
+                "seed": random.randint(1000, 9999),
+                "stats": stats,
+                "notches": compute_notches(lay),
+                "rooms": [{"id": r.id, "name": r.name, "kind": r.kind,
+                           "x": r.rect.x, "y": r.rect.y, "w": r.rect.w, "h": r.rect.h,
+                           "area": round(r.rect.w * r.rect.h, 2), "zone": r.group,
+                           "color": palette.get(KIND_GROUP.get(r.kind, "living"), "#f8fafc")} for r in lay.rooms],
+                "walls": [{"x": x, "y": y, "w": w, "h": h} for x, y, w, h in walls],
+                "doors": [_export_opening(lay, d, True) for d in lay.doors],
+                "windows": [_export_opening(lay, w, False) for w in lay.windows],
+                "furniture": [{"type": i.type, "x": round(i.rect.x, 3), "y": round(i.rect.y, 3),
+                               "w": round(i.rect.w, 3), "h": round(i.rect.h, 3), "rot": 0.0,
+                               "facing": i.facing, "room": i.room_id} for i in lay.items],
+                "notes": ["Planimetria importata da DXF ed arredata con successo."],
+            }
+
+    num_r = max(2, min(5, int((W * L) / 20)))
+    plan = generate(W, L, "apartment", num_r, style)
+    plan["notes"] = ["Planimetria DXF importata: perimetro rilevato ed arredo completato."]
+    return plan
