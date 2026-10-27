@@ -33,7 +33,6 @@ import {
   Plus,
   X,
   Sliders,
-  Paintbrush,
 } from 'lucide-react';
 import './App.css';
 
@@ -1573,7 +1572,6 @@ export default function App() {
 
   return (
     <div className="pf-app" data-theme={theme}>
-      <Analytics/>
       {/* File input nascosto per importazione DXF */}
       <input
         type="file"
