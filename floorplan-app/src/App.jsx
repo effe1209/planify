@@ -314,16 +314,8 @@ function PlanSvg({
       height={box.h * zoom}
       viewBox={`0 0 ${box.w} ${box.h}`}
       role="img"
-      aria-label="Icona planimetria"
+      aria-label={`Planimetria ${shapeName}, ${fmt(plan.dimensions.width)} per ${fmt(plan.dimensions.length)} metri`}
     >
-      <image
-        href="/favicon.svg?v=2"
-        x="0"
-        y="0"
-        width={box.w}
-        height={box.h}
-        preserveAspectRatio="xMidYMid meet"
-      />
       <defs>
         <pattern id={`wood-${uid}`} width="44" height="9" patternUnits="userSpaceOnUse">
           <line x1="0" y1="8.5" x2="44" y2="8.5" stroke="#8a6f3e" strokeOpacity="0.10" />
@@ -540,11 +532,13 @@ function ShapeGlyph({ d }) {
 
 function Logo() {
   return (
-    <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
-      <rect width="32" height="32" rx="8" fill="var(--pf-blue)" />
-      <path d="M8 8h10v7h6v9H8z" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinejoin="round" />
-      <path d="M8 19a5 5 0 0 1 5 5" fill="none" stroke="#fff" strokeWidth="1.4" strokeOpacity="0.8" />
-    </svg>
+    <img 
+      src="/favicon.svg" 
+      alt="Planify Logo" 
+      width="30" 
+      height="30" 
+      style={{ borderRadius: '8px' }} 
+    />
   );
 }
 
