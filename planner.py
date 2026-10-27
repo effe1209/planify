@@ -44,10 +44,12 @@ PALETTES = {
                "corridor": "#e2e8f0", "office": "#f8fafc", "meeting": "#f1f5f9", "study": "#f1f5f9"},
     "classic": {"living": "#fdf6e3", "kitchen": "#fef3c7", "bed": "#fef9ef", "bath": "#e7f0f7",
                 "corridor": "#efe7d6", "office": "#fdf6e3", "meeting": "#f5ecd7", "study": "#f5ecd7"},
+    "hotel": {"hotel_room": "#fdf8f2", "bath": "#e8f4f8", "corridor": "#f0ece4"},
 }
 KIND_GROUP = {"living": "living", "living_kitchen": "living", "zone_day": "living", "kitchen": "kitchen",
               "bed": "bed", "zone_night": "bed", "bath": "bath", "wc": "bath", "corridor": "corridor",
-              "office_open": "office", "meeting": "meeting", "director": "meeting", "study": "study"}
+              "office_open": "office", "meeting": "meeting", "director": "meeting", "study": "study",
+              "hotel_room": "living"}
 
 
 def snap(v: float, step: float = 0.05) -> float:
@@ -153,6 +155,7 @@ class Layout:
         self.notes: List[str] = []
         self._by_id: Dict[int, Room] = {}
         self.shape = "rect"
+        self.room_type = ""
 
     # -- stanze --------------------------------------------------------------
     def add_room(self, name, kind, x0, y0, x1, y1, group=None, master=False) -> Room:
@@ -846,10 +849,14 @@ def furnish(lay: Layout):
     P = Placer(lay)
     for r in lay.rooms:                     # prima i bagni (possono invertire il verso porta)
         if r.kind in ("bath", "wc"):
-            furnish_bath(P, r, shower=(r.kind == "bath"))
+            if lay.room_type == "hotel-room" and r.rect.w * r.rect.h >= 4.5:
+                furnish_hotel_bath(P, r)
+            else:
+                furnish_bath(P, r, shower=(r.kind == "bath"))
     for r in lay.rooms:
         k = r.kind
         if k == "bed":              furnish_bedroom(P, r)
+        elif k == "hotel_room":     furnish_hotel_room(P, r)
         elif k == "living":         furnish_living(P, r)
         elif k in ("living_kitchen", "zone_day"): furnish_living(P, r, with_kitchen=True)
         elif k == "kitchen":        furnish_kitchen(P, r)
@@ -860,6 +867,112 @@ def furnish(lay: Layout):
         elif k == "office_open":    furnish_office_open(P, r)
     for plist in P.placed.values():
         lay.items.extend(plist)
+
+
+# ----------------------------------------------------------------------------
+# HOTEL ROOM LAYOUT
+# ----------------------------------------------------------------------------
+def layout_hotel_room(W: float, L: float, shape: str = "auto",
+                      rng: Optional[random.Random] = None) -> Layout:
+    """Hotel room: main bedroom + en-suite bathroom + optional closet corridor."""
+    rng = rng or random.Random(0)
+    lay = Layout(W, L)
+    lay.room_type = "hotel-room"
+
+    # Bathroom dimensions: standard hotel en-suite
+    bw = snap(clamp(W * rng.uniform(0.35, 0.45), 2.4, 3.6))
+    bh = snap(clamp(L * rng.uniform(0.28, 0.38), 2.2, 3.4))
+
+    # Bathroom in the back (north/top side)
+    bath = lay.add_room("Bagno en-suite", "bath", 0, 0, bw, bh)
+    # Main bedroom takes the rest
+    main = lay.add_room("Camera", "hotel_room", 0, bh, W, L)
+    # Entry corridor/closet area next to bathroom if there is room
+    closet = None
+    if W - bw >= 1.5:
+        closet = lay.add_room("Ingresso / Guardaroba", "corridor", bw, 0, W, bh)
+
+    lay.shape = "rect"
+
+    # Entrance door on south wall of main room
+    lay.add_entrance(main.id, "S", DOOR_W, 0.3)
+    # Internal door between bathroom and main room
+    lay.add_door(bath.id, main.id, DOOR_W_BATH, 0.5, into=bath.id)
+    if closet is not None:
+        lay.add_door(closet.id, main.id, DOOR_W_BATH, 0.5, into=closet.id)
+
+    # Windows
+    lay.add_windows(main.id, "S", 2.0, 2)
+    lay.add_windows(main.id, "E", 1.6, 1)
+    lay.add_windows(main.id, "W", 1.6, 1)
+    side = lay.best_ext_side(bath)
+    if side:
+        lay.add_windows(bath.id, side, 0.7, 1)
+    lay.add_partial_windows()
+    return lay
+
+
+def furnish_hotel_room(P: Placer, room: Room):
+    """Furnish the main hotel room area."""
+    r = room.rect
+    sides = P.sides_far_from_door(room)
+    wins = P.window_sides(room)
+
+    # King bed against the far wall from entrance
+    bed = None
+    for width in (1.8, 1.6):
+        bed = P.place_wall(room, "bed", width, 2.0, sides, gap=0.45,
+                           avoid_windows=True, zone_gap=0.35)
+        if bed:
+            break
+        bed = P.place_wall(room, "bed", width, 2.0, sides, gap=0.45, zone_gap=0.35)
+        if bed:
+            break
+
+    if not bed:
+        P.lay.notes.append(f"{room.name}: letto non inserito")
+        return
+
+    # TV on wall facing the bed
+    bed_facing = bed.facing  # direction the bed faces (opposite of the wall it's against)
+    opp_sides = [bed_facing] + [s for s in "NSEW" if s != bed_facing]
+    P.place_wall(room, "tv", 1.6, 0.25, opp_sides, gap=0.05, zone_gap=0.2)
+
+    # Desk near window
+    desk_sides = wins + [s for s in "NSEW" if s not in wins]
+    P.place_wall(room, "desk", 1.2, 0.6, desk_sides, gap=0.4, zone_gap=0.2)
+
+    # Minibar near entrance / closet area
+    door_sides = [s for s in "NSEW" if s not in sides]
+    entry_sides = door_sides + [s for s in sides if s not in door_sides]
+    P.place_wall(room, "minibar", 0.9, 0.6, entry_sides, gap=0.2, zone_gap=0.1)
+
+    # Small sofa or armchair near window/TV area
+    if r.w * r.h >= 20:
+        for w, h in ((1.4, 0.8), (0.8, 0.8)):
+            if P.place_free(room, "sofa", w, h, gap=0.5, zone_gap=0.3):
+                break
+
+    # Wardrobe near entrance
+    P.place_wall(room, "wardrobe", 1.6, 0.6, entry_sides, gap=0.3, zone_gap=0.2)
+
+
+def furnish_hotel_bath(P: Placer, room: Room):
+    """Furnish hotel en-suite bathroom with bathtub."""
+    P.clear(room)
+    sides = P.sides_far_from_door(room)
+
+    # Bathtub/shower against far wall
+    for bw, bh in ((1.7, 0.8), (1.5, 0.75), (0.9, 0.9)):
+        ftype = "bathtub" if bw > 1.0 else "shower"
+        if P.place_wall(room, ftype, bw, bh, sides, gap=0.1):
+            break
+
+    # Toilet and sink
+    if not P.place_wall(room, "toilet", 0.4, 0.7, sides, gap=0.15, front=0.5):
+        P.lay.notes.append(f"{room.name}: sanitari non inseriti")
+        return
+    P.place_wall(room, "sink", 0.6, 0.5, sides, gap=0.1, front=0.4)
 
 
 # ----------------------------------------------------------------------------
@@ -940,9 +1053,9 @@ def _apartment_notches(shape: str, rng: random.Random, n_north: int, n_south: in
     """Sceglie quali stanze di ogni fila vengono accorciate (le rientranze).
     Ritorna ({'N': (i0, i1, profondità), 'S': ...}, sagoma effettiva); i1 è escluso."""
     max_d = row_h - 2.7
-    if shape == "rect" or max_d < 1.2 or n_north < 1:
+    if shape == "rect" or max_d < 0.8 or n_north < 1:
         return {}, "rect"
-    d = snap(clamp(row_h * rng.uniform(0.30, 0.45), 1.2, max_d))
+    d = snap(clamp(row_h * rng.uniform(0.25, 0.50), 0.8, max_d))
     m, s = n_north, n_south
     if shape == "t" and two and s >= 1:
         return {"N": (m - 1, m, d), "S": (s - 1, s, d)}, "t"
@@ -1088,8 +1201,8 @@ def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
     if wanted != "rect":
         room_h = L - bh
         max_d = room_h - 2.6
-        if max_d >= 1.2:
-            nd = snap(clamp(room_h * rng.uniform(0.30, 0.45), 1.2, max_d))
+        if max_d >= 0.8:
+            nd = snap(clamp(room_h * rng.uniform(0.25, 0.50), 0.8, max_d))
     lay.shape = "l" if nd > 0 else "rect"
     if shape not in ("auto", "rect") and nd == 0:
         lay.notes.append("Con queste misure non è possibile una sagoma irregolare: pianta rettangolare.")
@@ -1139,7 +1252,7 @@ def layout_office(W: float, L: float, n_closed: int, shape: str = "auto",
     wanted = _resolve_shape(shape, rng, ["l", "u", "t", "step"])
     offs = [0.0] * total
     max_off = ws - 3.0
-    if wanted != "rect" and max_off >= 0.8:
+    if wanted != "rect" and max_off >= 0.6:
         d = snap(clamp(ws * rng.uniform(0.25, 0.40), 0.8, max_off))
         if wanted == "u" and total >= 3:
             offs[rng.randint(1, total - 2)] = d
@@ -1327,6 +1440,8 @@ def _build_layout(Wn: float, Ln: float, rt: str, n: int, palette: dict, shape: s
                   rng: random.Random) -> Layout:
     if rt == "office":
         return layout_office(Wn, Ln, n_closed=max(1, n - 1), shape=shape, rng=rng)
+    if rt == "hotel-room":
+        return layout_hotel_room(Wn, Ln, shape=shape, rng=rng)
     if rt == "open-space" or n <= 1:
         return layout_loft(Wn, Ln, office=False, shape=shape, rng=rng)
     return layout_apartment(Wn, Ln, bedrooms=n - 1, palette=palette, shape=shape, rng=rng)
@@ -1339,13 +1454,16 @@ def generate(width: float, length: float, room_type: str = "apartment",
     L0 = snap(clamp(length, 5.0, 60.0))
     transposed = W0 < L0
     Wn, Ln = (L0, W0) if transposed else (W0, L0)
-    palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
     n = int(clamp(num_rooms, 1, 8))
     rt = (room_type or "apartment").strip().lower()
     if rt in ("ufficio", "office", "workspace", "coworking"):
         rt = "office"
     elif rt in ("open-space", "open_space", "openspace", "loft", "monolocale", "studio"):
         rt = "open-space"
+    elif rt in ("hotel-room", "hotel_room", "hotel", "camera hotel", "camera"):
+        rt = "hotel-room"
+    base_palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
+    palette = {**base_palette, **PALETTES["hotel"]} if rt == "hotel-room" else base_palette
     shape = _normalize_shape(shape)
 
     # Stesso seed = stessa pianta. Si provano più varianti e si tiene la più pulita.
