@@ -308,14 +308,20 @@ function PlanSvg({
 
   return (
     <svg
-      ref={svgRef}
-      xmlns="http://www.w3.org/2000/svg"
-      width={box.w * zoom}
-      height={box.h * zoom}
-      viewBox={`0 0 ${box.w} ${box.h}`}
-      role="img"
-      aria-label={`Planimetria ${shapeName}, ${fmt(plan.dimensions.width)} per ${fmt(plan.dimensions.length)} metri`}
-    >
+        ref={svgRef}
+        xmlns="http://www.w3.org/2000/svg"
+        width={box.w * zoom}
+        height={box.h * zoom}
+        viewBox={`0 0 ${box.w} ${box.h}`}
+        role="img"
+        aria-label="Icona planimetria"
+      >
+      <image
+        href="/favicon.svg"
+        width={box.w}
+        height={box.h}
+        preserveAspectRatio="xMidYMid meet"
+      />
       <defs>
         <pattern id={`wood-${uid}`} width="44" height="9" patternUnits="userSpaceOnUse">
           <line x1="0" y1="8.5" x2="44" y2="8.5" stroke="#8a6f3e" strokeOpacity="0.10" />
