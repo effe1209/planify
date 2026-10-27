@@ -7,14 +7,14 @@ Avvio:   uvicorn main:app --reload
 Debug:   http://127.0.0.1:8000/preview?width=12&length=9&room_type=apartment&num_rooms=4&shape=l&seed=11
 """
 import io
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional, Tuple
 
 try:
     import ezdxf
-except ImportError:
+except ImportError:  # l'export DXF ha un fallback ASCII senza dipendenze
     ezdxf = None
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -31,7 +31,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,   # con origini "*" i browser rifiutano le credenziali: l'API non ne usa
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -64,6 +64,7 @@ class Room(BaseModel):
     area: float = 0.0       # m² (w * h)
     zone: int = 0           # stanze con lo stesso valore formano un unico spazio aperto
     color: str
+    poly: Optional[List[List[float]]] = None   # contorno libero (schizzi): se presente vale questo, non il rettangolo
 
 
 class Wall(BaseModel):
@@ -162,74 +163,75 @@ def preview(
     plan = planner.generate(width, length, room_type, num_rooms, style, shape, seed)
     return Response(content=planner.to_svg(plan), media_type="image/svg+xml")
 
+Polyline = Tuple[str, List[Tuple[float, float]], bool]   # (layer, punti, chiusa)
+
+
+def _rect(o: dict) -> List[Tuple[float, float]]:
+    x, y, w, h = (float(o.get(k, 0)) for k in ("x", "y", "w", "h"))
+    return [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+
+
+def _plan_polylines(plan: dict) -> Iterator[Polyline]:
+    """Tutte le geometrie della pianta, con la y ribaltata (nel DXF cresce verso l'alto)."""
+    L = float(plan.get("dimensions", {}).get("length", 0))
+    flip = lambda pts: [(round(x, 4), round(L - y, 4)) for x, y in pts]
+    for room in plan.get("rooms", []):
+        yield "AREE", flip(room.get("poly") or _rect(room)), True
+    for wall in plan.get("walls", []):
+        yield "MURI", flip(_rect(wall)), True
+    for line in plan.get("wallLines", []):
+        yield "MURI", flip(line.get("pts", [])), bool(line.get("closed"))
+    for item in plan.get("furniture", []):
+        yield "ARREDI", flip(_rect(item)), True
+
+
+def _dxf_with_ezdxf(plan: dict) -> str:
+    doc = ezdxf.new("R2010")
+    doc.header["$MEASUREMENT"] = 1   # metrico
+    doc.header["$INSUNITS"] = 6      # metri
+    for name, color in (("MURI", 7), ("ARREDI", 3), ("AREE", 8)):
+        doc.layers.add(name, color=color)
+    msp = doc.modelspace()
+    for layer, pts, closed in _plan_polylines(plan):
+        msp.add_lwpolyline(pts, close=closed, dxfattribs={"layer": layer})
+    L = float(plan.get("dimensions", {}).get("length", 0))
+    for room in plan.get("rooms", []):
+        if room.get("name"):
+            cx, cy = room.get("label") or (room.get("x", 0) + room.get("w", 0) / 2, room.get("y", 0) + room.get("h", 0) / 2)
+            msp.add_text(room["name"], dxfattribs={"layer": "AREE", "height": 0.2}).set_placement((cx, L - cy))
+    stream = io.StringIO()
+    doc.write(stream)
+    return stream.getvalue()
+
+
+def _dxf_ascii(plan: dict) -> str:
+    """DXF minimale senza dipendenze (solo sezione ENTITIES)."""
+    out = ["0", "SECTION", "2", "ENTITIES"]
+    for layer, pts, closed in _plan_polylines(plan):
+        out += ["0", "LWPOLYLINE", "8", layer, "90", str(len(pts)), "70", "1" if closed else "0"]
+        for x, y in pts:
+            out += ["10", str(x), "20", str(y)]
+    out += ["0", "ENDSEC", "0", "EOF"]
+    return "\n".join(out)
+
+
 @app.post("/export-dxf")
-async def export_dxf(plan: dict):
+def export_dxf(plan: dict):
     try:
-        if ezdxf is not None:
-            doc = ezdxf.new('R2010')
-            doc.header['$MEASUREMENT'] = 1  
-            doc.header['$INSUNITS'] = 6     
-            msp = doc.modelspace()
-            
-            doc.layers.add("MURI", color=7)
-            doc.layers.add("ARREDI", color=3)
-            doc.layers.add("AREE", color=8)
-
-            for room in plan.get('rooms', []):
-                x, y, w, h = room.get('x', 0), room.get('y', 0), room.get('w', 0), room.get('h', 0)
-                msp.add_lwpolyline([(x, y), (x+w, y), (x+w, y+h), (x, y+h)], close=True, dxfattribs={'layer': 'AREE'})
-                name = room.get('name', '')
-                if name:
-                    msp.add_text(name, dxfattribs={'layer': 'AREE', 'height': 0.2}).set_placement((x + w/2, y + h/2))
-
-            for wall in plan.get('walls', []):
-                x, y, w, h = wall.get('x', 0), wall.get('y', 0), wall.get('w', 0), wall.get('h', 0)
-                msp.add_lwpolyline([(x, y), (x+w, y), (x+w, y+h), (x, y+h)], close=True, dxfattribs={'layer': 'MURI'})
-
-            for item in plan.get('furniture', []):
-                x, y, w, h = item.get('x', 0), item.get('y', 0), item.get('w', 0), item.get('h', 0)
-                msp.add_lwpolyline([(x, y), (x+w, y), (x+w, y+h), (x, y+h)], close=True, dxfattribs={'layer': 'ARREDI'})
-
-            stream = io.StringIO()
-            doc.write(stream)
-            content = stream.getvalue()
-        else:
-            # Fallback generatore DXF ASCII puro senza dipendenze
-            lines = ["0", "SECTION", "2", "ENTITIES"]
-            for room in plan.get('rooms', []):
-                x, y, w, h = room.get('x', 0), room.get('y', 0), room.get('w', 0), room.get('h', 0)
-                pts = [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
-                lines.extend(["0", "LWPOLYLINE", "8", "AREE", "90", "4", "70", "1"])
-                for px, py in pts:
-                    lines.extend(["10", str(px), "20", str(py)])
-            for wall in plan.get('walls', []):
-                x, y, w, h = wall.get('x', 0), wall.get('y', 0), wall.get('w', 0), wall.get('h', 0)
-                pts = [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
-                lines.extend(["0", "LWPOLYLINE", "8", "MURI", "90", "4", "70", "1"])
-                for px, py in pts:
-                    lines.extend(["10", str(px), "20", str(py)])
-            for item in plan.get('furniture', []):
-                x, y, w, h = item.get('x', 0), item.get('y', 0), item.get('w', 0), item.get('h', 0)
-                pts = [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
-                lines.extend(["0", "LWPOLYLINE", "8", "ARREDI", "90", "4", "70", "1"])
-                for px, py in pts:
-                    lines.extend(["10", str(px), "20", str(py)])
-            lines.extend(["0", "ENDSEC", "0", "EOF"])
-            content = "\n".join(lines)
-
-        return Response(
-            content=content, 
-            media_type="application/dxf", 
-            headers={"Content-Disposition": "attachment; filename=planimetria.dxf"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore interno DXF: {str(e)}")
+        content = _dxf_with_ezdxf(plan) if ezdxf is not None else _dxf_ascii(plan)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore interno DXF: {e}")
+    return Response(
+        content=content,
+        media_type="application/dxf",
+        headers={"Content-Disposition": "attachment; filename=planimetria.dxf"},
+    )
 
 
 @app.post("/import-dxf", response_model=PlanResponse)
-async def import_dxf_endpoint(req: DxfImportRequest):
+def import_dxf_endpoint(req: DxfImportRequest):
     """Riceve il testo di un file DXF e genera una planimetria arredata completa."""
     try:
         return planner.import_dxf_data(req.dxf_content, style=req.style or "modern")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {str(e)}")
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {e}")

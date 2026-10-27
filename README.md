@@ -33,6 +33,9 @@ Il cuore del sistema è un **motore algoritmico in Python puro** (zero dipendenz
   * Zoom, pan e tooltips per le stanze.
   * Supporto nativo per **Tema Chiaro** e **Tema Scuro**.
 * 💾 **Esportazione Avanzata:** Scarica la tua planimetria in formato **SVG** (vettoriale di alta qualità), **PNG** (raster) o **JSON** (dati grezzi della pianta).
+* ✏️ **Schizzo a mano libera:** disegna le stanze a rettangolo o a mano libera (tonde, a ferro di cavallo, oblique): la forma viene rispettata, i bordi si agganciano a griglia e alle stanze vicine e le porte vengono messe solo sui muri in comune, in modo che ogni stanza sia raggiungibile. Funziona anche senza backend.
+* ⭐ **Cronologia salvata:** le planimetrie (e le modifiche fatte) restano nella cronologia; con la stella le salvi in modo permanente. Con il consenso, la cronologia resta sul dispositivo tra una visita e l'altra.
+* 🍪 **Privacy:** banner di consenso e informativa su cookie e archiviazione locale; statistiche anonime attive solo su consenso.
 * 🎲 **Riproducibilità:** Grazie al sistema di *Seed*, puoi bloccare una variante che ti piace o generare infinite disposizioni diverse a parità di dimensioni.
 
 ## 🚀 Come Funziona
