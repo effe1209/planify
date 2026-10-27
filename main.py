@@ -6,8 +6,10 @@ Il motore vero è in planner.py (stessa cartella). Questo file espone solo l'API
 Avvio:   uvicorn main:app --reload
 Debug:   http://127.0.0.1:8000/preview?width=12&length=9&room_type=apartment&num_rooms=4&shape=l&seed=11
 """
+import io
 from typing import Dict, List, Optional
 
+import ezdxf
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -150,8 +152,6 @@ def preview(
     """Anteprima SVG nel browser, per verificare il motore senza il frontend."""
     plan = planner.generate(width, length, room_type, num_rooms, style, shape, seed)
     return Response(content=planner.to_svg(plan), media_type="image/svg+xml")
-
-import io
 
 @app.post("/export-dxf")
 async def export_dxf(plan: dict):
