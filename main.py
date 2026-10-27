@@ -150,3 +150,43 @@ def preview(
     """Anteprima SVG nel browser, per verificare il motore senza il frontend."""
     plan = planner.generate(width, length, room_type, num_rooms, style, shape, seed)
     return Response(content=planner.to_svg(plan), media_type="image/svg+xml")
+
+import io
+
+@app.post("/export-dxf")
+async def export_dxf(plan: dict):
+    # Crea un nuovo documento DXF in scala metrica
+    doc = ezdxf.new('R2010')
+    doc.header['$MEASUREMENT'] = 1  # Sistema metrico
+    doc.header['$INSUNITS'] = 6     # Unità in Metri
+    msp = doc.modelspace()
+    
+    # Crea i layer CAD
+    doc.layers.add("MURI", color=7)
+    doc.layers.add("ARREDI", color=3)
+    doc.layers.add("AREE", color=8)
+
+    # 1. Disegna le Aree (Stanze)
+    for room in plan.get('rooms', []):
+        x, y, w, h = room.get('x', 0), room.get('y', 0), room.get('w', 0), room.get('h', 0)
+        msp.add_lwpolyline([(x, y), (x+w, y), (x+w, y+h), (x, y+h)], close=True, dxfattribs={'layer': 'AREE'})
+        msp.add_text(room.get('name', ''), dxfattribs={'layer': 'AREE', 'height': 0.2}).set_placement((x + w/2, y + h/2))
+
+    # 2. Disegna i Muri
+    for wall in plan.get('walls', []):
+        x, y, w, h = wall.get('x', 0), wall.get('y', 0), wall.get('w', 0), wall.get('h', 0)
+        msp.add_lwpolyline([(x, y), (x+w, y), (x+w, y+h), (x, y+h)], close=True, dxfattribs={'layer': 'MURI'})
+
+    # 3. Disegna gli Arredi geometrici (semplificati per il CAD)
+    for item in plan.get('furniture', []):
+        x, y, w, h = item.get('x', 0), item.get('y', 0), item.get('w', 0), item.get('h', 0)
+        msp.add_lwpolyline([(x, y), (x+w, y), (x+w, y+h), (x, y+h)], close=True, dxfattribs={'layer': 'ARREDI'})
+
+    # Salva il file in memoria e invialo
+    stream = io.StringIO()
+    doc.write(stream)
+    return Response(
+        content=stream.getvalue(), 
+        media_type="application/dxf", 
+        headers={"Content-Disposition": "attachment; filename=planimetria.dxf"}
+    )

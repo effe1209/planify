@@ -767,6 +767,25 @@ export default function App() {
     } catch { say('Copia non riuscita'); }
   };
 
+  const exportDxf = async () => {
+    if (!plan) return;
+    say('Generazione file CAD in corso...');
+    try {
+      const base = backendUrl.trim().replace(/\/+$/, '');
+      const res = await fetch(`${base}/export-dxf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(plan)
+      });
+      if (!res.ok) throw new Error('Errore DXF');
+      const blob = await res.blob();
+      saveBlob(blob, 'planimetria.dxf');
+      say('File CAD esportato');
+    } catch (err) {
+      setError('Impossibile esportare in DXF. Verifica che il backend sia aggiornato.');
+    }
+  };
+
   const area = (parseFloat(form.width) || 0) * (parseFloat(form.length) || 0);
   const toggle = (k) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
@@ -937,6 +956,9 @@ export default function App() {
             <div className="pf-group" role="group" aria-label="Esporta">
               <button type="button" className="pf-tool" disabled={!plan} onClick={exportSvg}><Download size={15} /> SVG</button>
               <button type="button" className="pf-tool" disabled={!plan} onClick={exportPng}><ImageIcon size={15} /> PNG</button>
+              <button type="button" className="pf-tool" disabled={!plan || !backendUrl} onClick={exportDxf} style={{ color: '#0071e3', fontWeight: '500' }}>
+                <Briefcase size={15} /> DXF (CAD)
+              </button>
               <button type="button" className="pf-tool" disabled={!plan} onClick={exportJson}><FileJson size={15} /> JSON</button>
             </div>
           </div>
