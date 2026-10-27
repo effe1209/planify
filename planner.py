@@ -1560,8 +1560,12 @@ def generate(width: float, length: float, room_type: str = "apartment",
         lay.flip(rng.random() < 0.5, False)
     else:
         lay.flip(rng.random() < 0.5, rng.random() < 0.5)       # varianti speculari
-    walls = build_walls(lay)
+    return serialize(lay, palette, base)
 
+
+def serialize(lay: Layout, palette: dict, seed: int) -> dict:
+    """Layout -> dizionario nel formato di PlanResponse (usato da generate e dall'import DXF)."""
+    walls = build_walls(lay)
     kinds = [r.kind for r in lay.rooms]
     stats = {
         "grossArea": round(sum(r.rect.w * r.rect.h for r in lay.rooms), 2),
@@ -1573,7 +1577,6 @@ def generate(width: float, length: float, room_type: str = "apartment",
         "windows": len(lay.windows),
         "furniture": len(lay.items),
     }
-
     return {
         "dimensions": {"width": lay.W, "length": lay.L},
         "svgWidth": lay.W * SCALE,
@@ -1581,7 +1584,7 @@ def generate(width: float, length: float, room_type: str = "apartment",
         "scale": SCALE,
         "wallThickness": WALL * SCALE,
         "shape": lay.shape,
-        "seed": base,
+        "seed": seed,
         "stats": stats,
         "notches": compute_notches(lay),
         "rooms": [{"id": r.id, "name": r.name, "kind": r.kind,
@@ -1658,149 +1661,154 @@ def to_svg(plan: dict) -> str:
 # ----------------------------------------------------------------------------
 # IMPORTAZIONE DXF E ARREDO
 # ----------------------------------------------------------------------------
-def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
-    """Importa e arreda dettagliatamente una planimetria da un file DXF."""
+_ROOM_LAYERS = {"aree", "area", "room", "rooms", "stanza", "stanze", "locali"}
+_OTHER_LAYERS = ("muri", "wall", "arredi", "furniture", "quote", "dim")
+PASS_COST = {"corridor": 0, "living": 0.5, "living_kitchen": 0.5, "kitchen": 1, "study": 2, "bed": 3, "bath": 8}
+
+
+def _read_dxf_polylines(dxf_content: str) -> List[Tuple[str, List[Tuple[float, float]]]]:
+    """(layer, punti) di ogni LWPOLYLINE con almeno 3 vertici."""
     lines = [l.strip() for l in dxf_content.splitlines()]
-    polylines = []
-    line_segs = []
+    out, cur_type, layer, pts = [], None, "", []
 
-    i = 0
-    cur_type = None
-    cur_layer = ""
-    cur_pts = []
-    cur_p = {}
+    def flush():
+        if cur_type == "LWPOLYLINE" and len(pts) >= 3:
+            out.append((layer, list(pts)))
 
-    while i < len(lines):
+    for i in range(0, len(lines) - 1, 2):
         try:
             code = int(lines[i])
-            val = lines[i+1] if i + 1 < len(lines) else ""
-            i += 2
-        except (ValueError, IndexError):
-            i += 1
+        except ValueError:
             continue
-
+        val = lines[i + 1]
         if code == 0:
-            if cur_type == "LWPOLYLINE" and len(cur_pts) >= 3:
-                polylines.append({"layer": cur_layer, "pts": cur_pts})
-            elif cur_type == "LINE" and (10 in cur_p and 20 in cur_p and 11 in cur_p and 21 in cur_p):
-                line_segs.append({"layer": cur_layer, "p1": (cur_p[10], cur_p[20]), "p2": (cur_p[11], cur_p[21])})
+            flush()
+            cur_type, layer, pts = val.upper(), "", []
+        elif code == 8:
+            layer = val
+        elif cur_type == "LWPOLYLINE" and code in (10, 20):
+            try:
+                v = float(val)
+            except ValueError:
+                continue
+            if code == 10:
+                pts.append([v, 0.0])
+            elif pts:
+                pts[-1][1] = v
+    flush()
+    return out
 
-            cur_type = val.upper()
-            cur_layer = ""
-            cur_pts = []
-            cur_p = {}
-        elif cur_type:
-            if code == 8:
-                cur_layer = val
-            elif code in (10, 20, 11, 21):
-                try:
-                    fval = float(val)
-                    cur_p[code] = fval
-                    if cur_type == "LWPOLYLINE":
-                        if code == 10:
-                            cur_pts.append([fval, 0.0])
-                        elif code == 20 and cur_pts:
-                            cur_pts[-1][1] = fval
-                except ValueError:
-                    pass
 
-    all_x = []
-    all_y = []
-    for poly in polylines:
-        for x, y in poly["pts"]:
-            all_x.append(x)
-            all_y.append(y)
-    for seg in line_segs:
-        all_x.extend([seg["p1"][0], seg["p2"][0]])
-        all_y.extend([seg["p1"][1], seg["p2"][1]])
+def connect_rooms(lay: Layout, entrance_room: Room) -> None:
+    """Porte solo tra stanze con un muro in comune, in modo che tutte siano raggiungibili dall'ingresso.
 
-    if not all_x or not all_y:
-        return generate(10.0, 8.0, "apartment", 3, style)
+    Albero di copertura a costo minimo (Prim): si preferisce passare da disimpegni e soggiorni
+    piuttosto che attraversare camere o bagni. Le stanze isolate ricevono un ingresso proprio.
+    """
+    reached, failed = {entrance_room.id}, set()
+    while True:
+        best = None
+        for a in lay.rooms:
+            if a.id not in reached:
+                continue
+            for b in lay.rooms:
+                if b.id in reached or (a.id, b.id) in failed:
+                    continue
+                e = shared_edge(a.rect, b.rect)
+                if e is None or e[3] - e[2] < 1.0:
+                    continue
+                cost = PASS_COST.get(a.kind, 2) - (e[3] - e[2]) * 0.01
+                if best is None or cost < best[0]:
+                    best = (cost, a, b)
+        if best is None:
+            break
+        _, a, b = best
+        width = DOOR_W_BATH if "bath" in (a.kind, b.kind) else DOOR_W
+        if lay.add_door(a.id, b.id, width, 0.5, into=b.id):
+            reached.add(b.id)
+        else:
+            failed.add((a.id, b.id))
+    for r in lay.rooms:
+        if r.id in reached:
+            continue
+        side = lay.best_ext_side(r)
+        if side:
+            lay.add_entrance(r.id, side)
+            lay.notes.append(f"{r.name} non confina con altre stanze: ha un ingresso indipendente")
+        else:
+            lay.notes.append(f"{r.name} non raggiungibile")
 
-    min_x, max_x = min(all_x), max(all_x)
-    min_y, max_y = min(all_y), max(all_y)
-    raw_w = max_x - min_x
-    raw_h = max_y - min_y
 
-    scale_factor = 1.0
-    if raw_w > 500 or raw_h > 500:
-        scale_factor = 0.001
-    elif raw_w > 50 or raw_h > 50:
-        scale_factor = 0.01
+def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
+    """Importa le stanze (polilinee chiuse) da un DXF e le arreda.
 
-    W = snap(clamp(raw_w * scale_factor, 5.0, 40.0))
-    L = snap(clamp(raw_h * scale_factor, 5.0, 40.0))
+    Unità riconosciute: m, cm, mm. Se il file ha un layer delle stanze (AREE/ROOMS/STANZE) si usa
+    solo quello, altrimenti tutte le polilinee tranne muri e arredi. Le stanze sono approssimate
+    dal loro rettangolo d'ingombro, agganciate tra loro per assorbire lo spessore dei muri del CAD.
+    """
+    palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
+    polys = _read_dxf_polylines(dxf_content)
+    tagged = [p for l, p in polys if l.strip().lower() in _ROOM_LAYERS]
+    polys = tagged or [p for l, p in polys if not l.strip().lower().startswith(_OTHER_LAYERS)]
+    pts = [p for poly in polys for p in poly]
+    if not pts:
+        plan = generate(10.0, 8.0, "apartment", 3, style)
+        plan["notes"] = ["Nessuna polilinea chiusa nel DXF: generata una pianta di esempio."] + plan["notes"]
+        return plan
 
-    detected_rooms = []
-    for poly in polylines:
-        pts = poly["pts"]
-        xs = [p[0] * scale_factor for p in pts]
-        ys = [p[1] * scale_factor for p in pts]
-        rx0, rx1 = min(xs) - min_x * scale_factor, max(xs) - min_x * scale_factor
-        ry0, ry1 = min(ys) - min_y * scale_factor, max(ys) - min_y * scale_factor
-        rw = rx1 - rx0
-        rh = ry1 - ry0
-        if rw >= 1.5 and rh >= 1.5 and rw < W and rh < L:
-            detected_rooms.append((snap(rx0), snap(ry0), snap(rw), snap(rh)))
+    min_x, max_x = min(p[0] for p in pts), max(p[0] for p in pts)
+    min_y, max_y = min(p[1] for p in pts), max(p[1] for p in pts)
+    size = max(max_x - min_x, max_y - min_y)
+    k = next((f for f in (1.0, 0.01, 0.001) if size * f <= 60), 0.001)
+    W, L = snap((max_x - min_x) * k), snap((max_y - min_y) * k)
 
-    if len(detected_rooms) >= 2:
-        lay = Layout(W, L)
-        palette = PALETTES.get(style.lower(), PALETTES["modern"])
-        for idx, (rx, ry, rw, rh) in enumerate(detected_rooms):
-            area = rw * rh
-            if area >= 18:
-                nm, kd = "Soggiorno con Cucina", "living_kitchen"
-            elif area >= 11:
-                nm, kd = f"Camera {idx}", "bed"
-            elif area <= 5.5:
-                nm, kd = "Bagno", "bath"
-            else:
-                nm, kd = f"Locale {idx+1}", "study"
-            lay.add_room(nm, kd, rx, ry, rx + rw, ry + rh, group=idx+1)
+    # rettangoli d'ingombro, y ribaltata (nel DXF cresce verso l'alto); il contorno esterno non è una stanza
+    boxes = []
+    for poly in polys:
+        xs = [(p[0] - min_x) * k for p in poly]
+        ys = [(max_y - p[1]) * k for p in poly]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        if x1 - x0 >= 1.2 and y1 - y0 >= 1.2 and (x1 - x0) * (y1 - y0) < W * L * 0.9:
+            boxes.append([x0, y0, x1, y1])
+    if not boxes:
+        n = max(2, min(5, int(W * L / 20)))
+        plan = generate(max(W, 5.0), max(L, 5.0), "apartment", n, style)
+        plan["notes"] = ["DXF importato: riconosciuto solo il perimetro, stanze generate automaticamente."] + plan["notes"]
+        return plan
 
-        if lay.rooms:
-            lay.add_entrance(lay.rooms[0].id, "S", DOOR_W, 0.3)
-            for r in lay.rooms[1:]:
-                lay.add_door(lay.rooms[0].id, r.id, DOOR_W_BATH if r.kind == "bath" else DOOR_W, 0.5)
-                lay.add_windows(r.id, lay.best_ext_side(r) or "E", 1.4, 2)
-            lay.add_windows(lay.rooms[0].id, "W", 1.8, 2)
-            furnish(lay)
-            walls = build_walls(lay)
-            kinds = [r.kind for r in lay.rooms]
-            stats = {
-                "grossArea": round(sum(r.rect.w * r.rect.h for r in lay.rooms), 2),
-                "boundingBox": round(lay.W * lay.L, 2),
-                "rooms": len(lay.rooms),
-                "bedrooms": kinds.count("bed"),
-                "bathrooms": kinds.count("bath"),
-                "doors": len(lay.doors),
-                "windows": len(lay.windows),
-                "furniture": len(lay.items),
-            }
-            return {
-                "dimensions": {"width": lay.W, "length": lay.L},
-                "svgWidth": lay.W * SCALE,
-                "svgHeight": lay.L * SCALE,
-                "scale": SCALE,
-                "wallThickness": WALL * SCALE,
-                "shape": "rect",
-                "seed": random.randint(1000, 9999),
-                "stats": stats,
-                "notches": compute_notches(lay),
-                "rooms": [{"id": r.id, "name": r.name, "kind": r.kind,
-                           "x": r.rect.x, "y": r.rect.y, "w": r.rect.w, "h": r.rect.h,
-                           "area": round(r.rect.w * r.rect.h, 2), "zone": r.group,
-                           "color": palette.get(KIND_GROUP.get(r.kind, "living"), "#f8fafc")} for r in lay.rooms],
-                "walls": [{"x": x, "y": y, "w": w, "h": h} for x, y, w, h in walls],
-                "doors": [_export_opening(lay, d, True) for d in lay.doors],
-                "windows": [_export_opening(lay, w, False) for w in lay.windows],
-                "furniture": [{"type": i.type, "x": round(i.rect.x, 3), "y": round(i.rect.y, 3),
-                               "w": round(i.rect.w, 3), "h": round(i.rect.h, 3), "rot": 0.0,
-                               "facing": i.facing, "room": i.room_id} for i in lay.items],
-                "notes": ["Planimetria importata da DXF ed arredata con successo."],
-            }
+    # aggancio: bordi a meno di 35 cm (spessore muro) diventano coincidenti; bordi vicini al perimetro vanno sul perimetro
+    boxes.sort(key=lambda b: -(b[2] - b[0]) * (b[3] - b[1]))
+    xs_ref, ys_ref = [0.0, W], [0.0, L]
+    for b in boxes:
+        for i, ref in ((0, xs_ref), (2, xs_ref), (1, ys_ref), (3, ys_ref)):
+            near = min(ref, key=lambda v: abs(v - b[i]))
+            if abs(near - b[i]) <= 0.35:
+                b[i] = near
+        xs_ref += [b[0], b[2]]
+        ys_ref += [b[1], b[3]]
 
-    num_r = max(2, min(5, int((W * L) / 20)))
-    plan = generate(W, L, "apartment", num_r, style)
-    plan["notes"] = ["Planimetria DXF importata: perimetro rilevato ed arredo completato."]
-    return plan
+    lay = Layout(W, L)
+    lay.shape = "rect"
+    for idx, (x0, y0, x1, y1) in enumerate(boxes):
+        area = (x1 - x0) * (y1 - y0)
+        if idx == 0:
+            name, kind = "Soggiorno con Cucina", "living_kitchen"
+        elif area <= 5.5:
+            name, kind = "Bagno", "bath"
+        elif area >= 9:
+            name, kind = "Camera", "bed"
+        else:
+            name, kind = f"Locale {idx + 1}", "study"
+        lay.add_room(name, kind, snap(x0), snap(y0), snap(x1), snap(y1))
+
+    living = lay.rooms[0]
+    side = lay.best_ext_side(living) or "S"
+    lay.add_entrance(living.id, side, DOOR_W, 0.3)
+    connect_rooms(lay, living)
+    for r in lay.rooms:
+        best = lay.best_ext_side(r)
+        if best:
+            lay.add_windows(r.id, best, 0.6 if r.kind == "bath" else 1.4, 1 if r.kind == "bath" else 2)
+    furnish(lay)
+    lay.notes.insert(0, f"Importate {len(lay.rooms)} stanze dal file DXF e arredate automaticamente.")
+    return serialize(lay, palette, random.randrange(1, 1_000_000))

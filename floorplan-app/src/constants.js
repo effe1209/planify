@@ -1,0 +1,115 @@
+import { Home, Briefcase, Maximize2, BedDouble } from 'lucide-react';
+
+export const SHAPES = [
+  { id: 'auto', label: 'Varia', d: null },
+  { id: 'rect', label: 'Rettangolo', d: 'M3 6h18v12H3z' },
+  { id: 'l', label: 'A L', d: 'M3 5h11v6h7v8H3z' },
+  { id: 'u', label: 'A U', d: 'M3 5h5v7h8V5h5v14H3z' },
+  { id: 't', label: 'A T', d: 'M3 5h18v6h-6v8H9v-8H3z' },
+  { id: 'step', label: 'Scalare', d: 'M3 5h9v5h5v5h4v4H3z' },
+];
+export const SHAPE_NAME = {
+  rect: 'rettangolare', l: 'a L', u: 'a U', t: 'a T', step: 'scalare', sketch: 'libera',
+};
+
+export const TYPES = [
+  { id: 'apartment', label: 'Appartamento', Icon: Home },
+  { id: 'open-space', label: 'Open space', Icon: Maximize2 },
+  { id: 'office', label: 'Ufficio', Icon: Briefcase },
+  { id: 'hotel-room', label: 'Camera Hotel', Icon: BedDouble },
+];
+export const TYPE_NAME = {
+  apartment: 'Appartamento',
+  'open-space': 'Open space',
+  office: 'Ufficio',
+  'hotel-room': 'Camera Hotel',
+  sketch: 'Schizzo',
+  dxf: 'Import DXF',
+};
+
+export const STYLES = [
+  { id: 'modern', label: 'Moderno', bg: '#e0f2fe', desc: 'Minimal e contemporaneo' },
+  { id: 'classic', label: 'Classico', bg: '#fef3c7', desc: 'Caldo e tradizionale' },
+  { id: 'nordic', label: 'Nordico', bg: '#e8f5e9', desc: 'Legno chiaro e salvia' },
+  { id: 'industrial', label: 'Industriale', bg: '#cfd8dc', desc: 'Loft e cemento' },
+  { id: 'japandi', label: 'Japandi', bg: '#f7f4ea', desc: 'Zen e naturale' },
+  { id: 'luxury', label: 'Luxury', bg: '#f9f6f0', desc: 'Elegante e raffinato' },
+];
+
+export const PRESETS = [
+  { label: 'Bilocale', w: 8, l: 6.5, type: 'apartment', rooms: 2 },
+  { label: 'Trilocale', w: 10, l: 8, type: 'apartment', rooms: 3 },
+  { label: 'Quadrilocale', w: 13, l: 9.5, type: 'apartment', rooms: 4 },
+  { label: 'Monolocale', w: 6.5, l: 5.5, type: 'open-space', rooms: 1 },
+  { label: 'Ufficio', w: 14, l: 10, type: 'office', rooms: 3 },
+  { label: 'Camera Std', w: 4.2, l: 6.0, type: 'hotel-room', rooms: 1 },
+  { label: 'Camera Deluxe', w: 5.0, l: 6.8, type: 'hotel-room', rooms: 1 },
+  { label: 'Suite Hotel', w: 6.0, l: 8.0, type: 'hotel-room', rooms: 1 },
+];
+
+export const FLOOR_PALETTES = [
+  { name: 'Rovere Chiaro', color: '#fdf6e3' },
+  { name: 'Parquet Noce', color: '#efe0c8' },
+  { name: 'Ceramica Bianca', color: '#f8fafc' },
+  { name: 'Cotto Caldo', color: '#fef3c7' },
+  { name: 'Resina Grigia', color: '#e2e8f0' },
+  { name: 'Azzurro Spa', color: '#e0f2fe' },
+  { name: 'Verde Salvia', color: '#e8f5e9' },
+  { name: 'Marmo Luxury', color: '#faf7f5' },
+];
+
+/* Destinazioni d'uso selezionabili (schizzo e personalizzazione stanza). */
+export const ROOM_KINDS = [
+  { id: 'living', label: 'Soggiorno', name: 'Soggiorno' },
+  { id: 'living_kitchen', label: 'Soggiorno + cucina', name: 'Soggiorno con Cucina' },
+  { id: 'kitchen', label: 'Cucina', name: 'Cucina' },
+  { id: 'bed', label: 'Camera', name: 'Camera da Letto' },
+  { id: 'bath', label: 'Bagno', name: 'Bagno' },
+  { id: 'study', label: 'Studio', name: 'Studio' },
+  { id: 'corridor', label: 'Disimpegno', name: 'Disimpegno' },
+  { id: 'hotel_room', label: 'Camera hotel', name: 'Camera' },
+];
+export const ROOM_KIND_NAME = Object.fromEntries(ROOM_KINDS.map((k) => [k.id, k.name]));
+
+export const FURNITURE = [
+  { type: 'bed', label: 'Letto matrimoniale', w: 1.6, h: 2.0 },
+  { type: 'sofa', label: 'Divano', w: 1.8, h: 0.9 },
+  { type: 'table', label: 'Tavolo con sedie', w: 1.4, h: 0.8 },
+  { type: 'desk', label: 'Scrivania con sedia', w: 1.2, h: 0.6 },
+  { type: 'tv', label: 'Mobile TV', w: 1.4, h: 0.25 },
+  { type: 'wardrobe', label: 'Armadio guardaroba', w: 1.6, h: 0.6 },
+  { type: 'kitchen_counter', label: 'Piano cucina', w: 1.8, h: 0.6 },
+  { type: 'bathtub', label: 'Vasca da bagno', w: 1.5, h: 0.75 },
+  { type: 'shower', label: 'Box doccia', w: 0.9, h: 0.9 },
+  { type: 'toilet', label: 'WC', w: 0.4, h: 0.65 },
+  { type: 'sink', label: 'Lavabo', w: 0.6, h: 0.5 },
+  { type: 'minibar', label: 'Minibar', w: 0.8, h: 0.5 },
+];
+export const FURNITURE_LABEL = Object.fromEntries(FURNITURE.map((f) => [f.type, f.label]));
+
+export const LOADING_STEPS = [
+  'Calcolo la sagoma e la volumetria…',
+  'Traccio pareti e distribuisco gli ambienti…',
+  'Inserisco porte, finestre e dotazioni di arredo…',
+  'Controllo passaggi, circolazione e conformità…',
+];
+
+/* Stesse palette del motore Python (planner.PALETTES), usate per schizzi e import locali. */
+export const PALETTES = {
+  modern: { living: '#f8fafc', kitchen: '#f1f5f9', bed: '#f8fafc', bath: '#e0f2fe', corridor: '#e2e8f0', study: '#f1f5f9' },
+  classic: { living: '#fdf6e3', kitchen: '#fef3c7', bed: '#fef9ef', bath: '#e7f0f7', corridor: '#efe7d6', study: '#f5ecd7' },
+  nordic: { living: '#fafaf9', kitchen: '#f5f5f4', bed: '#fafaf9', bath: '#e8f5e9', corridor: '#f5f5f4', study: '#f0fdf4' },
+  industrial: { living: '#eceff1', kitchen: '#e2e8f0', bed: '#f1f5f9', bath: '#cfd8dc', corridor: '#e2e8f0', study: '#e2e8f0' },
+  japandi: { living: '#f7f4ea', kitchen: '#f3efe6', bed: '#faf7f0', bath: '#eaf0e8', corridor: '#f3efe6', study: '#faf7f0' },
+  luxury: { living: '#f9f6f0', kitchen: '#f5efe6', bed: '#fbf8f5', bath: '#e2e8f0', corridor: '#f3eee5', study: '#fbf8f5' },
+};
+export const KIND_GROUP = {
+  living: 'living', living_kitchen: 'living', zone_day: 'living', kitchen: 'kitchen', bed: 'bed',
+  zone_night: 'bed', bath: 'bath', wc: 'bath', corridor: 'corridor', study: 'study', hotel_room: 'bed',
+};
+export const roomColor = (kind, style = 'modern') =>
+  (PALETTES[style] || PALETTES.modern)[KIND_GROUP[kind] || 'living'] || '#f8fafc';
+
+/* Spessore muri e scala di disegno: allineati a planner.py. */
+export const WALL = 0.2;
+export const SCALE = 45;
