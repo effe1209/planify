@@ -7,7 +7,7 @@ Avvio:   uvicorn main:app --reload
 Debug:   http://127.0.0.1:8000/preview?width=12&length=9&room_type=apartment&num_rooms=4&shape=l&seed=11
 """
 import io
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Literal, Optional, Tuple
 
 try:
     import ezdxf
@@ -46,6 +46,12 @@ class PlanRequest(BaseModel):
     style: Optional[str] = Field("modern", description="modern | classic | nordic | industrial | japandi | luxury")
     shape: Optional[str] = Field("auto", description="auto | rect | l | u | t | step  (auto = varia a caso)")
     seed: Optional[int] = Field(None, ge=0, description="Stesso seed = stessa pianta. Vuoto = variante nuova a ogni richiesta")
+    # Solo appartamenti: se indicati hanno la precedenza su num_rooms
+    double_bedrooms: Optional[int] = Field(None, ge=0, le=5, description="Camere matrimoniali")
+    single_bedrooms: Optional[int] = Field(None, ge=0, le=5, description="Camere singole")
+    bathrooms: Optional[int] = Field(None, ge=1, le=3, description="Bagni (vuoto = automatico)")
+    kitchen: Literal["auto", "open", "closed"] = Field("auto", description="Cucina a vista nel soggiorno o separata")
+    peninsula: bool = Field(False, description="Penisola in cucina, se entra")
 
 
 class DxfImportRequest(BaseModel):
@@ -99,6 +105,7 @@ class FurnitureItem(BaseModel):
     rot: float
     facing: str = ""   # lato verso cui è rivolto l'arredo (N/E/S/W)
     room: int = 0      # id della stanza che lo contiene
+    flip: bool = False # disegno specchiato (doccia angolare, divano angolare, penisola)
 
 
 class Notch(BaseModel):
@@ -144,6 +151,11 @@ def generate_floor_plan(request: PlanRequest):
             style=request.style or "modern",
             shape=request.shape or "auto",
             seed=request.seed,
+            double_bedrooms=request.double_bedrooms,
+            single_bedrooms=request.single_bedrooms,
+            bathrooms=request.bathrooms,
+            kitchen=request.kitchen,
+            peninsula=request.peninsula,
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")

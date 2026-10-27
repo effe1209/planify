@@ -545,3 +545,20 @@
 .pf-policy-table th, .pf-policy-table td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .pf-policy-table th { color: var(--text); font-weight: 600; }
 .pf-policy-table code { font-size: 11px; }
+
+/* ── Programma dell'appartamento ───────────────────────────────────────── */
+.pf-program { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.pf-stepper { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+.pf-stepper div { display: flex; align-items: center; gap: 6px; }
+.pf-stepper strong { min-width: 18px; text-align: center; font-size: 13px; }
+.pf-stepper button {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg-canvas); color: var(--text);
+}
+.pf-stepper button:hover:not(:disabled) { border-color: var(--border-hover); }
+.pf-stepper button:disabled { opacity: 0.35; cursor: default; }
+.pf-program .pf-seg button { font-size: 11px; padding: 6px 4px; }
+.pf-check { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
+.pf-check input { accent-color: var(--accent); width: 15px; height: 15px; }
+.pf-check em { font-style: normal; color: var(--text-muted); }
+.pf-furn-row em { font-style: normal; color: var(--text-muted); margin-left: 4px; }

@@ -7,10 +7,11 @@ import {
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
 
-import { FURNITURE, FURNITURE_LABEL, LOADING_STEPS, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME } from './constants';
+import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME } from './constants';
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import RoomEditor from './components/RoomEditor';
+import LayoutOptions from './components/LayoutOptions';
 import HistoryPanel from './components/HistoryPanel';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
@@ -52,6 +53,7 @@ export default function App() {
 
   const [form, setForm] = useState({
     width: 10, length: 8, roomType: 'apartment', rooms: 3, style: 'modern', shape: 'auto', seed: '',
+    doubles: 1, singles: 1, baths: 'auto', kitchen: 'auto', peninsula: false,
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [autoSeed, setAutoSeed] = useState(true);
@@ -117,7 +119,7 @@ export default function App() {
     const kinds = plan.rooms.map((r) => r.kind);
     return {
       gross: st.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0),
-      bedrooms: st.bedrooms ?? kinds.filter((k) => k === 'bed').length,
+      bedrooms: st.bedrooms ?? kinds.filter((k) => k === 'bed' || k === 'bed_single').length,
       baths: st.bathrooms ?? kinds.filter((k) => k === 'bath' || k === 'wc').length,
       doors: plan.doors.length,
       windows: plan.windows.length,
@@ -142,7 +144,10 @@ export default function App() {
     history.add({
       plan: newPlan,
       meta: { style: form.style, ...meta },
-      params: { roomType: form.roomType, rooms: Number(form.rooms), style: form.style, shape: form.shape },
+      params: {
+        roomType: form.roomType, rooms: Number(form.rooms), style: form.style, shape: form.shape,
+        doubles: form.doubles, singles: form.singles, baths: form.baths, kitchen: form.kitchen, peninsula: form.peninsula,
+      },
       ...extra,
     });
     setSelectedId(null);
@@ -161,23 +166,25 @@ export default function App() {
   };
   const rotateFurniture = (index) =>
     editFurniture((list) => list.map((f, i) => (i === index ? { ...f, facing: NEXT_FACING[f.facing || 'S'] || 'S' } : f)));
-  const addFurniture = (roomId, type) => {
+  const flipFurniture = (index) =>
+    editFurniture((list) => list.map((f, i) => (i === index ? { ...f, flip: !f.flip } : f)));
+  const addFurniture = (roomId, catalogId) => {
     const room = plan.rooms.find((r) => r.id === roomId);
-    if (!room) return;
-    const sz = FURNITURE.find((f) => f.type === type) || { w: 1, h: 0.8 };
-    const offset = (roomFurniture.length * 0.3) % Math.max(0.2, room.w - sz.w);
+    const entry = FURNITURE.find((f) => f.id === catalogId);
+    if (!room || !entry) return;
+    const offset = (roomFurniture.length * 0.3) % Math.max(0.2, room.w - entry.w);
     const item = {
-      type,
-      x: clamp(snap(room.x + 0.3 + offset), room.x, room.x + Math.max(0, room.w - sz.w)),
-      y: clamp(snap(room.y + 0.3 + offset), room.y, room.y + Math.max(0, room.h - sz.h)),
-      w: sz.w,
-      h: sz.h,
+      type: entry.type,
+      x: clamp(snap(room.x + 0.3 + offset), room.x, room.x + Math.max(0, room.w - entry.w)),
+      y: clamp(snap(room.y + 0.3 + offset), room.y, room.y + Math.max(0, room.h - entry.h)),
+      w: entry.w,
+      h: entry.h,
       rot: 0,
       facing: 'S',
       room: roomId,
     };
     editFurniture((list) => [...list, item]);
-    say(`${FURNITURE_LABEL[type] || type} aggiunto`);
+    say(`${entry.label} aggiunto`);
   };
 
   /* ── Generazione dal motore ── */
@@ -194,6 +201,7 @@ export default function App() {
       setError('Inserisci larghezza e lunghezza valide.');
       return;
     }
+    const apartment = form.roomType === 'apartment';
     const seedTxt = String(form.seed).trim();
     const fixedSeed = !autoSeed && !variant && /^\d+$/.test(seedTxt);
     const requestSeed = fixedSeed ? Number(seedTxt) : randomSeed();
@@ -211,10 +219,17 @@ export default function App() {
         width: clamp(w, 3.5, 60),
         length: clamp(l, 3.5, 60),
         room_type: form.roomType,
-        num_rooms: Number(form.rooms),
+        num_rooms: apartment ? 1 + form.doubles + form.singles : Number(form.rooms),
         style: form.style,
         shape: form.shape,
         seed: requestSeed,
+        ...(apartment && {
+          double_bedrooms: form.doubles,
+          single_bedrooms: form.singles,
+          bathrooms: form.baths === 'auto' ? null : form.baths,
+          kitchen: form.kitchen,
+          peninsula: form.peninsula,
+        }),
       }, controller.signal);
       const data = await res.json();
       openNewPlan(data, { type: form.roomType });
@@ -239,7 +254,7 @@ export default function App() {
   /* ── Schizzo ── */
   const generateFromSketch = (shapes) => {
     try {
-      const newPlan = sketchToPlan(shapes, { style: form.style });
+      const newPlan = sketchToPlan(shapes, { style: form.style, peninsula: form.peninsula });
       openNewPlan(newPlan, { type: 'sketch' }, { sketch: shapes, params: { roomType: 'apartment', rooms: shapes.length, style: form.style, shape: 'auto' } });
       setSketch(null);
       say('Planimetria creata dallo schizzo');
@@ -399,7 +414,7 @@ export default function App() {
               <div className="pf-chips">
                 {PRESETS.map((p) => (
                   <button key={p.label} type="button" className="pf-chip"
-                    onClick={() => setForm((f) => ({ ...f, width: p.w, length: p.l, roomType: p.type, rooms: p.rooms }))}>
+                    onClick={() => setForm((f) => ({ ...f, width: p.w, length: p.l, roomType: p.type, rooms: p.rooms, ...defaultBedrooms(p.rooms) }))}>
                     {p.label}
                   </button>
                 ))}
@@ -420,14 +435,18 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div className="pf-range">
-                <div>
-                  <span>Locali principali</span>
-                  <strong>{form.rooms}</strong>
+              {form.roomType === 'apartment' ? (
+                <LayoutOptions form={form} setF={setF} />
+              ) : form.roomType !== 'hotel-room' && (
+                <div className="pf-range">
+                  <div>
+                    <span>{form.roomType === 'office' ? 'Locali (open space incluso)' : 'Locali principali'}</span>
+                    <strong>{form.rooms}</strong>
+                  </div>
+                  <input type="range" min="1" max="8" value={form.rooms} aria-label="Locali principali"
+                    onChange={(e) => setF('rooms', Number(e.target.value))} />
                 </div>
-                <input type="range" min="1" max="8" value={form.rooms} aria-label="Locali principali"
-                  onChange={(e) => setF('rooms', Number(e.target.value))} />
-              </div>
+              )}
             </section>
 
             <section className="pf-sec">
@@ -606,6 +625,7 @@ export default function App() {
                   furniture={roomFurniture}
                   onChange={(patch) => updateRoom(selectedRoom.id, patch)}
                   onRotate={rotateFurniture}
+                  onFlip={flipFurniture}
                   onRemoveItem={removeFurniture}
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
                   onClose={() => setSelectedId(null)}
