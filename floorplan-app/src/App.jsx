@@ -65,7 +65,7 @@ const LOADING_STEPS = [
 
 const INK = '#14181f';
 const FONT = "'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif";
-const MARGIN = 78;   // spazio per le quote attorno alla pianta
+const MARGIN = 78;   
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmt = (n, d = 1) => Number(n).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtM = (n) => Number(n).toLocaleString('it-IT', { maximumFractionDigits: 2 });
@@ -77,8 +77,7 @@ function sheetBox(plan, thumb) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Arredi: disegnati in posizione canonica (schienale in alto, fronte in basso)
-   e ruotati in base a `facing`, il lato verso cui sono rivolti (calcolato dal backend)
+   Arredi
    ──────────────────────────────────────────────────────────────────────────── */
 const ROT_BY_FACING = { S: 0, N: 180, E: -90, W: 90 };
 
@@ -342,12 +341,10 @@ function PlanSvg({
         </filter>
       </defs>
 
-      {/* Foglio */}
       <rect width={box.w} height={box.h} fill="#fff" />
       {!thumb && <rect x="10" y="10" width={box.w - 20} height={box.h - 20} fill="none" stroke={INK} strokeWidth="1.2" />}
 
       <g transform={`translate(${box.ox},${box.oy})`}>
-        {/* Esterno / rientranze */}
         {notches.map((n, i) => (
           <g key={`n-${i}`}>
             <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill="#f3f6f1" />
@@ -361,7 +358,6 @@ function PlanSvg({
           </g>
         ))}
 
-        {/* Stanze */}
         <g filter={thumb ? undefined : ref('pshadow')}>
           {plan.rooms.map((r) => (
             <rect key={`bg-${r.id}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} fill={r.color} />
@@ -376,7 +372,6 @@ function PlanSvg({
 
         {layers.grid && !thumb && <rect width={W} height={H} fill={ref('grid')} pointerEvents="none" />}
 
-        {/* Evidenziazione stanza */}
         {!thumb && plan.rooms.map((r) => {
           const on = r.id === hoverId || r.id === selectedId;
           return on ? (
@@ -385,21 +380,18 @@ function PlanSvg({
           ) : null;
         })}
 
-        {/* Arredi */}
         {showFurn && (
           <g filter={ref('fshadow')}>
             {plan.furniture.map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} />)}
           </g>
         )}
 
-        {/* Muri */}
         <g fill={INK}>
           {plan.walls.map((w, i) => (
             <rect key={`w-${i}`} x={w.x * s} y={w.y * s} width={w.w * s} height={w.h * s} />
           ))}
         </g>
 
-        {/* Porte */}
         {plan.doors.map((d, i) => {
           const sw = d.w * s;
           const dir = d.openDir;
@@ -417,7 +409,6 @@ function PlanSvg({
           );
         })}
 
-        {/* Finestre */}
         {plan.windows.map((w, i) => {
           const sw = w.w * s;
           return (
@@ -429,7 +420,6 @@ function PlanSvg({
           );
         })}
 
-        {/* Nomi stanze */}
         {!thumb && layers.labels && plan.rooms.map((r) => {
           const lb = roomLabel(r, s);
           if (!lb) return null;
@@ -451,7 +441,6 @@ function PlanSvg({
           );
         })}
 
-        {/* Zone cliccabili */}
         {!thumb && plan.rooms.map((r) => (
           <rect key={`hit-${r.id}`} className="pf-hit" x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s}
             fill="transparent" style={{ cursor: 'pointer' }}
@@ -459,7 +448,6 @@ function PlanSvg({
             onClick={() => onSelect?.(r.id === selectedId ? null : r.id)} />
         ))}
 
-        {/* Quote generali */}
         {!thumb && layers.dims && (
           <g fontFamily={FONT}>
             <g stroke={INK} strokeWidth="0.8">
@@ -474,7 +462,6 @@ function PlanSvg({
         )}
       </g>
 
-      {/* Cartiglio, scala, nord */}
       {!thumb && (
         <g fontFamily={FONT}>
           <g transform={`translate(${box.w - 46},52)`} stroke={INK} fill="none" strokeWidth="1.1">
@@ -511,9 +498,6 @@ function PlanSvg({
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Utilità di esportazione
-   ──────────────────────────────────────────────────────────────────────────── */
 function serializeSvg(svg) {
   const clone = svg.cloneNode(true);
   clone.querySelectorAll('.pf-hl,.pf-hit').forEach((n) => n.remove());
@@ -557,13 +541,13 @@ function Logo() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   App
+   App Principale
    ──────────────────────────────────────────────────────────────────────────── */
 const lsGet = (k, fallback) => {
   try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; }
 };
 const lsSet = (k, v) => {
-  try { localStorage.setItem(k, v); } catch { /* storage non disponibile */ }
+  try { localStorage.setItem(k, v); } catch { }
 };
 
 export default function App() {
@@ -582,10 +566,10 @@ export default function App() {
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState(null);
 
-  const [current, setCurrent] = useState(null);      // { id, plan, meta }
+  const [current, setCurrent] = useState(null);      
   const [history, setHistory] = useState([]);
   const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false });
-  const [zoom, setZoom] = useState(null);            // null = adatta alla finestra
+  const [zoom, setZoom] = useState(null);            
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [flash, setFlash] = useState('');
@@ -600,7 +584,6 @@ export default function App() {
   useEffect(() => { lsSet('planify.theme', theme); }, [theme]);
   useEffect(() => { lsSet('planify.backend', backendUrl); }, [backendUrl]);
 
-  // dimensioni dell'area di lavoro, per "adatta alla finestra"
   useEffect(() => {
     const el = stageRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
@@ -610,7 +593,6 @@ export default function App() {
     return () => ro.disconnect();
   }, []);
 
-  // Ctrl/Cmd + rotella = zoom
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return undefined;
@@ -649,12 +631,11 @@ export default function App() {
     setTimeout(() => setFlash(''), 1600);
   };
 
-  /* ── generazione ───────────────────────────────────────────────────────── */
   const run = async ({ variant = false } = {}) => {
     setError(null);
     const base = backendUrl.trim().replace(/\/+$/, '');
     if (!base) {
-      setError("Inserisci l'URL del backend in «Connessione» (oppure imposta VITE_BACKEND_URL su Vercel e rifai il deploy).");
+      setError("Inserisci l'URL del backend in «Connessione» (oppure imposta VITE_BACKEND_URL su Vercel).");
       setConnOpen(true);
       return;
     }
@@ -683,7 +664,7 @@ export default function App() {
     const interval = setInterval(() => setLoadingStep((st) => Math.min(st + 1, 3)), 800);
     const slowTimer = setTimeout(() => setSlow(true), 7000);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000); // Render gratuito può impiegare ~60 s a svegliarsi
+    const timeout = setTimeout(() => controller.abort(), 90000); 
 
     try {
       const res = await fetch(`${base}/generate-plan`, {
@@ -697,7 +678,7 @@ export default function App() {
         try {
           const j = await res.json();
           detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
-        } catch { /* risposta non JSON */ }
+        } catch { }
         throw new Error(`HTTP ${res.status}${detail ? ' - ' + detail : ''}`);
       }
       const data = await res.json();
@@ -721,7 +702,7 @@ export default function App() {
       setError(
         err.name === 'AbortError'
           ? 'Il backend non ha risposto entro 90 secondi. Riprova: su Render gratuito la prima richiesta può essere lenta.'
-          : `Impossibile contattare il backend (${err.message}). Controlla l'URL e che il servizio sia attivo.`,
+          : `Impossibile contattare il backend (${err.message}).`
       );
     } finally {
       clearInterval(interval);
@@ -748,7 +729,6 @@ export default function App() {
     setForm((f) => ({ ...f, width: p.w, length: p.l, roomType: p.type, rooms: p.rooms }));
   };
 
-  /* ── esportazione ─────────────────────────────────────────────────────── */
   const exportSvg = () => {
     if (!svgRef.current) return;
     const { xml } = serializeSvg(svgRef.current);
@@ -771,7 +751,7 @@ export default function App() {
       canvas.toBlob((b) => b && saveBlob(b, 'planimetria.png'), 'image/png');
       URL.revokeObjectURL(url);
     };
-    img.onerror = () => { URL.revokeObjectURL(url); setError('Non sono riuscito a creare il PNG: scarica l’SVG.'); };
+    img.onerror = () => { URL.revokeObjectURL(url); setError('Errore PNG: usa SVG.'); };
     img.src = url;
   };
   const exportJson = () => {
@@ -788,7 +768,6 @@ export default function App() {
   const area = (parseFloat(form.width) || 0) * (parseFloat(form.length) || 0);
   const toggle = (k) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
-  /* ── interfaccia ──────────────────────────────────────────────────────── */
   return (
     <div className="pf-app" data-theme={theme}>
       <header className="pf-top">
@@ -809,7 +788,7 @@ export default function App() {
       </header>
 
       <div className="pf-body">
-        {/* ───────── Pannello comandi ───────── */}
+        {/* ───────── Pannello comandi Sinistro ───────── */}
         <aside className="pf-rail">
           <form className="pf-form" onSubmit={(e) => { e.preventDefault(); run(); }}>
             <section className="pf-sec">
@@ -931,7 +910,7 @@ export default function App() {
           </div>
         </aside>
 
-        {/* ───────── Area di lavoro ───────── */}
+        {/* ───────── Area di lavoro Centrale ───────── */}
         <main className="pf-stage">
           <div className="pf-toolbar">
             <div className="pf-group" role="group" aria-label="Livelli">
@@ -997,30 +976,9 @@ export default function App() {
             )}
             {flash && <div className="pf-flash"><Check size={14} /> {flash}</div>}
           </div>
-
-          {history.length > 0 && (
-            <div className="pf-history">
-              <div className="pf-history-head">
-                <span>Cronologia</span>
-                <button type="button" className="pf-link" onClick={() => setHistory(current ? [current] : [])}>
-                  <Trash2 size={13} /> Svuota
-                </button>
-              </div>
-              <div className="pf-history-list">
-                {history.map((h) => (
-                  <button key={h.id} type="button" className={`pf-thumb ${current?.id === h.id ? 'is-on' : ''}`}
-                    onClick={() => restore(h)}
-                    title={`${fmtM(h.plan.dimensions.width)} × ${fmtM(h.plan.dimensions.length)} m, ${SHAPE_NAME[h.plan.shape] || ''}`}>
-                    <PlanSvg plan={h.plan} layers={{ furniture: false, labels: false, dims: false, grid: false }} thumb />
-                    <span>{SHAPE_NAME[h.plan.shape] || 'rettangolare'} · #{h.plan.seed}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </main>
 
-        {/* ───────── Dettagli ───────── */}
+        {/* ───────── Dettagli e Cronologia Destra ───────── */}
         <aside className="pf-inspector">
           {plan && stats ? (
             <>
@@ -1100,6 +1058,28 @@ export default function App() {
             <section className="pf-sec">
               <h2>Dettagli</h2>
               <p className="pf-hint">Qui compaiono superficie, locali e avvisi della pianta generata. Passa il mouse su una stanza per evidenziarla.</p>
+            </section>
+          )}
+
+          {/* Cronologia fissa e organizzata a griglia a fine colonna */}
+          {history.length > 0 && (
+            <section className="pf-sec" style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+              <div className="pf-history-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h2 style={{ margin: 0 }}>Cronologia</h2>
+                <button type="button" className="pf-link" onClick={() => setHistory(current ? [current] : [])}>
+                  <Trash2 size={13} /> Svuota
+                </button>
+              </div>
+              <div className="pf-history-list" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {history.map((h) => (
+                  <button key={h.id} type="button" className={`pf-thumb ${current?.id === h.id ? 'is-on' : ''}`}
+                    onClick={() => restore(h)}
+                    title={`${fmtM(h.plan.dimensions.width)} × ${fmtM(h.plan.dimensions.length)} m, ${SHAPE_NAME[h.plan.shape] || ''}`}>
+                    <PlanSvg plan={h.plan} layers={{ furniture: false, labels: false, dims: false, grid: false }} thumb />
+                    <span>{SHAPE_NAME[h.plan.shape] || 'rettangolare'} · #{h.plan.seed}</span>
+                  </button>
+                ))}
+              </div>
             </section>
           )}
         </aside>
