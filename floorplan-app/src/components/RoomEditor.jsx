@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { Plus, RotateCw, Sliders, Trash2, X } from 'lucide-react';
+import { FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, X } from 'lucide-react';
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
 
 /* Pannello di personalizzazione della stanza selezionata: nome, uso, finitura, arredi. */
-export default function RoomEditor({ room, furniture, onChange, onRotate, onRemoveItem, onAddItem, onClose }) {
-  const [newType, setNewType] = useState('bed');
+const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula']);
+
+export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip, onRemoveItem, onAddItem, onClose }) {
+  const [newId, setNewId] = useState('bed_double');
+  const groups = [...new Set(FURNITURE.map((f) => f.group))];
 
   return (
     <section className="pf-sec pf-customizer">
@@ -51,8 +54,13 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onRemo
         <div className="pf-furn-list">
           {furniture.map(({ item, index }) => (
             <div key={index} className="pf-furn-row">
-              <span>{FURNITURE_LABEL[item.type] || item.type}</span>
+              <span>{FURNITURE_LABEL[item.type] || item.type} <em>{item.w} × {item.h} m</em></span>
               <div className="pf-furn-actions">
+                {ASYMMETRIC.has(item.type) && (
+                  <button type="button" className="pf-btn-icon" title="Specchia" onClick={() => onFlip(index)}>
+                    <FlipHorizontal2 size={12} />
+                  </button>
+                )}
                 <button type="button" className="pf-btn-icon" title="Ruota di 90°" onClick={() => onRotate(index)}>
                   <RotateCw size={12} />
                 </button>
@@ -68,10 +76,14 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onRemo
       <div className="pf-field-sm">
         <span>Aggiungi arredo</span>
         <div className="pf-add-furn">
-          <select value={newType} onChange={(e) => setNewType(e.target.value)}>
-            {FURNITURE.map((f) => <option key={f.type} value={f.type}>{f.label}</option>)}
+          <select value={newId} onChange={(e) => setNewId(e.target.value)}>
+            {groups.map((g) => (
+              <optgroup key={g} label={g}>
+                {FURNITURE.filter((f) => f.group === g).map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </optgroup>
+            ))}
           </select>
-          <button type="button" className="pf-btn-add" onClick={() => onAddItem(newType)}>
+          <button type="button" className="pf-btn-add" onClick={() => onAddItem(newId)}>
             <Plus size={13} /> Aggiungi
           </button>
         </div>

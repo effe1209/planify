@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2 } from 'lucide-react';
 import { ROOM_KINDS, ROOM_KIND_NAME, roomColor } from '../constants';
 import * as G from '../lib/geometry';
-import { boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
-import { fmt, newId } from '../lib/utils';
+import { CORRECTIONS, boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
+import { fmt, newId, storage } from '../lib/utils';
 
 const PX = 40; // pixel per metro: un quadretto grande = 1 m
 const SKETCH_KINDS = ROOM_KINDS.filter((k) => k.id !== 'hotel_room');
@@ -37,6 +37,7 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
   const { shapes } = doc;
   const [tool, setTool] = useState(initialShapes.length ? 'select' : 'box');
   const [kind, setKind] = useState('living');
+  const [correction, setCorrection] = useState(() => storage.get('planify.sketchCorrection', 'auto'));
   const [selectedId, setSelectedId] = useState(null);
   const [draft, setDraftState] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -152,7 +153,7 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
       if (r.error) say(r.error, 'error');
       else addShape(r.poly);
     } else if (d.type === 'pen') {
-      const r = strokeToPolygon(d.pts, shapes);
+      const r = strokeToPolygon(d.pts, shapes, correction);
       if (r.error) say(r.error, 'error');
       else addShape(r.poly);
     } else if (d.poly !== d.orig) {
@@ -208,6 +209,18 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
         </button>
       </div>
 
+      {tool === 'pen' && (
+        <div className="pf-sketch-kinds" role="radiogroup" aria-label="Correzione del tratto">
+          <span>Correzione tratto:</span>
+          {CORRECTIONS.map((c) => (
+            <button key={c.id} type="button" role="radio" aria-checked={correction === c.id} title={c.hint}
+              className={`pf-kind-chip ${correction === c.id ? 'is-on' : ''}`}
+              onClick={() => { setCorrection(c.id); storage.set('planify.sketchCorrection', c.id); say(c.hint); }}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
       {tool !== 'select' && (
         <div className="pf-sketch-kinds" role="radiogroup" aria-label="Tipo di stanza da disegnare">
           <span>Nuova stanza:</span>

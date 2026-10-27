@@ -27,7 +27,7 @@ function Oriented({ item, scale, children }) {
   const cx = item.x * scale + sw / 2;
   const cy = item.y * scale + sh / 2;
   return (
-    <g transform={`translate(${cx},${cy}) rotate(${ROT_BY_FACING[facing] ?? 0}) translate(${-cw / 2},${-ch / 2})`}>
+    <g transform={`translate(${cx},${cy}) rotate(${ROT_BY_FACING[facing] ?? 0})${item.flip ? ' scale(-1,1)' : ''} translate(${-cw / 2},${-ch / 2})`}>
       {children(cw, ch)}
     </g>
   );
@@ -120,13 +120,107 @@ const FURNITURE = {
       <ellipse cx={w / 2} cy={h * 0.66} rx={w * 0.42} ry={h * 0.32} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
     </>
   ),
-  sink: (w, h) => (
+  sink: (w, h, s) => {
+    const n = w >= 1.05 * s ? 2 : 1; // lavabo doppio da 1,1-1,2 m
+    return (
+      <>
+        <rect width={w} height={h} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
+        {Array.from({ length: n }, (_, i) => {
+          const cx = (w * (i + 0.5)) / n;
+          return (
+            <g key={i}>
+              <ellipse cx={cx} cy={h * 0.58} rx={(w / n) * 0.32} ry={h * 0.28} fill="#e3eefb" stroke={F_SOFT} />
+              <circle cx={cx} cy={h * 0.15} r={1.8} fill={F_STROKE} />
+            </g>
+          );
+        })}
+      </>
+    );
+  },
+  bidet: (w, h) => (
     <>
-      <rect width={w} height={h} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
-      <ellipse cx={w / 2} cy={h * 0.58} rx={w * 0.32} ry={h * 0.28} fill="#e3eefb" stroke={F_SOFT} />
-      <circle cx={w / 2} cy={h * 0.15} r={1.8} fill={F_STROKE} />
+      <rect x={w * 0.1} width={w * 0.8} height={h * 0.18} rx={2} fill="#fff" stroke={F_STROKE} strokeWidth="1" />
+      <ellipse cx={w / 2} cy={h * 0.58} rx={w * 0.42} ry={h * 0.38} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
+      <ellipse cx={w / 2} cy={h * 0.6} rx={w * 0.22} ry={h * 0.2} fill="#e3eefb" stroke={F_SOFT} />
+      <circle cx={w / 2} cy={h * 0.3} r={1.5} fill={F_STROKE} />
     </>
   ),
+  /* doccia angolare a quarto di cerchio: angolo dei muri in alto a sinistra (flip = muro a destra) */
+  shower_round: (w, h) => (
+    <>
+      <path d={`M0 0H${w}A${w} ${h} 0 0 1 0 ${h}Z`} fill="#e3eefb" stroke={F_STROKE} strokeWidth="1.1" />
+      <path d={`M0 0H${w * 0.82}A${w * 0.82} ${h * 0.82} 0 0 1 0 ${h * 0.82}`} fill="none" stroke="#fff" strokeWidth="1.5" />
+      <circle cx={w * 0.3} cy={h * 0.3} r={3} fill="#fff" stroke={F_STROKE} />
+    </>
+  ),
+  /* doccia walk-in: piatto lungo con vetro fisso sul lato lungo, ingresso libero a destra */
+  shower_walkin: (w, h) => (
+    <>
+      <rect width={w} height={h} fill="#e3eefb" stroke={F_STROKE} strokeWidth="1.1" />
+      <line x1={0} y1={h - 1.5} x2={w * 0.62} y2={h - 1.5} stroke="#7fb3e6" strokeWidth="2.4" />
+      <line x1={w * 0.1} y1={h * 0.5} x2={w * 0.55} y2={h * 0.5} stroke={F_SOFT} strokeDasharray="2 2" />
+      <circle cx={w * 0.3} cy={h * 0.3} r={3} fill="#fff" stroke={F_STROKE} />
+    </>
+  ),
+  nightstand: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={2} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1" />
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.22} fill="#fff7d6" stroke={WOOD_LINE} strokeWidth="0.8" />
+    </>
+  ),
+  table_round: (w, h, s) => {
+    const r = Math.min(w, h) / 2;
+    const n = clamp(Math.round((2 * Math.PI * (r / s)) / 0.6), 2, 8);
+    const cr = 0.2 * s;
+    return (
+      <>
+        {Array.from({ length: n }, (_, i) => {
+          const a = (2 * Math.PI * i) / n - Math.PI / 2;
+          return <circle key={i} cx={w / 2 + Math.cos(a) * (r + cr * 0.6)} cy={h / 2 + Math.sin(a) * (r + cr * 0.6)}
+            r={cr} fill="#eadfca" stroke={WOOD_LINE} strokeWidth="0.8" />;
+        })}
+        <circle cx={w / 2} cy={h / 2} r={r} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1.2" />
+      </>
+    );
+  },
+  coffee_table: (w, h) => (
+    <rect x={1} y={1} width={w - 2} height={h - 2} rx={Math.min(w, h) * 0.25} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1" />
+  ),
+  armchair: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={5} fill="#e4e9f1" stroke={F_STROKE} strokeWidth="1.1" />
+      <rect x={w * 0.18} y={h * 0.28} width={w * 0.64} height={h * 0.66} rx={3} fill="#f3f5f9" stroke={F_SOFT} />
+    </>
+  ),
+  /* divano angolare: schienale in alto, penisola (chaise) a destra verso il basso */
+  sofa_corner: (w, h, s) => {
+    const back = 0.25 * s;
+    const seatD = Math.min(0.95 * s, h * 0.55);
+    const chaise = Math.min(0.95 * s, w * 0.4);
+    const path = `M0 0H${w}V${h}H${w - chaise}V${seatD}H0Z`;
+    return (
+      <>
+        <path d={path} fill="#e4e9f1" stroke={F_STROKE} strokeWidth="1.2" strokeLinejoin="round" />
+        <path d={`M${back} ${back}H${w - back}V${h - 2}H${w - chaise + 2}V${seatD - 2}H${back}Z`}
+          fill="#f3f5f9" stroke={F_SOFT} />
+        <line x1={w - chaise} y1={back} x2={w - chaise} y2={seatD - 2} stroke={F_SOFT} />
+        <line x1={(w - chaise) / 2} y1={back} x2={(w - chaise) / 2} y2={seatD - 2} stroke={F_SOFT} />
+      </>
+    );
+  },
+  /* penisola: piano lungo che sporge dal muro (in alto), sgabelli sul lato destro */
+  kitchen_peninsula: (w, h, s) => {
+    const n = clamp(Math.floor(h / (0.6 * s)), 1, 4);
+    return (
+      <>
+        {Array.from({ length: n }, (_, i) => (
+          <circle key={i} cx={w + 0.22 * s} cy={(h * (i + 0.5)) / n} r={0.17 * s} fill="#eadfca" stroke={WOOD_LINE} strokeWidth="0.8" />
+        ))}
+        <rect width={w} height={h} fill="#f1f2f5" stroke={F_STROKE} strokeWidth="1.1" />
+        <rect x={w * 0.2} y={h * 0.12} width={w * 0.45} height={Math.min(h * 0.25, 0.5 * s)} rx={2} fill="#e3eefb" stroke={F_SOFT} />
+      </>
+    );
+  },
   shower: (w, h) => (
     <>
       <rect width={w} height={h} fill="#e3eefb" stroke={F_STROKE} strokeWidth="1.1" />
@@ -204,7 +298,7 @@ function Furn({ item, scale }) {
    Pavimenti, quote, etichette
    ──────────────────────────────────────────────────────────────────────────── */
 const FLOOR_BY_KIND = {
-  living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', study: 'wood',
+  living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
 };

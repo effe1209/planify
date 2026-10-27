@@ -66,36 +66,75 @@ function snapVertex(p, shapes) {
 /* Aggancia tutti i vertici di un poligono ai muri delle forme vicine (usato anche per l'import DXF). */
 export const snapPolygon = (poly, shapes) => G.cleanPolygon(poly.map((p) => roundPt(snapVertex(p, shapes))));
 
-function rdpIndices(pts, lo, hi, eps, out) {
-  let idx = -1;
-  let maxD = 0;
-  for (let i = lo + 1; i < hi; i++) {
-    const d = G.closestOnSegment(pts[i], pts[lo], pts[hi]).d;
-    if (d > maxD) {
-      maxD = d;
-      idx = i;
-    }
-  }
-  if (maxD > eps) {
-    rdpIndices(pts, lo, idx, eps, out);
-    out.push(idx);
-    rdpIndices(pts, idx, hi, eps, out);
-  }
-}
+/* Correzione applicata al tratto a mano libera. */
+export const CORRECTIONS = [
+  { id: 'square', label: 'Squadrata', hint: 'Lati dritti a 90° (e 45° se inclinati di molto), curve come archi perfetti.' },
+  { id: 'auto', label: 'Automatica', hint: 'Raddrizza i lati e li allinea a 0°/45°/90° quando sono vicini; arrotonda le curve.' },
+  { id: 'free', label: 'Libera', hint: 'Ripulisce solo il tremolio: angoli e curve restano come li disegni.' },
+];
+
+const STEP = 0.05;          // passo di ricampionamento del tratto (m)
+const DEG = Math.PI / 180;
+
+const det3 = (a) => a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+  - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
 
 /*
- * Il tratto è un lato dritto? Retta ai minimi quadrati sulla parte centrale (gli estremi sono
- * gli angoli, arrotondati dalla mano). Il tremolio resta entro pochi centimetri; un arco no.
- * Restituisce la retta {a, b} (estremi proiettati) oppure null.
- * `betweenCorners`: il tratto è chiuso da due angoli netti, quindi è quasi certamente un lato.
+ * Svolta (radianti) in ogni punto del contorno chiuso: angolo tra la direzione media del tratto
+ * che precede (da `outer` a `inner` campioni prima) e di quello che segue. Ignorando i campioni
+ * vicinissimi, un angolo arrotondato o smussato dalla mano conta per intero.
  */
-function fitStraight(seg, betweenCorners) {
-  const a0 = seg[0];
-  const b0 = seg[seg.length - 1];
-  const l = G.dist(a0, b0);
-  if (l < 0.6) return null;
-  const lo = Math.floor(seg.length * 0.12);
-  const core = seg.slice(lo, Math.max(Math.ceil(seg.length * 0.88), lo + 2));
+function turning(pts, inner, outer) {
+  const n = pts.length;
+  const at = (i) => pts[((i % n) + n) % n];
+  return pts.map((_, i) => {
+    const a = G.unit(G.sub(at(i - inner), at(i - outer)));
+    const b = G.unit(G.sub(at(i + outer), at(i + inner)));
+    return Math.acos(Math.max(-1, Math.min(1, G.dot(a, b))));
+  });
+}
+
+/* Angoli del contorno: in ogni gruppo di punti con svolta forte, il punto di svolta massima. */
+function findCorners(pts) {
+  const n = pts.length;
+  const t = turning(pts, Math.round(0.2 / STEP), Math.round(0.7 / STEP));
+  const hot = t.map((v) => v > 40 * DEG);
+  if (hot.filter(Boolean).length > n * 0.5) return []; // forma piccola e tutta curva
+  const start = hot.findIndex((h, i) => h && !hot[(i - 1 + n) % n]);
+  if (start < 0) return [];
+  const corners = [];
+  let cur = null;
+  for (let s = 0; s < n; s++) {
+    const i = (start + s) % n;
+    if (hot[i]) {
+      if (cur === null || t[i] > t[cur]) cur = i;
+    } else if (cur !== null) {
+      corners.push(cur);
+      cur = null;
+    }
+  }
+  if (cur !== null) corners.push(cur);
+  corners.sort((p, q) => p - q);
+  // due angoli a meno di 50 cm (uno smusso) sono un angolo solo: si tiene quello che svolta di più
+  const gap = Math.round(0.5 / STEP);
+  const merged = [];
+  for (const c of corners) {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && c - last < gap) {
+      if (t[c] > t[last]) merged[merged.length - 1] = c;
+    } else merged.push(c);
+  }
+  if (merged.length > 1 && merged[0] + n - merged[merged.length - 1] < gap) {
+    if (t[merged[0]] > t[merged[merged.length - 1]]) merged.pop();
+    else merged.shift();
+  }
+  return merged;
+}
+
+/* Retta ai minimi quadrati sulla parte centrale del tratto (gli estremi sono gli angoli). */
+function fitLine(seg) {
+  const lo = Math.floor(seg.length * 0.1);
+  const core = seg.slice(lo, Math.max(Math.ceil(seg.length * 0.9), lo + 2));
   const m = core.reduce((acc, p) => G.add(acc, G.mul(p, 1 / core.length)), [0, 0]);
   let sxx = 0;
   let sxy = 0;
@@ -107,85 +146,175 @@ function fitStraight(seg, betweenCorners) {
     syy += dy * dy;
   }
   const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
-  const u = [Math.cos(ang), Math.sin(ang)];
-  const n = G.normal(u);
-  // parabola r = c0 + c1·t + c2·t² nelle coordinate della retta: c2 misura la curvatura sistematica
-  const S = [0, 0, 0, 0, 0];
-  const R = [0, 0, 0];
-  let maxRes = 0;
-  for (const p of core) {
-    const v = G.sub(p, m);
-    const t = G.dot(v, u);
-    const r = G.dot(v, n);
-    maxRes = Math.max(maxRes, Math.abs(r));
-    for (let k = 0; k < 5; k++) S[k] += t ** k;
-    for (let k = 0; k < 3; k++) R[k] += r * t ** k;
+  const n = G.normal([Math.cos(ang), Math.sin(ang)]);
+  const maxDev = core.reduce((acc, p) => Math.max(acc, Math.abs(G.dot(G.sub(p, m), n))), 0);
+  return { m, ang, maxDev };
+}
+
+/* Porta l'angolo della retta su multipli di 90° o 45° quando ci è vicino. */
+function snapAngle(ang, mode) {
+  const near = (step, tol) => {
+    const k = Math.round(ang / step) * step;
+    return Math.abs(ang - k) <= tol ? k : null;
+  };
+  if (mode === 'square') return near(90 * DEG, 25 * DEG) ?? near(45 * DEG, 15 * DEG) ?? ang;
+  if (mode === 'auto') return near(45 * DEG, 10 * DEG) ?? ang;
+  return ang;
+}
+
+/* Cerchio ai minimi quadrati (metodo di Kåsa): { c, r, rms } oppure null. */
+function fitCircle(pts) {
+  const S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  const B = [0, 0, 0];
+  for (const [x, y] of pts) {
+    const row = [x, y, 1];
+    const z = -(x * x + y * y);
+    for (let i = 0; i < 3; i++) {
+      B[i] += row[i] * z;
+      for (let j = 0; j < 3; j++) S[i][j] += row[i] * row[j];
+    }
   }
-  const det3 = (a) => a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
-    - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
-  const M = [[S[0], S[1], S[2]], [S[1], S[2], S[3]], [S[2], S[3], S[4]]];
-  const D = det3(M);
-  const c2 = Math.abs(D) > 1e-12 ? det3(M.map((row, i) => [row[0], row[1], R[i]])) / D : 0;
-  const sag = Math.abs(c2) * (l / 2) ** 2;
-  // tra due spigoli vivi un lato può essere un po' incurvato dalla mano; dentro un arco no
-  const tol = betweenCorners ? Math.max(0.1, 0.05 * l) : Math.max(0.03, 0.02 * l);
-  if (sag > tol || maxRes > tol + 0.03) return null;
-  const proj = (p) => G.add(m, G.mul(u, G.dot(G.sub(p, m), u)));
-  return { a: proj(a0), b: proj(b0) };
+  const D = det3(S);
+  if (Math.abs(D) < 1e-12) return null;
+  const sol = [0, 1, 2].map((k) => det3(S.map((row, i) => row.map((v, j) => (j === k ? B[i] : v)))) / D);
+  const c = [-sol[0] / 2, -sol[1] / 2];
+  const r2 = c[0] * c[0] + c[1] * c[1] - sol[2];
+  if (!(r2 > 0)) return null;
+  const r = Math.sqrt(r2);
+  const rms = Math.sqrt(pts.reduce((acc, p) => acc + (G.dist(p, c) - r) ** 2, 0) / pts.length);
+  return { c, r, rms };
+}
+
+const goodArc = (fit, tol) => fit && fit.r < 30 && fit.rms <= Math.max(tol, 0.035 * fit.r);
+
+/* Punti di un arco da a a b sul cerchio, dalla parte del punto intermedio `via`. */
+function arcPoints({ c, r }, a, b, via) {
+  const ang = (p) => Math.atan2(p[1] - c[1], p[0] - c[0]);
+  const a0 = ang(a);
+  const norm = (x) => ((x - a0) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+  let sweep = norm(ang(b));
+  if (norm(ang(via)) > sweep) sweep -= 2 * Math.PI; // il punto intermedio sta dall'altra parte
+  const n = Math.max(2, Math.ceil(Math.abs(sweep) / (7.5 * DEG)));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = a0 + (sweep * i) / n;
+    return [c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)];
+  });
+}
+
+/* Levigatura di Chaikin su polilinea aperta (gli estremi restano fermi). */
+function chaikin(pts, rounds = 2) {
+  let out = pts;
+  for (let k = 0; k < rounds; k++) {
+    const next = [out[0]];
+    for (let i = 0; i < out.length - 1; i++) {
+      next.push(G.lerp(out[i], out[i + 1], 0.25), G.lerp(out[i], out[i + 1], 0.75));
+    }
+    next.push(out[out.length - 1]);
+    out = next;
+  }
+  return out;
+}
+
+const projectOn = (p, line) => {
+  const u = [Math.cos(line.ang), Math.sin(line.ang)];
+  return G.add(line.m, G.mul(u, G.dot(G.sub(p, line.m), u)));
+};
+const lineHits = (l1, l2) => {
+  const u1 = [Math.cos(l1.ang), Math.sin(l1.ang)];
+  const u2 = [Math.cos(l2.ang), Math.sin(l2.ang)];
+  return G.lineIntersection(l1.m, G.add(l1.m, u1), l2.m, G.add(l2.m, u2));
+};
+
+/* Contorno chiuso senza angoli: cerchio perfetto se ci somiglia, altrimenti curva levigata. */
+function smoothLoop(dense, mode) {
+  const fit = fitCircle(dense);
+  if (mode !== 'free' && goodArc(fit, 0.06)) {
+    const n = Math.max(24, Math.round((2 * Math.PI * fit.r) / 0.25));
+    return Array.from({ length: n }, (_, i) => [
+      fit.c[0] + fit.r * Math.cos((2 * Math.PI * i) / n),
+      fit.c[1] + fit.r * Math.sin((2 * Math.PI * i) / n),
+    ]);
+  }
+  return G.simplifyClosed(G.smoothClosed(dense, mode === 'free' ? 3 : 6), 0.015);
 }
 
 /*
- * Tratto a mano libera → poligono che rispetta la forma disegnata.
- * I tratti quasi dritti diventano lati netti (e, se quasi orizzontali/verticali, perfettamente
- * allineati); le curve restano curve, solo ripulite dal tremolio della mano.
+ * Lo snap alle stanze vicine sposta solo alcuni vertici: un lato che era orizzontale o verticale
+ * resterebbe storto. Si ri-allinea l'altro estremo, tenendo fermo il vertice agganciato.
  */
-export function strokeToPolygon(stroke, shapes) {
-  if (stroke.length < 6) return { error: 'Tratto troppo corto: disegna il contorno completo della stanza.' };
-  const closed = [...stroke, stroke[0]];
-  let dense = G.smoothClosed(G.resample(closed, 0.08).slice(0, -1), 2);
-  if (dense.length < 8) return { error: 'Tratto troppo corto: disegna il contorno completo della stanza.' };
-
-  // vertici "di forma" (angoli) e, tra un angolo e l'altro, tratto dritto o curva
-  let far = 0;
-  dense.forEach((p, i) => {
-    if (G.dist(p, dense[0]) > G.dist(dense[far], dense[0])) far = i;
-  });
-  dense = [...dense, dense[0]];
-  const idx = [0];
-  rdpIndices(dense, 0, far, 0.15, idx);
-  idx.push(far);
-  rdpIndices(dense, far, dense.length - 1, 0.15, idx);
-  idx.push(dense.length - 1);
-
-  const segs = idx.slice(0, -1).map((i, k) => dense.slice(i, idx[k + 1] + 1));
-  const dirs = segs.map((sg) => G.unit(G.sub(sg[sg.length - 1], sg[0])));
-  const sharp = (k) => G.dot(dirs[(k - 1 + segs.length) % segs.length], dirs[k]) < Math.cos((35 * Math.PI) / 180);
-  const pieces = [];
-  for (let k = 0; k < segs.length; k++) {
-    const seg = segs[k];
-    const line = fitStraight(seg, sharp(k) && sharp((k + 1) % segs.length));
-    pieces.push(line ? { line: true, ...line } : { line: false, pts: G.simplifyOpen(seg, 0.012) });
+function squareAfterSnap(before, after) {
+  const out = after.map((p) => p.slice());
+  const moved = after.map((p, i) => G.dist(p, before[i]) > 1e-6);
+  const n = out.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const [a, b] = [out[i], out[j]];
+    const dx = Math.abs(b[0] - a[0]);
+    const dy = Math.abs(b[1] - a[1]);
+    const axis = dy < dx * Math.tan(10 * DEG) ? 1 : dx < dy * Math.tan(10 * DEG) ? 0 : -1;
+    if (axis < 0 || Math.hypot(dx, dy) < 0.3) continue;
+    if (moved[i] && !moved[j]) b[axis] = a[axis];
+    else if (moved[j] && !moved[i]) a[axis] = b[axis];
   }
-  // una curva cortissima tra due lati dritti è uno spigolo arrotondato dalla mano: diventa un angolo vivo
-  const kept = pieces.filter((p, i) => {
-    if (p.line) return true;
-    const prev = pieces[(i - 1 + pieces.length) % pieces.length];
-    const next = pieces[(i + 1) % pieces.length];
-    return !(prev.line && next.line && G.dist(p.pts[0], p.pts[p.pts.length - 1]) < 0.5);
-  });
-  const poly = [];
-  kept.forEach((p, i) => {
-    const prev = kept[(i - 1 + kept.length) % kept.length];
-    if (!p.line) {
-      poly.push(...p.pts.slice(0, -1));
-      return;
-    }
-    const corner = prev.line && prev !== p ? G.lineIntersection(prev.a, prev.b, p.a, p.b) : null;
-    poly.push(corner && G.dist(corner, p.a) < 0.6 ? corner : p.a);
-  });
+  return out;
+}
 
-  let out = G.straightenAxisEdges(poly, 8).map((p) => snapVertex(p, shapes)).map(roundPt);
-  out = G.cleanPolygon(out);
+/*
+ * Tratto a mano libera → poligono pulito.
+ *   1. si trovano gli angoli veri (dove il tratto svolta bruscamente)
+ *   2. tra due angoli: se il tratto si scosta poco da una retta è un lato dritto, raddrizzato e
+ *      allineato a 0°/45°/90°; altrimenti è una curva, resa arco perfetto se somiglia a un cerchio
+ *   3. gli angoli diventano l'intersezione esatta dei lati adiacenti
+ */
+export function strokeToPolygon(stroke, shapes, mode = 'auto') {
+  if (stroke.length < 6) return { error: 'Tratto troppo corto: disegna il contorno completo della stanza.' };
+  const dense = G.smoothClosed(G.resample([...stroke, stroke[0]], STEP).slice(0, -1), 2);
+  if (dense.length < 12) return { error: 'Tratto troppo corto: disegna il contorno completo della stanza.' };
+
+  const n = dense.length;
+  const corners = findCorners(dense);
+  let poly;
+  if (corners.length < 2) {
+    poly = smoothLoop(dense, mode);
+  } else {
+    const straightTol = (l) => (mode === 'free' ? Math.max(0.04, 0.02 * l) : Math.max(0.1, 0.06 * l));
+    const pieces = corners.map((ci, k) => {
+      const cj = corners[(k + 1) % corners.length];
+      const seg = [];
+      for (let i = ci; ; i = (i + 1) % n) {
+        seg.push(dense[i]);
+        if (i === cj) break;
+      }
+      const chord = G.dist(seg[0], seg[seg.length - 1]);
+      const line = fitLine(seg);
+      if (chord >= 0.3 && line.maxDev <= straightTol(chord)) {
+        return { line: true, m: line.m, ang: snapAngle(line.ang, mode), a: seg[0] };
+      }
+      const fit = mode === 'free' ? null : fitCircle(seg);
+      const pts = goodArc(fit, 0.05)
+        ? arcPoints(fit, seg[0], seg[seg.length - 1], seg[Math.floor(seg.length / 2)])
+        : chaikin(G.simplifyOpen(seg, 0.03));
+      return { line: false, pts };
+    });
+
+    poly = [];
+    pieces.forEach((p, i) => {
+      const prev = pieces[(i - 1 + pieces.length) % pieces.length];
+      if (p.line) {
+        // vertice d'inizio del lato: intersezione col lato precedente, o proiezione dell'angolo
+        const hit = prev.line ? lineHits(prev, p) : null;
+        poly.push(hit && G.dist(hit, p.a) < 1.0 ? hit : projectOn(p.a, p));
+      } else {
+        const pts = p.pts.slice(0, -1);
+        if (prev.line) pts[0] = projectOn(pts[0], prev);
+        poly.push(...pts);
+      }
+    });
+  }
+
+  let out = poly.map((p) => snapVertex(p, shapes));
+  if (mode !== 'free') out = squareAfterSnap(poly, out);
+  out = G.cleanPolygon(out.map(roundPt));
   if (out.length < 3) return { error: 'Non riesco a ricavare una stanza da questo tratto.' };
   if (!G.isSimplePolygon(out)) return { error: 'Il contorno si incrocia: disegna una forma chiusa senza intrecci.' };
   if (G.polygonArea(out) < MIN_AREA) return { error: 'Stanza troppo piccola (minimo 1,5 m²).' };

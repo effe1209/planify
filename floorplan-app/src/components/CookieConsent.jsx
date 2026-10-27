@@ -35,6 +35,7 @@ const STORAGE_ROWS = [
   ['planify.consent', 'Ricorda le tue scelte su questa finestra', 'Necessario', '12 mesi'],
   ['planify.theme', 'Tema chiaro / scuro', 'Necessario', 'Fino a cancellazione'],
   ['planify.backend', 'Indirizzo del motore di generazione', 'Necessario', 'Fino a cancellazione'],
+  ['planify.sketchCorrection', 'Tipo di correzione del disegno a mano', 'Necessario', 'Fino a cancellazione'],
   ['planify.history', 'Cronologia e planimetrie salvate', 'Funzionale (consenso)', 'Fino a cancellazione'],
 ];
 

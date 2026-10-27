@@ -18,8 +18,8 @@ const DOOR_W = 0.9;
 const DOOR_W_BATH = 0.8;
 
 /* Quanto "costa" attraversare una stanza per raggiungerne un'altra: meglio passare dal disimpegno che dal bagno. */
-const PASS_COST = { corridor: 0, living: 0.5, living_kitchen: 0.5, hotel_room: 1, kitchen: 1, study: 2, bed: 3, bath: 8 };
-const ENTRANCE_PREF = ['corridor', 'living_kitchen', 'living', 'hotel_room', 'kitchen', 'study', 'bed', 'bath'];
+const PASS_COST = { corridor: 0, living: 0.5, living_kitchen: 0.5, hotel_room: 1, kitchen: 1, study: 2, bed: 3, bed_single: 3, bath: 8 };
+const ENTRANCE_PREF = ['corridor', 'living_kitchen', 'living', 'hotel_room', 'kitchen', 'study', 'bed', 'bed_single', 'bath'];
 
 /* ── Analisi dei lati ──────────────────────────────────────────────────── */
 function analyzeSides(rooms) {
@@ -176,6 +176,8 @@ function longestRun(runs, minLen) {
 /* ── Arredi ─────────────────────────────────────────────────────────────── */
 const FACE = { S: [0, 1], N: [0, -1], E: [1, 0], W: [-1, 0] };
 const OPP = { S: 'N', N: 'S', E: 'W', W: 'E' };
+// direzione (nel mondo) della destra locale di un arredo rivolto verso f: come LOCAL_RIGHT nel motore Python
+const RIGHT = { S: [1, 0], N: [-1, 0], E: [0, -1], W: [0, 1] };
 const PAD = HALF + 0.02;        // distanza minima dalla linea del muro
 
 const dims = (along, depth, f) => (f === 'S' || f === 'N' ? [along, depth] : [depth, along]);
@@ -216,7 +218,7 @@ class Placer {
     this.items = [];          // [{ type, rect, keep, facing, gap }]
   }
 
-  free(rect, keep, gap, avoidWindows) {
+  free(rect, keep, gap, avoidWindows, ignore = null) {
     if (!G.rectInPolygon(rect, this.poly, HALF + 0.005)) return false;
     if (keep !== rect && !G.rectInPolygon(keep, this.poly, 0)) return false;
     for (const d of this.doors) {
@@ -228,6 +230,10 @@ class Placer {
     }
     if (avoidWindows) for (const w of this.windows) if (G.rectHitsCircle(rect, w.centre, w.w / 2 + 0.1)) return false;
     for (const it of this.items) {
+      if (it === ignore) {
+        if (G.rectsOverlap(rect, it.rect)) return false;
+        continue;
+      }
       const g = Math.max(gap, it.gap);
       if (G.rectsOverlap(rect, it.keep, g) || G.rectsOverlap(keep, it.rect, g)) return false;
     }
@@ -271,6 +277,55 @@ class Placer {
     return null;
   }
 
+  /* Arredo appoggiato allo stesso muro di `anchor`, subito a destra o a sinistra (comodini, bidet). */
+  beside(anchor, type, along, depth, { side = 'right', gap = 0.03, front = 0 } = {}) {
+    const f = anchor.facing;
+    const r = RIGHT[f].map((v) => (side === 'right' ? v : -v));
+    const a = anchor.rect;
+    const [w, h] = dims(along, depth, f);
+    const back = backInfo(a, f).pts[0];   // un punto dello schienale: allinea gli schienali
+    let x;
+    let y;
+    if (f === 'S' || f === 'N') {
+      x = r[0] > 0 ? a.x + a.w + gap : a.x - gap - w;
+      y = f === 'S' ? back[1] : back[1] - h;
+    } else {
+      y = r[1] > 0 ? a.y + a.h + gap : a.y - gap - h;
+      x = f === 'E' ? back[0] : back[0] - w;
+    }
+    const rect = { x, y, w, h };
+    const keep = keepRect(rect, f, front);
+    if (!this.free(rect, keep, gap, false, anchor)) return null;
+    const item = { type, rect, keep, facing: f, gap };
+    this.items.push(item);
+    return item;
+  }
+
+  /* Il disegno va specchiato se il muro laterale più vicino sta alla destra dell'arredo. */
+  sideWallOnRight(it) {
+    const c = G.rectCenter(it.rect);
+    const r = RIGHT[it.facing];
+    const half = (it.facing === 'S' || it.facing === 'N' ? it.rect.w : it.rect.h) / 2;
+    const toRight = G.rayHit(G.add(c, G.mul(r, half)), r, this.poly);
+    const toLeft = G.rayHit(G.sub(c, G.mul(r, half)), G.mul(r, -1), this.poly);
+    return toRight < toLeft;
+  }
+
+  /* Fascia libera larga `width` sul fianco destro (o sinistro) dell'arredo. */
+  stripFree(it, width, right = true) {
+    const r = RIGHT[it.facing].map((v) => (right ? v : -v));
+    const a = it.rect;
+    const strip = r[0] > 0 ? { x: a.x + a.w, y: a.y, w: width, h: a.h }
+      : r[0] < 0 ? { x: a.x - width, y: a.y, w: width, h: a.h }
+        : r[1] > 0 ? { x: a.x, y: a.y + a.h, w: a.w, h: width }
+          : { x: a.x, y: a.y - width, w: a.w, h: width };
+    return this.free(strip, strip, 0, false, it);
+  }
+
+  remove(it) {
+    this.items = this.items.filter((x) => x !== it);
+  }
+
   minDoorDist(p) {
     return this.doors.length ? Math.min(...this.doors.map((d) => G.dist(p, d.centre))) : 0;
   }
@@ -295,9 +350,44 @@ function placeCounter(P) {
   });
 }
 
-function placeLiving(P) {
-  const sofa = P.place({ type: 'sofa', sizes: [[2.2, 0.9], [1.8, 0.9], [1.4, 0.8]], front: 0.5, gap: 0.3, score: farFromDoor });
+/* Penisola: sullo stesso muro del piano cucina, accanto alla sua estremità libera, con spazio per gli sgabelli. */
+function placePeninsula(P, counter) {
+  const side = P.sideWallOnRight(counter) ? 'left' : 'right';  // l'estremità lontana dall'angolo
+  const r = RIGHT[counter.facing].map((v) => (side === 'right' ? v : -v));
+  const half = (counter.facing === 'S' || counter.facing === 'N' ? counter.rect.w : counter.rect.h) / 2;
+  const end = G.add(G.rectCenter(counter.rect), G.mul(r, half + 0.5));
+  const it = P.place({
+    type: 'kitchen_peninsula',
+    sizes: [[0.9, 2.0], [0.9, 1.6]],
+    facings: [counter.facing],
+    front: 0.9,
+    gap: 0.05,
+    score: ({ rect }) => G.dist(backInfo(rect, counter.facing).pts[2], end),
+  });
+  if (!it) return false;
+  if (!P.stripFree(it, 0.6, true)) {
+    if (P.stripFree(it, 0.6, false)) it.flip = true;
+    else {
+      P.remove(it);
+      return false;
+    }
+  }
+  it.gap = 0.8;   // passaggio attorno alla penisola per gli arredi successivi
+  return true;
+}
+
+function placeLiving(P, room) {
+  // il divano angolare solo dove resta spazio: con cucina e pranzo nella stessa stanza serve molta più superficie
+  const big = room.area >= (room.kind === 'living_kitchen' ? 30 : 20);
+  const sofaSpecs = big ? [{ type: 'sofa_corner', sizes: [[2.6, 1.7]] }] : [];
+  sofaSpecs.push({ type: 'sofa', sizes: [[2.2, 0.9], [1.8, 0.9], [1.4, 0.8]] });
+  let sofa = null;
+  for (const sp of sofaSpecs) {
+    sofa = P.place({ ...sp, front: 0.5, gap: 0.3, score: farFromDoor });
+    if (sofa) break;
+  }
   if (!sofa) return false;
+  if (sofa.type === 'sofa_corner') sofa.flip = P.sideWallOnRight(sofa);   // la penisola del divano verso la stanza
   const sc = G.rectCenter(sofa.rect);
   const fv = FACE[sofa.facing];
   P.place({
@@ -313,54 +403,130 @@ function placeLiving(P) {
       return lateral * 2 + (facing === OPP[sofa.facing] ? 0 : 6) + (along < 1.8 ? 8 : 0) + Math.abs(along - 2.8) * 0.3;
     },
   });
-  return true;
+  // tavolino davanti al divano e, nei soggiorni ampi, una poltrona di fianco
+  const depth = sofa.facing === 'S' || sofa.facing === 'N' ? sofa.rect.h : sofa.rect.w;
+  const front = G.add(sc, G.mul(fv, depth / 2 + 0.65));
+  return P.place({
+    type: 'coffee_table', sizes: [[1.0, 0.55], [0.8, 0.5]], wall: false, facings: [sofa.facing], gap: 0.35,
+    score: ({ centre }) => G.dist(centre, front),
+  }) || true;
 }
 
-function placeTable(P, near, sizes = [[1.6, 0.9], [1.2, 0.8]]) {
-  return P.place({
-    type: 'table',
-    sizes,
-    wall: false,
-    gap: 0.75,
-    score: ({ centre }) => G.dist(centre, near),
+/* Poltrona di fianco al tavolino, rivolta verso di lui: solo nei soggiorni ampi e dopo il tavolo da pranzo. */
+function placeArmchair(P, room) {
+  const table = P.items.find((it) => it.type === 'coffee_table');
+  if (!table || room.area < 20) return;
+  const tc = G.rectCenter(table.rect);
+  P.place({
+    type: 'armchair', sizes: [[0.8, 0.8]], wall: false, facings: ['S', 'N', 'E', 'W'], gap: 0.35,
+    score: ({ centre, facing }) => {
+      const v = G.sub(tc, centre);
+      return Math.abs(G.len(v) - 1.1) + (G.dot(G.unit(v), FACE[facing]) > 0.7 ? 0 : 3);
+    },
   });
 }
 
-function furnishRoom(P, room, notes) {
+/* Tavolo da pranzo: tondo negli spazi raccolti, rettangolare in quelli lunghi. */
+function placeTable(P, near, room) {
+  const bb = G.bounds(room.poly);
+  const square = bb.w / bb.h > 0.75 && bb.w / bb.h < 1.33;
+  const opts = square || room.area < 22
+    ? [['table_round', [[1.1, 1.1], [0.9, 0.9]]], ['table', [[1.6, 0.9], [1.2, 0.8]]]]
+    : [['table', [[1.6, 0.9], [1.2, 0.8]]], ['table_round', [[1.1, 1.1], [0.9, 0.9]]]];
+  for (const [type, sizes] of opts) {
+    const t = P.place({ type, sizes, wall: false, gap: 0.75, score: ({ centre }) => G.dist(centre, near) });
+    if (t) return t;
+  }
+  return null;
+}
+
+function placeShower(P, room) {
+  const bb = G.bounds(room.poly);
+  if (room.area >= 5 && Math.max(bb.w, bb.h) >= 2.8) {
+    const walk = P.place({ type: 'shower_walkin', sizes: [[1.4, 0.9]], front: 0.3, gap: 0.05, score: corner });
+    if (walk) {
+      walk.flip = P.sideWallOnRight(walk);
+      return walk;
+    }
+  }
+  const round = P.place({ type: 'shower_round', sizes: [[0.9, 0.9]], front: 0.2, gap: 0.05, score: corner });
+  if (round) {
+    round.flip = P.sideWallOnRight(round);
+    return round;
+  }
+  return P.place({ type: 'shower', sizes: [[0.8, 0.8]], gap: 0.05, score: corner });
+}
+
+function furnishRoom(P, room, notes, opts) {
   const missing = (what) => notes.push(`${room.name}: ${what} non inserito (spazio insufficiente o forma troppo stretta)`);
   const label = room.label;
+  const kitchenExtras = (counter) => {
+    if (!opts.peninsula || !counter) return false;
+    const ok = placePeninsula(P, counter);
+    if (!ok) notes.push(`${room.name}: la penisola non entra in questa forma`);
+    return ok;
+  };
   switch (room.kind) {
     case 'bath': {
-      const shower = P.place({ type: 'shower', sizes: [[0.9, 0.9], [0.8, 0.8]], front: 0.4, gap: 0.05, score: corner });
-      if (!shower && room.area >= 4.5) P.place({ type: 'bathtub', sizes: [[1.7, 0.75], [1.5, 0.7]], front: 0.5, score: corner });
-      if (!P.place({ type: 'toilet', sizes: [[0.4, 0.7], [0.4, 0.6]], front: 0.5, gap: 0.15, score: farFromDoor })) missing('WC');
-      if (!P.place({ type: 'sink', sizes: [[0.6, 0.5], [0.5, 0.4]], front: 0.4, gap: 0.1 })) missing('lavabo');
+      const bb = G.bounds(room.poly);
+      const tub = room.area >= 5.5 && Math.max(bb.w, bb.h) >= 2.1
+        && P.place({ type: 'bathtub', sizes: [[1.7, 0.75]], front: 0.5, score: corner });
+      if (!tub && !placeShower(P, room)) missing('doccia');
+      const wc = P.place({ type: 'toilet', sizes: [[0.4, 0.7], [0.4, 0.6]], front: 0.5, gap: 0.2, score: farFromDoor });
+      if (!wc) missing('WC');
+      else if (!P.beside(wc, 'bidet', 0.38, 0.55, { side: 'right', gap: 0.25, front: 0.5 })) {
+        P.beside(wc, 'bidet', 0.38, 0.55, { side: 'left', gap: 0.25, front: 0.5 });
+      }
+      const sinks = room.area >= 7 ? [[1.2, 0.5], [0.6, 0.5], [0.5, 0.4]] : [[0.6, 0.5], [0.5, 0.4]];
+      if (!P.place({ type: 'sink', sizes: sinks, front: 0.45, gap: 0.1 })) missing('lavabo');
       break;
     }
     case 'bed':
+    case 'bed_single':
     case 'hotel_room': {
-      const sizes = room.area >= 12 ? [[1.6, 2.0], [1.4, 2.0], [0.9, 2.0]] : [[1.4, 2.0], [0.9, 2.0]];
-      if (!P.place({ type: 'bed', sizes, front: 0.6, gap: 0.4, score: (c) => farFromDoor(c) + nearWindow(c) * 0.1 })) missing('letto');
-      P.place({ type: 'wardrobe', sizes: [[1.8, 0.6], [1.2, 0.6]], front: 0.7, gap: 0.3, avoidWindows: true, score: corner });
-      if (room.area >= 11) P.place({ type: 'desk', sizes: [[1.2, 0.6]], front: 0.7, gap: 0.3, score: nearWindow });
+      const single = room.kind === 'bed_single';
+      const sizes = single ? [[0.9, 2.0]]
+        : room.area >= 14 ? [[1.8, 2.0], [1.6, 2.0], [1.4, 2.0], [0.9, 2.0]]
+          : room.area >= 10 ? [[1.6, 2.0], [1.4, 2.0], [0.9, 2.0]] : [[1.4, 2.0], [0.9, 2.0]];
+      const bed = P.place({
+        type: 'bed', sizes, front: 0.6, gap: single ? 0.3 : 0.45,
+        // la singola va in un angolo, la matrimoniale lontano dalla porta con i due lati liberi
+        score: (c) => farFromDoor(c) + nearWindow(c) * 0.1 + (single ? corner(c) : -corner(c) * 0.2),
+      });
+      if (!bed) missing('letto');
+      else {
+        const sides = single ? [P.sideWallOnRight(bed) ? 'left' : 'right'] : ['left', 'right'];
+        for (const side of sides) P.beside(bed, 'nightstand', 0.45, 0.4, { side });
+      }
+      // meglio non davanti a una finestra, ma un armadio serve comunque
+      const wardrobe = { type: 'wardrobe', front: 0.7, gap: 0.3, score: corner };
+      if (!P.place({ ...wardrobe, sizes: single ? [[1.2, 0.6], [1.0, 0.6]] : [[2.4, 0.6], [1.8, 0.6], [1.2, 0.6]], avoidWindows: true })) {
+        P.place({ ...wardrobe, sizes: [[1.2, 0.6]] });
+      }
+      if (room.area >= (single ? 8 : 13)) P.place({ type: 'desk', sizes: [[1.2, 0.6], [1.0, 0.55]], front: 0.6, gap: 0.3, score: nearWindow });
       break;
     }
     case 'living_kitchen': {
       const counter = placeCounter(P);
       if (!counter) missing('angolo cottura');
-      if (!placeLiving(P) && room.area >= 12) missing('divano');
-      placeTable(P, counter ? G.rectCenter(counter.rect) : label);
+      const peninsula = kitchenExtras(counter);
+      // zona pranzo vicino alla cucina, poi la zona living nello spazio che resta
+      if (!peninsula) placeTable(P, counter ? G.rectCenter(counter.rect) : label, room);
+      if (!placeLiving(P, room) && room.area >= 12) missing('divano');
+      placeArmchair(P, room);
       break;
     }
     case 'living': {
-      if (!placeLiving(P) && room.area >= 10) missing('divano');
-      if (room.area >= 16) placeTable(P, label);
+      if (!placeLiving(P, room) && room.area >= 10) missing('divano');
+      if (room.area >= 16) placeTable(P, label, room);
+      placeArmchair(P, room);
       break;
     }
     case 'kitchen': {
       const counter = placeCounter(P);
       if (!counter) missing('piano cucina');
-      if (room.area >= 8) placeTable(P, label, [[1.2, 0.8], [0.9, 0.7]]);
+      const peninsula = kitchenExtras(counter);
+      if (room.area >= 8 && !peninsula) placeTable(P, label, room);
       break;
     }
     case 'study': {
@@ -378,7 +544,7 @@ function furnishRoom(P, room, notes) {
  * @param {Array<{kind:string,name:string,poly:number[][]}>} shapes  stanze in metri
  * @returns piano nello stesso formato di /generate-plan, con in più `room.poly` e `wallLines`
  */
-export function sketchToPlan(shapes, { style = 'modern' } = {}) {
+export function sketchToPlan(shapes, { style = 'modern', peninsula = false } = {}) {
   if (!shapes.length) throw new Error('Lo schizzo è vuoto: disegna almeno una stanza.');
   const b = G.bounds(shapes.flatMap((s) => s.poly));
   // il muro esterno sporge di mezzo spessore oltre la linea disegnata
@@ -499,7 +665,7 @@ export function sketchToPlan(shapes, { style = 'modern' } = {}) {
   const furniture = [];
   for (const r of rooms) {
     const P = new Placer(r, doorsByRoom.get(r.id), windowsByRoom.get(r.id));
-    furnishRoom(P, r, notes);
+    furnishRoom(P, r, notes, { peninsula });
     for (const it of P.items) {
       furniture.push({
         type: it.type,
@@ -510,6 +676,7 @@ export function sketchToPlan(shapes, { style = 'modern' } = {}) {
         rot: 0,
         facing: it.facing,
         room: r.id,
+        ...(it.flip && { flip: true }),
       });
     }
   }
@@ -527,7 +694,7 @@ export function sketchToPlan(shapes, { style = 'modern' } = {}) {
       grossArea: round(rooms.reduce((a, r) => a + r.area, 0), 2),
       boundingBox: round(W * L, 2),
       rooms: rooms.length,
-      bedrooms: kinds.filter((k) => k === 'bed').length,
+      bedrooms: kinds.filter((k) => k === 'bed' || k === 'bed_single').length,
       bathrooms: kinds.filter((k) => k === 'bath').length,
       doors: doors.length,
       windows: windows.length,

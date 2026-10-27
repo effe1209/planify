@@ -63,7 +63,8 @@ export const ROOM_KINDS = [
   { id: 'living', label: 'Soggiorno', name: 'Soggiorno' },
   { id: 'living_kitchen', label: 'Soggiorno + cucina', name: 'Soggiorno con Cucina' },
   { id: 'kitchen', label: 'Cucina', name: 'Cucina' },
-  { id: 'bed', label: 'Camera', name: 'Camera da Letto' },
+  { id: 'bed', label: 'Camera matrimoniale', name: 'Camera Matrimoniale' },
+  { id: 'bed_single', label: 'Camera singola', name: 'Camera Singola' },
   { id: 'bath', label: 'Bagno', name: 'Bagno' },
   { id: 'study', label: 'Studio', name: 'Studio' },
   { id: 'corridor', label: 'Disimpegno', name: 'Disimpegno' },
@@ -71,21 +72,44 @@ export const ROOM_KINDS = [
 ];
 export const ROOM_KIND_NAME = Object.fromEntries(ROOM_KINDS.map((k) => [k.id, k.name]));
 
+/* Catalogo per «Aggiungi arredo»: più varianti possono condividere lo stesso disegno (type). */
 export const FURNITURE = [
-  { type: 'bed', label: 'Letto matrimoniale', w: 1.6, h: 2.0 },
-  { type: 'sofa', label: 'Divano', w: 1.8, h: 0.9 },
-  { type: 'table', label: 'Tavolo con sedie', w: 1.4, h: 0.8 },
-  { type: 'desk', label: 'Scrivania con sedia', w: 1.2, h: 0.6 },
-  { type: 'tv', label: 'Mobile TV', w: 1.4, h: 0.25 },
-  { type: 'wardrobe', label: 'Armadio guardaroba', w: 1.6, h: 0.6 },
-  { type: 'kitchen_counter', label: 'Piano cucina', w: 1.8, h: 0.6 },
-  { type: 'bathtub', label: 'Vasca da bagno', w: 1.5, h: 0.75 },
-  { type: 'shower', label: 'Box doccia', w: 0.9, h: 0.9 },
-  { type: 'toilet', label: 'WC', w: 0.4, h: 0.65 },
-  { type: 'sink', label: 'Lavabo', w: 0.6, h: 0.5 },
-  { type: 'minibar', label: 'Minibar', w: 0.8, h: 0.5 },
+  { id: 'bed_double', type: 'bed', label: 'Letto matrimoniale 160', w: 1.6, h: 2.0, group: 'Notte' },
+  { id: 'bed_king', type: 'bed', label: 'Letto king 180', w: 1.8, h: 2.0, group: 'Notte' },
+  { id: 'bed_single', type: 'bed', label: 'Letto singolo', w: 0.9, h: 2.0, group: 'Notte' },
+  { id: 'nightstand', type: 'nightstand', label: 'Comodino', w: 0.45, h: 0.4, group: 'Notte' },
+  { id: 'wardrobe', type: 'wardrobe', label: 'Armadio 3 ante', w: 1.8, h: 0.6, group: 'Notte' },
+  { id: 'wardrobe_small', type: 'wardrobe', label: 'Armadio 2 ante', w: 1.2, h: 0.6, group: 'Notte' },
+  { id: 'desk', type: 'desk', label: 'Scrivania con sedia', w: 1.2, h: 0.6, group: 'Notte' },
+  { id: 'sofa_2', type: 'sofa', label: 'Divano 2 posti', w: 1.6, h: 0.9, group: 'Giorno' },
+  { id: 'sofa_3', type: 'sofa', label: 'Divano 3 posti', w: 2.2, h: 0.9, group: 'Giorno' },
+  { id: 'sofa_corner', type: 'sofa_corner', label: 'Divano angolare', w: 2.6, h: 1.7, group: 'Giorno' },
+  { id: 'armchair', type: 'armchair', label: 'Poltrona', w: 0.8, h: 0.8, group: 'Giorno' },
+  { id: 'coffee_table', type: 'coffee_table', label: 'Tavolino da salotto', w: 1.0, h: 0.55, group: 'Giorno' },
+  { id: 'tv', type: 'tv', label: 'Mobile TV', w: 1.6, h: 0.25, group: 'Giorno' },
+  { id: 'table', type: 'table', label: 'Tavolo rettangolare', w: 1.6, h: 0.9, group: 'Giorno' },
+  { id: 'table_round', type: 'table_round', label: 'Tavolo tondo', w: 1.1, h: 1.1, group: 'Giorno' },
+  { id: 'table_round_small', type: 'table_round', label: 'Tavolino tondo', w: 0.8, h: 0.8, group: 'Giorno' },
+  { id: 'kitchen_counter', type: 'kitchen_counter', label: 'Piano cucina', w: 2.4, h: 0.6, group: 'Cucina' },
+  { id: 'kitchen_peninsula', type: 'kitchen_peninsula', label: 'Penisola con sgabelli', w: 0.9, h: 2.0, group: 'Cucina' },
+  { id: 'shower', type: 'shower', label: 'Doccia quadrata', w: 0.9, h: 0.9, group: 'Bagno' },
+  { id: 'shower_rect', type: 'shower', label: 'Doccia rettangolare', w: 1.2, h: 0.8, group: 'Bagno' },
+  { id: 'shower_round', type: 'shower_round', label: 'Doccia angolare tonda', w: 0.9, h: 0.9, group: 'Bagno' },
+  { id: 'shower_walkin', type: 'shower_walkin', label: 'Doccia walk-in', w: 1.4, h: 0.9, group: 'Bagno' },
+  { id: 'bathtub', type: 'bathtub', label: 'Vasca da bagno', w: 1.7, h: 0.75, group: 'Bagno' },
+  { id: 'toilet', type: 'toilet', label: 'WC', w: 0.4, h: 0.65, group: 'Bagno' },
+  { id: 'bidet', type: 'bidet', label: 'Bidet', w: 0.38, h: 0.55, group: 'Bagno' },
+  { id: 'sink', type: 'sink', label: 'Lavabo', w: 0.6, h: 0.5, group: 'Bagno' },
+  { id: 'sink_double', type: 'sink', label: 'Lavabo doppio', w: 1.2, h: 0.5, group: 'Bagno' },
+  { id: 'minibar', type: 'minibar', label: 'Minibar', w: 0.8, h: 0.5, group: 'Giorno' },
 ];
-export const FURNITURE_LABEL = Object.fromEntries(FURNITURE.map((f) => [f.type, f.label]));
+export const FURNITURE_LABEL = {
+  bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', sofa: 'Divano',
+  sofa_corner: 'Divano angolare', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
+  table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola',
+  shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',
+  toilet: 'WC', bidet: 'Bidet', sink: 'Lavabo', minibar: 'Minibar',
+};
 
 export const LOADING_STEPS = [
   'Calcolo la sagoma e la volumetria…',
@@ -104,7 +128,7 @@ export const PALETTES = {
   luxury: { living: '#f9f6f0', kitchen: '#f5efe6', bed: '#fbf8f5', bath: '#e2e8f0', corridor: '#f3eee5', study: '#fbf8f5' },
 };
 export const KIND_GROUP = {
-  living: 'living', living_kitchen: 'living', zone_day: 'living', kitchen: 'kitchen', bed: 'bed',
+  living: 'living', living_kitchen: 'living', zone_day: 'living', kitchen: 'kitchen', bed: 'bed', bed_single: 'bed',
   zone_night: 'bed', bath: 'bath', wc: 'bath', corridor: 'corridor', study: 'study', hotel_room: 'bed',
 };
 export const roomColor = (kind, style = 'modern') =>
@@ -113,3 +137,10 @@ export const roomColor = (kind, style = 'modern') =>
 /* Spessore muri e scala di disegno: allineati a planner.py. */
 export const WALL = 0.2;
 export const SCALE = 45;
+
+/* Locali principali → (matrimoniali, singole), come nel motore: trilocale 1+1, quadrilocale 2+1. */
+export function defaultBedrooms(rooms) {
+  const beds = Math.max(1, rooms - 1);
+  const doubles = 1 + Math.floor(Math.max(0, beds - 1) / 2);
+  return { doubles, singles: beds - doubles };
+}
