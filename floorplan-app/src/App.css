@@ -332,3 +332,12 @@
   .lg-window { background: #fff; border: 1px solid #14181f; position: relative; }
   .lg-window::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: #2f6fe4; transform: translateY(-50%); }
   .lg-out { background: repeating-linear-gradient(45deg, transparent, transparent 3px, #8aa383 3px, #8aa383 4px); background-color: #f3f6f1; }
+
+  /* Flash Toast */
+.pf-flash { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--bg-panel); backdrop-filter: var(--blur); padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md); border: 1px solid var(--border-color); animation: fadeUp 0.3s ease-out; z-index: 60; }
+@keyframes fadeUp { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Cronologia (Bottom) */
+.pf-history { position: absolute; bottom: 20px; left: 20px; max-width: 450px; background: var(--bg-panel); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); padding: 16px; border-radius: 16px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); z-index: 20; display: flex; flex-direction: column; gap: 12px; }
+.pf-history-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.pf-history-list { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
