@@ -25,6 +25,7 @@ import {
   ChevronDown,
   Image as ImageIcon,
   FileJson,
+  BedDouble,
 } from 'lucide-react';
 import './App.css';
 
@@ -45,8 +46,9 @@ const TYPES = [
   { id: 'apartment', label: 'Appartamento', Icon: Home },
   { id: 'open-space', label: 'Open space', Icon: Maximize2 },
   { id: 'office', label: 'Ufficio', Icon: Briefcase },
+  { id: 'hotel-room', label: 'Camera Hotel', Icon: BedDouble },
 ];
-const TYPE_NAME = { apartment: 'Appartamento', 'open-space': 'Open space', office: 'Ufficio' };
+const TYPE_NAME = { apartment: 'Appartamento', 'open-space': 'Open space', office: 'Ufficio', 'hotel-room': 'Camera Hotel' };
 
 const PRESETS = [
   { label: 'Monolocale', w: 7, l: 6, type: 'open-space', rooms: 1 },
@@ -54,6 +56,9 @@ const PRESETS = [
   { label: 'Trilocale', w: 11, l: 9, type: 'apartment', rooms: 3 },
   { label: 'Quadrilocale', w: 14, l: 10, type: 'apartment', rooms: 4 },
   { label: 'Ufficio', w: 18, l: 12, type: 'office', rooms: 4 },
+  { label: 'Camera Std', w: 6, l: 8, type: 'hotel-room', rooms: 1 },
+  { label: 'Camera Deluxe', w: 7, l: 9, type: 'hotel-room', rooms: 1 },
+  { label: 'Suite', w: 9, l: 11, type: 'hotel-room', rooms: 1 },
 ];
 
 const LOADING_STEPS = [
@@ -235,6 +240,22 @@ const FURNITURE = {
       </>
     );
   },
+  bathtub: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={4} fill="#e3eefb" stroke={F_STROKE} strokeWidth="1.1" />
+      <rect x={4} y={4} width={w - 8} height={h - 8} rx={3} fill="#d0e8f7" stroke={F_SOFT} />
+      <ellipse cx={w / 2} cy={h * 0.75} rx={w * 0.3} ry={h * 0.18} fill="none" stroke={F_SOFT} strokeWidth="0.8" />
+      <circle cx={w / 2} cy={h * 0.18} r={3} fill={F_STROKE} />
+    </>
+  ),
+  minibar: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={2} fill="#e8e0d5" stroke={F_STROKE} strokeWidth="1.1" />
+      <rect x={2} y={2} width={w - 4} height={h * 0.5} rx={1} fill="#d4c9bb" stroke={F_SOFT} strokeWidth="0.7" />
+      <rect x={w * 0.15} y={h * 0.6} width={w * 0.3} height={h * 0.3} rx={1} fill="#c4b8a8" stroke={F_SOFT} strokeWidth="0.7" />
+      <rect x={w * 0.55} y={h * 0.6} width={w * 0.3} height={h * 0.3} rx={1} fill="#c4b8a8" stroke={F_SOFT} strokeWidth="0.7" />
+    </>
+  ),
 };
 
 function Furn({ item, scale }) {
@@ -255,6 +276,7 @@ const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
+  hotel_room: 'wood',
 };
 
 function Dim({ len, label }) {
@@ -874,7 +896,9 @@ export default function App() {
               <p className="pf-hint">
                 {form.shape === 'auto'
                   ? 'Ogni generazione sceglie una sagoma diversa.'
-                  : 'Se le misure sono troppo piccole, la pianta torna rettangolare.'}
+                  : form.roomType === 'hotel-room'
+                    ? 'La camera hotel ha sempre sagoma rettangolare.'
+                    : 'Se le misure sono troppo piccole, la pianta torna rettangolare.'}
               </p>
             </section>
 
