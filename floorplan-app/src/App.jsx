@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
+import { Analytics } from "@vercel/analytics/next"
 import {
   Home,
   Briefcase,
@@ -1573,6 +1574,7 @@ export default function App() {
 
   return (
     <div className="pf-app" data-theme={theme}>
+      <Analytics/>
       {/* File input nascosto per importazione DXF */}
       <input
         type="file"
