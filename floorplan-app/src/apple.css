@@ -245,3 +245,36 @@
 .pf-dialog { border-radius: 24px; border-color: var(--hairline); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28); }
 .pf-dialog::backdrop { background: rgba(0, 0, 0, 0.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 @media (max-width: 1100px) { .pf-cookie-banner { left: 16px; } }
+
+/* ── Area di clic minima 44 × 44 ───────────────────────────────────────── */
+/* controlli piccoli: l'area cliccabile si allarga in modo invisibile, l'aspetto resta compatto.
+   Nei gruppi affiancati cresce solo in altezza, così due icone vicine non si rubano il clic. */
+.pf-btn-icon, .pf-mini, .pf-stepper button, .pf-chip, .pf-floor-tab, .pf-tool, .pf-seg button, .pf-link,
+.pf-swatch-btn, .pf-customizer-close, .pf-sketch-tool, .pf-kind-chip, .pf-toggle {
+  position: relative;
+}
+.pf-btn-icon::before, .pf-mini::before, .pf-chip::before, .pf-floor-tab::before, .pf-tool::before,
+.pf-seg button::before, .pf-link::before, .pf-swatch-btn::before, .pf-sketch-tool::before, .pf-kind-chip::before,
+.pf-stepper button::before, .pf-customizer-close::before, .pf-toggle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: max(100%, 44px);
+  transform: translateY(-50%);
+}
+/* isolati: l'area cresce anche in larghezza */
+.pf-stepper button::before, .pf-customizer-close::before, .pf-toggle::before {
+  left: 50%;
+  width: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+.pf-btn-icon { min-width: 32px; min-height: 32px; justify-content: center; border-radius: 9px; }
+.pf-stepper button { width: 30px; height: 30px; border-radius: 9px; background: var(--fill); border-color: transparent; }
+.pf-swatch-btn { width: 28px; height: 28px; border-radius: 8px; }
+/* controlli a tutta larghezza: altezza reale da 44 */
+.pf-input input, .pf-plain, .pf-input-sm, .pf-add-furn select, .pf-floor-menu select { min-height: 44px; }
+.pf-btn-add, .pf-room, .pf-style-card, .pf-type-card, .pf-check, .pf-primary { min-height: 44px; }
+.pf-details summary, .pf-bom summary { min-height: 44px; display: flex; align-items: center; }
+.pf-check input { width: 18px; height: 18px; }
