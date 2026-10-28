@@ -103,7 +103,7 @@ const rectDist = (p, f) => Math.hypot(Math.max(f.x - p.x, 0, p.x - f.x - f.w), M
 const ROT_BY_FACING = { S: 0, N: 180, E: -90, W: 90 };   // come in PlanSvg (Oriented)
 
 /* Punto di un arredo nel suo riferimento (lx lungo il fronte, ly dal retro), in metri sulla pianta. */
-function itemPoint(f, lx, ly) {
+export function itemPoint(f, lx, ly) {
   const side = f.facing === 'E' || f.facing === 'W';
   const cw = side ? f.h : f.w;
   const ch = side ? f.w : f.h;
@@ -113,7 +113,7 @@ function itemPoint(f, lx, ly) {
   const a = ((ROT_BY_FACING[f.facing || 'S'] || 0) * Math.PI) / 180;
   return { x: f.x + f.w / 2 + x * Math.cos(a) - y * Math.sin(a), y: f.y + f.h / 2 + x * Math.sin(a) + y * Math.cos(a) };
 }
-const itemLength = (f) => (f.facing === 'E' || f.facing === 'W' ? f.h : f.w);
+export const itemLength = (f) => (f.facing === 'E' || f.facing === 'W' ? f.h : f.w);
 
 /* Punto nel riferimento di una porta: lx lungo il varco (0 = cardine), ly attraverso il muro. */
 function doorPoint(plan, d, lx, ly) {
@@ -125,7 +125,7 @@ function doorPoint(plan, d, lx, ly) {
  * Posizioni possibili lungo i muri di un locale, a filo della parete: un punto ogni `step` metri,
  * con la normale verso l'interno. I lati aperti su un locale della stessa zona (nessun muro) non contano.
  */
-function wallSpots(plan, r, step = 0.2) {
+export function wallSpots(plan, r, step = 0.2) {
   const t = plan.wallThickness / plan.scale;
   const { width: W, length: L } = plan.dimensions;
   const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];

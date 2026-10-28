@@ -7,6 +7,7 @@ import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
 import ElectricLayer from './ElectricLayer';
+import PlumbingLayer from './PlumbingLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
 import { THEMES } from '../lib/themes';
@@ -773,7 +774,7 @@ function roomLabel(room, s) {
 export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
-  electric = null, electricLinks = true,
+  electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
 }) {
   const uid = useId().replace(/:/g, '');
   const theme = THEMES[style] || THEMES.modern;
@@ -785,6 +786,8 @@ export default function PlanSvg({
   const notches = plan.notches || [];
   const ref = (n) => `url(#${n}-${uid})`;
   const showFurn = layers.furniture && !thumb;
+  // tavole degli impianti: arredi attenuati (meno nell'idraulica, dove i sanitari fanno da riferimento)
+  const furnOpacity = electric ? 0.22 : plumbing ? 0.5 : 1;
   const garden = !thumb && isGardenPlan(plan);
   const band = garden ? HOUSE_BAND : 0;
   const gross = plan.stats?.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0);
@@ -880,7 +883,7 @@ export default function PlanSvg({
         })}
 
         {showFurn && (
-          <g pointerEvents="none" opacity={electric ? 0.22 : 1}>
+          <g pointerEvents="none" opacity={furnOpacity}>
             {rugsFor(plan).filter((r) => !coveredByStairs(r, stairs)).map((r, i) => (
               <rect key={`rug-${i}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} rx={3}
                 fill={theme.rug} stroke={theme.rugLine} strokeWidth="0.8" strokeDasharray="1.5 2" />
@@ -888,7 +891,7 @@ export default function PlanSvg({
           </g>
         )}
         {showFurn && (
-          <g filter={ref('fshadow')} opacity={electric ? 0.22 : 1}>
+          <g filter={ref('fshadow')} opacity={furnOpacity}>
             {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
             {plan.furniture.filter((it) => !coveredByStairs(it, stairs))
               .sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
@@ -896,7 +899,7 @@ export default function PlanSvg({
           </g>
         )}
         {stairs?.length > 0 && (
-          <g pointerEvents="none" opacity={electric ? 0.45 : 1}>
+          <g pointerEvents="none" opacity={electric || plumbing ? 0.45 : 1}>
             {stairs.map((st) => (st.engine ? <EngineStair key={st.id} st={st} s={s} /> : <Stair key={st.id} st={st} s={s} />))}
             {!thumb && layers.labels && stairs.flatMap((st) => stairLabels(st).map((txt, i, all) => (
               <text key={`stl-${st.id}-${i}`} x={(st.x + st.w / 2) * s} y={(st.y + st.h / 2) * s + 3 + (i - (all.length - 1) / 2) * 11}
@@ -991,8 +994,9 @@ export default function PlanSvg({
         ))}
 
         {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
+        {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}
 
-        {!electric && !thumb && layers.alarm !== false && devices?.length > 0 && (
+        {!electric && !plumbing && !thumb && layers.alarm !== false && devices?.length > 0 && (
           <g pointerEvents="none" fontFamily={FONT} fontWeight="700" textAnchor="middle">
             {devices.map((d) => {
               const st = DEVICE_STYLE[d.model] || { tag: '?', color: INK };
