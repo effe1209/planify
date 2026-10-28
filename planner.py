@@ -29,7 +29,7 @@ DAY_MIN = 3.8          # larghezza minima zona giorno
 # Vano scala nelle file accanto al disimpegno: (larghezza del vano lungo la fila, profondità minima della fila).
 # Si parte e si arriva sempre dal lato del disimpegno: a U le due rampe tornano indietro; a L e a rampa
 # unica al piano di sopra si torna al disimpegno lungo il passaggio accanto alla rampa.
-STAIR_SLOT = {"u": (2.3, 3.0), "l": (2.5, 3.4), "straight": (2.2, 3.9)}
+STAIR_SLOT = {"u": (2.3, 3.0), "l": (2.5, 3.4), "straight": (2.2, 3.8)}
 STAIR_PICK = (("u", 0.5), ("l", 0.25), ("straight", 0.25))
 
 # Convenzione per le aperture verticali (rot=90). Il frontend ruota l'elemento

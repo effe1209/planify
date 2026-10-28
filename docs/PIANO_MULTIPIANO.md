@@ -52,3 +52,23 @@ Un appartamento singolo è `program=full, access=street, core=null` → **identi
    sovrapposti (scarichi); vista globale, PDF e DXF mostrano la scala come locale.
 9. **Verifica** — script di prova Python (scala allineata tra i piani, accesso corretto, nessuna
    sovrapposizione, ogni locale raggiungibile) + build e prova nell'app.
+
+## Stato (28/10/2026)
+
+Scelte concordate: scala nella **circolazione** (vano aperto sul disimpegno, soggiorno solo come
+ripiego), tipi **U, L e rampa unica**, distribuzione **preset + personalizza**, motore aggiornato.
+
+| Punto | Stato | Dove |
+|---|---|---|
+| 1 Locale scala nel motore | fatto | `planner.py`: `STAIR_SLOT`, `layout_apartment(stair=…)`, `export_stairs` |
+| 2 Ruolo del piano (`access`) | fatto | niente porta d'ingresso con `access="stairs"`; validazione e punteggio partono dalla scala |
+| 3 Programma (`program`) | fatto | `day` = soggiorno, cucina, bagno di servizio (+ studio/ripostiglio/lavanderia); `night` = camere e bagni, zona relax se avanza ≥ 3,5 m |
+| 4 `/generate-house` | fatto | `planner.generate_house`, `main.py` (motore 7.2.0, feature `stairs`, `floor_program`, `house`) |
+| 5 Frontend: scale dal motore | fatto | `lib/stairs.js` (vano del motore, ripiego sul vecchio metodo), `PlanSvg.jsx` (`EngineStair`) |
+| 6 «Aggiungi piano» intelligente | fatto | stesse misure del piano accanto, `core`, `access`, programma proposto; pulsante «Rigenera questo piano con la scala allineata» per i piani creati prima |
+| 7 «Casa su più piani» | fatto | `components/HouseOptions.jsx`, `lib/house.js` |
+| 8 Coerenza verticale | in parte | stessa sagoma (rettangolare) e misure; vista globale e PDF mostrano le scale. Da fare: bagni sovrapposti, sagome L/U/T su più piani, interrato/garage con scala |
+| 9 Verifica | fatto | `tests/test_house.py`; nessuna differenza sugli appartamenti senza scala a parità di seed |
+
+Limiti noti: con la scala la pianta è rettangolare; le camere si dividono tra i piani in automatico
+(prima i piani «Notte»); il garage interrato non ha ancora il vano scala.
