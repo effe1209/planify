@@ -53,7 +53,7 @@ const roomAt = (plan, x, y) => plan.rooms.find((r) => contains(r, x, y)) || null
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 
 /* Un varco (porta o finestra) visto dai due lati: centro, normale, stanza interna e se dà sull'esterno. */
-function opening(plan, o) {
+export function opening(plan, o) {
   const t = plan.wallThickness / plan.scale;
   const a = (o.rot * Math.PI) / 180;
   const ux = Math.cos(a), uy = Math.sin(a);   // lungo il muro
@@ -71,7 +71,7 @@ function opening(plan, o) {
 }
 
 /* Punto appena dentro la stanza, sul varco (spostato di `along` metri lungo il muro). */
-const inside = (op, depth = 0.12, along = 0) => ({
+export const inside = (op, depth = 0.12, along = 0) => ({
   x: op.cx + op.nx * (op.t / 2 + depth) + op.ux * along,
   y: op.cy + op.ny * (op.t / 2 + depth) + op.uy * along,
 });
