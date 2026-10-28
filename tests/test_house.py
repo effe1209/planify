@@ -49,6 +49,39 @@ def test_three_floors_share_the_same_stair():
     assert all(c == cores[0] for c in cores)
 
 
+def test_garage_under_the_house_has_the_same_stair_behind_a_door():
+    floors = [{"level": -1, "program": "garage"}, {"level": 0, "program": "day"}, NIGHT]
+    for W, L in SIZES:
+        house = planner.generate_house(W, L, floors, seed=5)
+        assert not house["notes"], (W, L, house["notes"])
+        plans = {f["level"]: f["plan"] for f in house["floors"]}
+        assert _core(plans[-1]) == _core(plans[0]) == _core(plans[1])
+        garage = plans[-1]
+        stair = next(r for r in garage["rooms"] if r["kind"] == "stairs")
+        box = {r["zone"] for r in garage["rooms"] if r["kind"] == "garage"}
+        assert stair["zone"] not in box, "nel garage il vano scala è chiuso"
+        assert any(d.get("kind") == "garage" for d in garage["doors"]), "basculante sulla facciata"
+        assert not [n for n in garage["notes"] if "raggiungibile" in n or "vuoto" in n]
+
+
+def _wet_cover(lower, upper):
+    area = sum(w["w"] * w["h"] for w in planner.wet_areas(lower))
+    over = sum(max(0, min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"])) *
+               max(0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
+               for a in planner.wet_areas(lower) for b in planner.wet_areas(upper))
+    return over / area
+
+
+def test_bathrooms_upstairs_sit_over_the_ones_below():
+    covered = []
+    for seed in range(1, 6):
+        for W, L in SIZES:
+            house = planner.generate_house(W, L, [{"level": 0, "program": "day"}, NIGHT], seed=seed)
+            plans = {f["level"]: f["plan"] for f in house["floors"]}
+            covered.append(_wet_cover(plans[0], plans[1]))
+    assert sum(c >= 0.9 for c in covered) >= 0.9 * len(covered), covered
+
+
 def test_apartment_without_stairs_is_unchanged():
     plan = planner.generate(10, 9, seed=5)
     assert plan["stairs"] == [] and not any(r["kind"] == "stairs" for r in plan["rooms"])

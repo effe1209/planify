@@ -23,8 +23,11 @@ export const HOUSE_PRESETS = [
 
 export const MAX_HOUSE_LEVEL = 3;
 
+export const GARAGE_FLOOR = { level: -1, program: 'garage', name: 'Piano interrato / garage' };
+
 export function floorName(f) {
   if (f.name) return f.name;
+  if (f.program === 'garage') return GARAGE_FLOOR.name;
   return FLOOR_PRESETS.find((p) => p.level === f.level && !p.type)?.name || `Piano ${f.level}`;
 }
 
@@ -45,6 +48,14 @@ export function suggestProgram(project, level) {
  * vanno al piano giorno, la suite al piano notte.
  */
 export function houseFloorsRequest(form) {
+  const garage = form.houseGarage ? [{
+    level: GARAGE_FLOOR.level, program: 'garage',
+    needs: { laundry: form.garageLaundry, storage: form.garageStorage },
+  }] : [];
+  return [...garage, ...programFloors(form)];
+}
+
+function programFloors(form) {
   const floors = form.houseFloors;
   const sleeping = [
     ...floors.filter((f) => f.program === 'night'),

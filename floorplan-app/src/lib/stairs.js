@@ -218,12 +218,26 @@ export function neighbourCore(project, level) {
   return near.length ? stairCore(near[0].plan) : null;
 }
 
+/*
+ * Bagni e lavanderie del piano accanto (verso il piano terra), da passare al motore (`wet`): il nuovo
+ * piano cerca di avere i bagni sopra/sotto, con gli scarichi allineati.
+ */
+const WET = ['bath', 'wc', 'laundry'];
+export function neighbourWet(project, level) {
+  if (!project || typeof level !== 'number') return null;
+  const near = project.floors
+    .filter((f) => typeof f.level === 'number' && Math.abs(f.level - level) === 1 && f.plan?.rooms)
+    .sort((a, b) => Math.abs(a.level) - Math.abs(b.level))[0];
+  const wet = near?.plan.rooms.filter((r) => WET.includes(r.kind)).map(({ x, y, w, h }) => ({ x, y, w, h }));
+  return wet?.length ? wet : null;
+}
+
 /* Descrizione per le note della pianta. */
 export function stairNote(st) {
   const kind = { u: 'a U', l: 'a L', straight: 'a rampa unica' }[st.type] || '';
   if (st.engine) {
     const where = [st.upTo && `sale a «${st.upTo}»`, st.downTo && `scende a «${st.downTo}»`].filter(Boolean).join(' e ');
-    return where ? `Scala ${kind} nel vano accanto al disimpegno: ${where}, nella stessa posizione su tutti i piani.`
+    return where ? `Scala ${kind} che ${where}, nella stessa posizione su tutti i piani.`
       : `Vano scala ${kind}: genera il piano sopra o sotto per collegarlo.`;
   }
   return `Scala ${kind} che ${st.role === 'up' ? 'sale a' : 'scende a'} «${st.other}», nella stessa posizione sui due piani.`;

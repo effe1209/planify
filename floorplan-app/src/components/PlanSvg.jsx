@@ -751,6 +751,7 @@ const linePath = ({ pts, closed }, s) =>
 
 function roomLabel(room, s) {
   if (room.kind === 'stairs') return null;   // il vano scala ha già «SALE a … / SCENDE a …»
+  if (!room.name) return null;                // pezzi senza nome (il box del garage attorno alla scala)
   const sw = room.w * s;
   const sh = room.h * s;
   if (sw < 52 || sh < 34) return null;

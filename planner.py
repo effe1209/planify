@@ -191,6 +191,7 @@ class Layout:
         self.room_type = ""
         self.options: dict = {}   # preferenze dell'utente (es. penisola)
         self.mirror: Optional[Tuple[bool, bool]] = None   # specchiatura imposta dalla scala di un altro piano
+        self.wet: List[Rect] = []   # bagni del piano accanto (coordinate del layout), per sovrapporre gli scarichi
 
     # -- stanze --------------------------------------------------------------
     def add_room(self, name, kind, x0, y0, x1, y1, group=None, master=False, size="") -> Room:
@@ -1189,7 +1190,7 @@ def furnish(lay: Layout):
         elif k in ("closet", "entry"): furnish_service(P, r)
         elif k == "storage":        furnish_storage(P, r)
         elif k == "laundry":        furnish_laundry(P, r)
-        elif k == "garage":         furnish_garage(P, r)
+        elif k == "garage" and r.name: furnish_garage(P, r)   # i pezzi di box attorno alla scala restano liberi
         elif k == "garden":         furnish_garden(P, r)
     for plist in P.placed.values():
         lay.items.extend(plist)
@@ -1915,12 +1916,26 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
     return lay
 
 
+def _garage_pieces(W: float, y0: float, L: float, core: Optional[Rect]) -> List[Tuple[float, float, float, float]]:
+    """Il box [0, W] × [y0, L] tolto il vano scala: fino a quattro rettangoli (x0, y0, x1, y1)."""
+    if core is None or core.y2 <= y0 + EPS:
+        return [(0.0, y0, W, L)]
+    cy0, cy1 = max(core.y, y0), core.y2
+    pieces = [(0.0, y0, core.x, L), (core.x2, y0, W, L), (core.x, y0, core.x2, cy0), (core.x, cy1, core.x2, L)]
+    return [p for p in pieces if p[2] - p[0] > 0.3 and p[3] - p[1] > 0.3]
+
+
 def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
-                  needs: Optional[dict] = None) -> Layout:
+                  needs: Optional[dict] = None, stair: Optional[dict] = None) -> Optional[Layout]:
     """Garage / piano interrato: box auto con basculante sulla facciata sud (lato W) e, sul fondo,
-    una fascia di servizi (lavanderia, ripostiglio, cantina) se richiesti e se c'è profondità."""
+    una fascia di servizi (lavanderia, ripostiglio, cantina) se richiesti e se c'è profondità.
+
+    stair = {type, core, entry, hand}: la scala del piano di sopra, nello stesso punto. Il vano scala è
+    chiuso, con una porta verso il box (compartimentazione antincendio); box e servizi gli stanno attorno.
+    Ritorna None se il vano lascia meno di un posto auto."""
     rng = rng or random.Random(0)
     needs = needs or {}
+    core = stair.get("core") if stair else None
     lay = Layout(W, L)
     lay.room_type = "garage"
     lay.shape = "rect"
@@ -1929,29 +1944,72 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
     strip = 2.2 if service and L >= 7.4 else 0.0
     if service and not strip:
         lay.notes.append("Garage poco profondo: lavanderia e ripostiglio non entrano (servono almeno 7,4 m).")
-    garage = lay.add_room("Garage", "garage", 0, strip, W, L)
+    sr = None   # locale del vano scala: l'ingombro della scala più gli avanzi sotto 1 m verso muri e servizi
+    blocks = core is not None and strip > 0 and core.y < strip + 1.0   # la scala taglia la fascia dei servizi
+    if core is not None:
+        x0 = 0.0 if core.x < 1.0 else core.x
+        x1 = W if W - core.x2 < 1.0 else core.x2
+        y0 = 0.0 if blocks else strip if core.y - strip < 1.0 else core.y
+        y1 = L if L - core.y2 < 1.0 else core.y2
+        sr = Rect(x0, y0, x1 - x0, y1 - y0)
+    pieces = _garage_pieces(W, strip, L, sr)
+    # il box vero è il pezzo più largo che arriva alla facciata sud (lì c'è la basculante)
+    main = max((p for p in pieces if p[3] >= L - EPS), key=lambda p: p[2] - p[0], default=None)
+    if main is None or main[2] - main[0] < 2.8:
+        return None
+    garage = lay.add_room("Garage", "garage", *main)
+    for p in pieces:
+        if p is not main:
+            lay.add_room("", "garage", *p, group=garage.group)   # resto del box, aperto sul box
     rooms = []
     if strip:
-        specs = [(1.8, 1.0, 3.2) if k == "laundry" else (1.4, 0.7, 2.6) for k in service]
-        if W - sum(sp[2] for sp in specs) >= 1.8:
-            service.append("cellar")
-            specs.append((1.8, 1.2, 99.0))
-        xs = _edges(0.0, W, distribute(W, specs))
+        # fascia dei servizi sul fondo, nei tratti liberi accanto al vano scala
+        spans = [(0.0, W)] if not blocks else [s for s in ((0.0, sr.x), (sr.x2, W)) if s[1] - s[0] > 0.3]
         names = {"laundry": ("Lavanderia", "laundry"), "storage": ("Ripostiglio", "storage"),
                  "cellar": ("Cantina", "storage")}
-        for i, k in enumerate(service):
-            nm, kind = names[k]
-            rooms.append(lay.add_room(nm, kind, xs[i], 0, xs[i + 1], strip))
-    cars = int(clamp((W - 0.4) // 2.8, 1, 3))
+        todo = list(service)
+        for a, b in sorted(spans, key=lambda s: s[0] - s[1]):      # prima il tratto più lungo
+            here = []
+            while todo and (not blocks or sum(1.8 if k == "laundry" else 1.4 for k in here + todo[:1]) <= b - a + EPS):
+                here.append(todo.pop(0))
+            specs = [(1.8, 1.0, 3.2) if k == "laundry" else (1.4, 0.7, 2.6) for k in here]
+            if b - a - sum(sp[2] for sp in specs) >= 1.8 or (not here and b - a >= 1.4):
+                here.append("cellar")
+                specs.append((1.8 if b - a - sum(sp[0] for sp in specs) >= 1.8 else 1.4, 1.2, 99.0))
+            if not here:
+                lay.add_room("", "garage", a, 0, b, strip, group=garage.group)
+                continue
+            xs = _edges(a, b, distribute(b - a, specs))
+            for i, k in enumerate(here):
+                nm, kind = names[k]
+                rooms.append(lay.add_room(nm, kind, xs[i], 0, xs[i + 1], strip))
+        for k in todo:
+            lay.notes.append(f"{names[k][0]}: non entra accanto alla scala.")
+    if core is not None:
+        st = lay.add_room("Scala", "stairs", sr.x, sr.y, sr.x2, sr.y2)
+        st.stair = {"type": stair["type"], "entry": stair["entry"], "hand": stair["hand"],
+                    "core": Rect(core.x, core.y, core.w, core.h)}
+        # porta verso il box: dal lato da cui parte la scala se lì c'è il box, altrimenti dal lato più lungo
+        boxes = [r for r in lay.rooms if r.kind == "garage" and shared_edge(st.rect, r.rect)]
+        front = {"N": lambda r: r.rect.y2 <= sr.y + EPS, "S": lambda r: r.rect.y >= sr.y2 - EPS,
+                 "W": lambda r: r.rect.x2 <= sr.x + EPS, "E": lambda r: r.rect.x >= sr.x2 - EPS}[stair["entry"]]
+        span = lambda r: (lambda e: e[3] - e[2])(shared_edge(st.rect, r.rect))
+        boxes.sort(key=lambda r: (not (front(r) and span(r) >= 1.2), -span(r)))
+        if boxes:
+            lay.add_door(st.id, boxes[0].id, DOOR_W, 0.5, into=st.id)
+    cars = int(clamp((garage.rect.w - 0.4) // 2.8, 1, 3))
     if rooms and L - strip < 6.4 and cars > 1:
         # box poco profondo: il passaggio verso i servizi sul fondo occupa lo spazio di un posto auto
         cars -= 1
         lay.notes.append(f"Garage: {cars} {'posto auto' if cars == 1 else 'posti auto'}, "
                          "lo spazio restante serve per accedere ai locali di servizio.")
-    lay.add_entrance(garage.id, "S", min(W - 0.6, 2.5 * cars if cars > 1 else 2.5), 0.5, kind="garage")
+    lay.add_entrance(garage.id, "S", min(garage.rect.w - 0.6, 2.5 * cars if cars > 1 else 2.5), 0.5, kind="garage")
     for r in rooms:
         # porte verso un'estremità: il resto della parete di fondo resta per il muso delle auto
-        lay.add_door(garage.id, r.id, DOOR_W_BATH, 0.1, into=r.id)
+        # dal pezzo di box con il muro in comune più lungo
+        edge = lambda b: (lambda e: e[3] - e[2] if e else 0.0)(shared_edge(b.rect, r.rect))
+        box = max((b for b in lay.rooms if b.kind == "garage"), key=edge)
+        lay.add_door(box.id, r.id, DOOR_W_BATH, 0.1, into=r.id)
         if r.kind == "laundry" and lay.ext_sides(r):
             lay.add_windows(r.id, lay.best_ext_side(r), 0.6, 1)
     # finestrature alte di aerazione sui lati del box
@@ -2521,7 +2579,7 @@ def _build_layout(Wn: float, Ln: float, rt: str, n: int, palette: dict, shape: s
     if rt == "open-space":
         return layout_loft(Wn, Ln, office=False, shape=shape, rng=rng)
     if rt == "garage":
-        return layout_garage(Wn, Ln, rng=rng, needs=opts["needs"])
+        return layout_garage(Wn, Ln, rng=rng, needs=opts["needs"], stair=opts.get("stair"))
     if rt == "garden":
         return layout_garden(Wn, Ln, rng=rng)
     return layout_apartment(Wn, Ln, opts["doubles"], opts["singles"], opts["baths"],
@@ -2543,7 +2601,8 @@ def generate(width: float, length: float, room_type: str = "apartment",
              double_bedrooms: Optional[int] = None, single_bedrooms: Optional[int] = None,
              bathrooms: Optional[int] = None, kitchen: str = "auto", peninsula: bool = False,
              needs: Optional[dict] = None, program: str = "full", access: str = "street",
-             stair_type: str = "auto", core: Optional[dict] = None) -> dict:
+             stair_type: str = "auto", core: Optional[dict] = None,
+             wet: Optional[List[dict]] = None) -> dict:
     """Genera la pianta. Per gli appartamenti double/single_bedrooms e bathrooms, se indicati,
     hanno la precedenza su num_rooms; kitchen = auto | open | closed; peninsula = penisola in cucina;
     needs = {entry: True/False/"auto", suite, study, storage}.
@@ -2551,7 +2610,8 @@ def generate(width: float, length: float, room_type: str = "apartment",
     Piani di una casa (solo appartamenti): program = full | day | night; access = street | stairs | both
     (con stairs o both c'è il vano scala); stair_type = auto | u | l | straight; core = la scala di un
     altro piano dello stesso progetto ({x, y, w, h, type, entry, hand}, come in plan["stairs"][i]["core"]):
-    la scala di questo piano va nello stesso punto.
+    la scala di questo piano va nello stesso punto. wet = bagni e lavanderie del piano accanto ({x, y, w, h},
+    vedi wet_areas): tra le varianti si preferiscono quelle con i bagni sopra/sotto (scarichi allineati).
 
     Si generano più varianti (schemi e proporzioni diverse) e si sceglie quella con il punteggio
     progettuale più alto (vedi design_review); stesso seed = stessa pianta."""
@@ -2596,60 +2656,73 @@ def generate(width: float, length: float, room_type: str = "apartment",
     program = program if program in ("full", "day", "night") else "full"
     access = access if access in ("street", "stairs", "both") else "street"
     opts["program"], opts["access"] = (program, access) if rt == "apartment" else ("full", "street")
-    with_stairs = rt == "apartment" and (access != "street" or bool(core))
+    with_stairs = (rt == "apartment" and (access != "street" or bool(core))) or (rt == "garage" and bool(core))
     if access == "stairs":
         opts["needs"]["entry"] = False
     wants = {**opts["needs"], "peninsula": bool(peninsula)} if rt == "apartment" else {}
     if program != "full" and rt != "apartment":
         early_notes.append("Zona giorno/notte disponibile solo per gli appartamenti.")
 
+    def to_layout(d: dict, fx: bool, fy: bool, sides=()) -> Tuple[Rect, list]:
+        """Un rettangolo (e i lati) della pianta finita nelle coordinate interne del layout, data la
+        specchiatura che si applicherà alla fine."""
+        r = Rect(float(d["x"]), float(d["y"]), float(d["w"]), float(d["h"]))
+        sides = list(sides)
+        if fx:
+            r = Rect(W0 - r.x2, r.y, r.w, r.h)
+            sides = [FLIP_X.get(x, x) for x in sides]
+        if fy:
+            r = Rect(r.x, L0 - r.y2, r.w, r.h)
+            sides = [FLIP_Y.get(x, x) for x in sides]
+        if transposed:
+            r = r.transposed()
+            sides = [TRANSPOSE_SIDE[x] for x in sides]
+        return r, sides
+
     def stair_for(fx: bool, fy: bool) -> Optional[dict]:
-        """La scala nelle coordinate interne del layout, data la specchiatura che si applicherà alla fine."""
+        """La scala nelle coordinate interne del layout."""
         if not with_stairs:
             return None
         if not core:
             return {"type": stair_type if stair_type in STAIR_SLOT else "auto"}
-        r = Rect(float(core["x"]), float(core["y"]), float(core["w"]), float(core["h"]))
-        entry, hand = core.get("entry", "S"), core.get("hand", "W")
-        if fx:
-            r = Rect(W0 - r.x2, r.y, r.w, r.h)
-            entry, hand = FLIP_X.get(entry, entry), FLIP_X.get(hand, hand)
-        if fy:
-            r = Rect(r.x, L0 - r.y2, r.w, r.h)
-            entry, hand = FLIP_Y.get(entry, entry), FLIP_Y.get(hand, hand)
-        if transposed:
-            r = r.transposed()
-            entry, hand = TRANSPOSE_SIDE[entry], TRANSPOSE_SIDE[hand]
+        r, (entry, hand) = to_layout(core, fx, fy, (core.get("entry", "S"), core.get("hand", "W")))
         t = core.get("type") if core.get("type") in STAIR_SLOT else "u"
         return {"type": t, "core": r, "entry": entry, "hand": hand}
+
+    wet = [w for w in (wet or []) if w.get("w", 0) > 0 and w.get("h", 0) > 0] if rt == "apartment" else []
 
     # Stesso seed = stessa pianta. Si generano più varianti e si tiene quella progettata meglio:
     # 1) tutte le distribuzioni valutate sulla sola geometria (luce, circolazione, privacy...), che è
     #    veloce; 2) solo le più promettenti vengono arredate e valutate di nuovo, arredo compreso.
     base = int(seed) if seed is not None else random.randrange(1, 1_000_000)
     attempts = (12 if rt == "apartment" else 6) if W0 * L0 <= 900 else 4
+    if wet and W0 * L0 <= 900:
+        attempts = 16   # più varianti: oltre alla scala si cercano i bagni sovrapposti
     drafts = []
     for k in range(attempts):
         rng = random.Random(base * 101 + k * 7919)
         # con la scala già fissata si provano le quattro specchiature: in alcune la scala cade nelle file
         # del disimpegno, in altre nella zona giorno (e quella variante si scarta)
-        mirror = (bool(k & 1), bool(k & 2)) if core else None
+        mirror = (bool(k & 1), bool(k & 2)) if (core or wet) and rt == "apartment" else \
+            (False, False) if core else None
         opts["stair"] = stair_for(*(mirror or (False, False)))
         lay = _build_layout(Wn, Ln, rt, n, palette, shape, rng, opts)
         if lay is None:
             continue
         lay.mirror = mirror
+        lay.wet = [to_layout(w, *mirror)[0] for w in wet] if wet else []
         ensure_daylight(lay)
         lay.options["peninsula"] = bool(peninsula)
         lay.notes[:0] = early_notes
         # si confronta il punteggio grezzo: il tetto a 100 appiattirebbe le differenze tra varianti buone
-        drafts.append((design_review(lay, [], wants, furnished=False)["raw"] - len(lay.notes), k, lay, rng))
+        drafts.append((design_review(lay, [], wants, furnished=False)["raw"] - len(lay.notes) + _wet_bonus(lay),
+                       k, lay, rng))
     if not drafts:
         # la scala del piano accanto non trova posto: si genera con una scala propria; se non entra
         # neanche quella, senza scala (e lo si dice nelle note)
         plan = generate(width, length, room_type, num_rooms, style, shape, seed, double_bedrooms,
                         single_bedrooms, bathrooms, kitchen, peninsula, needs, program,
-                        access if core else "street", stair_type)
+                        access if core else "street", stair_type, wet=wet or None)
         plan["notes"].insert(0, "La scala del piano accanto non trova posto in questa pianta: "
                                 "prova misure più ampie o un'altra variante." if core else
                                 "Con queste misure e questi locali la scala non entra: aumenta la superficie "
@@ -2666,10 +2739,14 @@ def generate(width: float, length: float, room_type: str = "apartment",
         issues = validate(lay)
         lay.notes.extend(issues)
         review = design_review(lay, issues, wants)
+        review["raw"] += _wet_bonus(lay)
         if best is None or review["raw"] > best[2]["raw"]:
             best = (lay, rng, review, issues)
     lay, rng, review, _ = best
     review.pop("raw", None)
+    if lay.wet and _wet_bonus(lay) >= WET_BONUS / 2:
+        review["strengths"] = (["Bagni sopra/sotto quelli del piano accanto: scarichi allineati"] +
+                               review["strengths"])[:6]
     if transposed:
         lay.transpose()
     if rt in ("hotel-room", "garage", "garden"):
@@ -2683,17 +2760,19 @@ def generate(width: float, length: float, room_type: str = "apartment",
     return plan
 
 
-HOUSE_PROGRAMS = ("full", "day", "night")
+HOUSE_PROGRAMS = ("full", "day", "night", "garage")
 
 
 def generate_house(width: float, length: float, floors: List[dict], style: str = "modern",
                    seed: Optional[int] = None, stair_type: str = "auto") -> dict:
     """Casa su più piani generata insieme: una sola casa con la scala che collega tutti i piani.
 
-    floors: [{level, program (full | day | night), double_bedrooms, single_bedrooms, bathrooms, kitchen,
-    peninsula, needs}]. Il piano d'ingresso (il livello 0, altrimenti il più basso) ha la porta sulla
-    facciata e la partenza della scala; gli altri si arriva dalla scala, che sta nello stesso punto
-    su tutti i piani. Se la scala non si allinea si riprova con altre varianti del piano d'ingresso.
+    floors: [{level, program (full | day | night | garage), double_bedrooms, single_bedrooms, bathrooms,
+    kitchen, peninsula, needs}]. Il piano d'ingresso (il livello 0, altrimenti il più basso) ha la porta
+    sulla facciata e la partenza della scala; gli altri si arriva dalla scala, che sta nello stesso punto
+    su tutti i piani (il garage la ha in un vano chiuso con porta sul box). I piani si generano dal piano
+    d'ingresso verso l'esterno e ognuno cerca di avere i bagni sopra/sotto quelli del piano accanto.
+    Se la scala non si allinea si riprova con altre varianti del piano d'ingresso.
     Ritorna {"floors": [{level, program, plan}], "seed", "notes"}.
     """
     floors = sorted(floors, key=lambda f: f.get("level", 0))
@@ -2704,13 +2783,18 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
     base = int(seed) if seed is not None else random.randrange(1, 1_000_000)
     many = len(floors) > 1
 
-    def one(f: dict, s: int, access: str, core: Optional[dict] = None) -> dict:
+    def one(f: dict, s: int, access: str, core: Optional[dict] = None, wet: Optional[list] = None) -> dict:
         prog = f.get("program") if f.get("program") in HOUSE_PROGRAMS else "full"
+        if prog == "garage":
+            return generate(width, length, "garage", style=style, seed=s, needs=f.get("needs"), core=core)
         return generate(width, length, "apartment", style=style, shape="rect", seed=s,
                         double_bedrooms=f.get("double_bedrooms"), single_bedrooms=f.get("single_bedrooms"),
                         bathrooms=f.get("bathrooms"), kitchen=f.get("kitchen") or "auto",
                         peninsula=bool(f.get("peninsula")), needs=f.get("needs"),
-                        program=prog, access=access, stair_type=stair_type, core=core)
+                        program=prog, access=access, stair_type=stair_type, core=core, wet=wet)
+
+    # dal piano d'ingresso verso l'esterno: ogni piano ha già generato quello accanto, verso l'ingresso
+    order = sorted((i for i in range(len(floors)) if i != entry), key=lambda i: (abs(i - entry), i))
 
     best = None
     for attempt in range(4):
@@ -2720,10 +2804,9 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         aligned = not many or bool(ground.get("stairs"))
         if aligned and many:
             core = ground["stairs"][0]["core"]
-            for i, f in enumerate(floors):
-                if i == entry:
-                    continue
-                p = one(f, s + 101 * (i + 1), "stairs", core)
+            for i in order:
+                near = plans[i - 1 if i > entry else i + 1]
+                p = one(floors[i], s + 101 * (i + 1), "stairs", core, wet_areas(near))
                 plans[i] = p
                 st = p.get("stairs") or []
                 aligned = aligned and bool(st) and all(abs(st[0]["core"][k] - core[k]) < 1e-3 for k in "xywh")
@@ -2780,6 +2863,29 @@ def serialize(lay: Layout, palette: dict, seed: int) -> dict:
         "stairs": export_stairs(lay),
         "notes": lay.notes,
     }
+
+
+WET_KINDS = ("bath", "wc", "laundry")
+WET_BONUS = 8.0
+
+
+def _overlap(a: Rect, b: Rect) -> float:
+    return max(0.0, min(a.x2, b.x2) - max(a.x, b.x)) * max(0.0, min(a.y2, b.y2) - max(a.y, b.y))
+
+
+def _wet_bonus(lay: Layout) -> float:
+    """Premio (fino a WET_BONUS punti) per la quota di bagni e lavanderie sopra/sotto quelli del piano accanto."""
+    rooms = [r for r in lay.rooms if r.kind in WET_KINDS]
+    if not lay.wet or not rooms:
+        return 0.0
+    area = sum(r.rect.w * r.rect.h for r in rooms)
+    over = sum(_overlap(r.rect, w) for r in rooms for w in lay.wet)
+    return WET_BONUS * min(1.0, over / area)
+
+
+def wet_areas(plan: dict) -> List[dict]:
+    """Bagni e lavanderie di una pianta: da passare come `wet` al piano sopra o sotto."""
+    return [{k: r[k] for k in "xywh"} for r in plan["rooms"] if r.get("kind") in WET_KINDS]
 
 
 def export_stairs(lay: Layout) -> List[dict]:
