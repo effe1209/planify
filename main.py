@@ -25,13 +25,13 @@ app = FastAPI(
     title="Planify AI - FloorPlan Engine",
     description="Generatore di planimetrie con sagome varie (rettangolo, L, U, T, scalare), "
                 "stanze, muri, porte, finestre e arredi coerenti.",
-    version="7.1.0",
+    version="7.2.0",
 )
 
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
-            "needs", "design_review", "garage", "garden", "laundry"]
+            "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +58,41 @@ class PlanRequest(BaseModel):
     kitchen: Literal["auto", "open", "closed"] = Field("auto", description="Cucina a vista nel soggiorno o separata")
     peninsula: bool = Field(False, description="Penisola in cucina, se entra")
     needs: Optional["Needs"] = Field(None, description="Bisogni dell'utente (solo appartamenti)")
+    # Case su più piani (solo appartamenti)
+    program: Literal["full", "day", "night"] = Field("full", description="Locali del piano: tutti, zona giorno o zona notte")
+    access: Literal["street", "stairs", "both"] = Field("street", description="Da dove si entra: porta sulla facciata, scala o entrambe")
+    stair_type: Literal["auto", "u", "l", "straight"] = Field("auto", description="Scala a U, a L o a rampa unica")
+    core: Optional["StairCore"] = Field(None, description="Scala di un altro piano (plan.stairs[i].core): va nello stesso punto")
+
+
+class StairCore(BaseModel):
+    x: float
+    y: float
+    w: float
+    h: float
+    type: Literal["u", "l", "straight"] = "u"
+    entry: Literal["N", "E", "S", "W"] = "S"
+    hand: Literal["N", "E", "S", "W"] = "W"
+
+
+class HouseFloor(BaseModel):
+    level: int = Field(0, ge=-3, le=5, description="-1 interrato, 0 terra, 1 primo…")
+    program: Literal["full", "day", "night"] = "full"
+    double_bedrooms: Optional[int] = Field(None, ge=0, le=5)
+    single_bedrooms: Optional[int] = Field(None, ge=0, le=5)
+    bathrooms: Optional[int] = Field(None, ge=1, le=3)
+    kitchen: Literal["auto", "open", "closed"] = "auto"
+    peninsula: bool = False
+    needs: Optional["Needs"] = None
+
+
+class HouseRequest(BaseModel):
+    width: float = Field(..., gt=0)
+    length: float = Field(..., gt=0)
+    style: Optional[str] = "modern"
+    seed: Optional[int] = Field(None, ge=0)
+    stair_type: Literal["auto", "u", "l", "straight"] = "auto"
+    floors: List[HouseFloor] = Field(..., min_length=1, max_length=5)
 
 
 class Needs(BaseModel):
@@ -69,6 +104,7 @@ class Needs(BaseModel):
 
 
 PlanRequest.model_rebuild()
+HouseFloor.model_rebuild()
 
 
 class DxfImportRequest(BaseModel):
@@ -152,6 +188,19 @@ class PlanResponse(BaseModel):
     furniture: List[FurnitureItem]
     notes: List[str] = []
     design: Optional[Dict[str, Any]] = None   # valutazione progettuale: punteggio, punti di forza, criticità
+    stairs: List[Dict[str, Any]] = []          # vani scala: ingombro (core) da passare agli altri piani e rampe
+
+
+class HouseFloorPlan(BaseModel):
+    level: int
+    program: str
+    plan: PlanResponse
+
+
+class HouseResponse(BaseModel):
+    floors: List[HouseFloorPlan]
+    seed: int
+    notes: List[str] = []
 
 
 # --- ENDPOINT ---------------------------------------------------------------
@@ -177,6 +226,26 @@ def generate_floor_plan(request: PlanRequest):
             kitchen=request.kitchen,
             peninsula=request.peninsula,
             needs=request.needs.model_dump() if request.needs else None,
+            program=request.program,
+            access=request.access,
+            stair_type=request.stair_type,
+            core=request.core.model_dump() if request.core else None,
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")
+
+
+@app.post("/generate-house", response_model=HouseResponse)
+def generate_house(request: HouseRequest):
+    """Casa su più piani generata insieme (zona giorno / zona notte) con la scala allineata."""
+    try:
+        return planner.generate_house(
+            width=request.width,
+            length=request.length,
+            style=request.style or "modern",
+            seed=request.seed,
+            stair_type=request.stair_type,
+            floors=[{**f.model_dump(), "needs": f.needs.model_dump() if f.needs else None} for f in request.floors],
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")
