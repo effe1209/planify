@@ -2,10 +2,15 @@ import { Star, Trash2, X } from 'lucide-react';
 import { SHAPE_NAME, TYPE_NAME } from '../constants';
 import { fmtM } from '../lib/utils';
 import PlanSvg from './PlanSvg';
+import { activeFloor } from '../lib/project';
 
 const THUMB_LAYERS = { furniture: false, labels: false, dims: false, grid: false };
 
-const entryTitle = (e) => e.name || `${TYPE_NAME[e.meta?.type] || 'Pianta'} ${SHAPE_NAME[e.plan.shape] || ''}`.trim();
+const entryTitle = (e) => {
+  if (e.floors.length > 1) return `${e.name || 'Progetto'} · ${e.floors.length} piani`;
+  const f = activeFloor(e);
+  return e.name || `${TYPE_NAME[f.meta?.type] || 'Pianta'} ${SHAPE_NAME[f.plan.shape] || ''}`.trim();
+};
 
 /* Cronologia: miniature con stella (salva in modo permanente) ed eliminazione singola. */
 export default function HistoryPanel({ entries, currentId, persistent, onOpen, onToggleSaved, onRemove, onClear, onManageConsent }) {
@@ -18,8 +23,8 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
       {list.map((e) => (
         <div key={e.id} className={`pf-thumb ${currentId === e.id ? 'is-on' : ''}`}>
           <button type="button" className="pf-thumb-open" onClick={() => onOpen(e)}
-            title={`${entryTitle(e)} · ${fmtM(e.plan.dimensions.width)} × ${fmtM(e.plan.dimensions.length)} m`}>
-            <PlanSvg plan={e.plan} layers={THUMB_LAYERS} thumb style={e.meta?.style} />
+            title={`${entryTitle(e)} · ${fmtM(activeFloor(e).plan.dimensions.width)} × ${fmtM(activeFloor(e).plan.dimensions.length)} m`}>
+            <PlanSvg plan={activeFloor(e).plan} layers={THUMB_LAYERS} thumb style={activeFloor(e).meta?.style} />
             <span>{entryTitle(e)}</span>
           </button>
           <div className="pf-thumb-actions">
