@@ -25,8 +25,12 @@ app = FastAPI(
     title="Planify AI - FloorPlan Engine",
     description="Generatore di planimetrie con sagome varie (rettangolo, L, U, T, scalare), "
                 "stanze, muri, porte, finestre e arredi coerenti.",
-    version="5.0.0",
+    version="6.0.0",
 )
+
+# Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
+# Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
+FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +74,7 @@ class Room(BaseModel):
     area: float = 0.0       # m² (w * h)
     zone: int = 0           # stanze con lo stesso valore formano un unico spazio aperto
     color: str
+    size: str = ""          # camere: "double" (matrimoniale) | "single"
     poly: Optional[List[List[float]]] = None   # contorno libero (schizzi): se presente vale questo, non il rettangolo
 
 
@@ -137,7 +142,7 @@ class PlanResponse(BaseModel):
 # --- ENDPOINT ---------------------------------------------------------------
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": app.version}
+    return {"status": "ok", "version": app.version, "features": FEATURES}
 
 
 @app.post("/generate-plan", response_model=PlanResponse)

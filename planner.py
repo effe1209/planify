@@ -899,11 +899,11 @@ def _place_media_free(P: Placer, room: Room) -> bool:
     return False
 
 
-def _place_counter(P: Placer, room: Room, prefer: List[str]) -> Optional[Item]:
+def _place_counter(P: Placer, room: Room, prefer: List[str], lengths=(3.6, 3.0, 2.4, 1.8, 1.2)) -> Optional[Item]:
     inn = P.inner(room)
     # davanti al piano servono ~1 m per lavorare e aprire i cassetti; negli spazi minimi si accetta meno
     for front in (1.0, 0.0):
-        for length in (3.6, 3.0, 2.4, 1.8, 1.2):
+        for length in lengths:
             for side in prefer:
                 span = inn.w if side in "NS" else inn.h
                 if span < length:
@@ -921,13 +921,13 @@ def _place_peninsula(P: Placer, room: Room, counter: Item) -> bool:
     side = OPP[counter.facing]
     horiz = side in "NS"
     end = counter.rect.x2 if horiz else counter.rect.y2
-    for depth in (2.0, 1.6):
+    for depth in (2.0, 1.6, 1.4):
         it = P.place_wall(room, "kitchen_peninsula", 0.9, depth, [side], target=end + 0.5,
-                          gap=0.05, zone_gap=0.3, front=0.9)
+                          gap=0.05, zone_gap=0.3, front=0.8)
         if not it:
             continue
-        stools = P.strip_free(room, it, 0.6, right=True)
-        if not stools and P.strip_free(room, it, 0.6, right=False):
+        stools = P.strip_free(room, it, 0.5, right=True)
+        if not stools and P.strip_free(room, it, 0.5, right=False):
             it.flip, stools = True, True
         if stools:
             it.gap = 0.8   # gli arredi successivi lasciano il passaggio attorno alla penisola
@@ -936,15 +936,29 @@ def _place_peninsula(P: Placer, room: Room, counter: Item) -> bool:
     return False
 
 
+def _counter_and_peninsula(P: Placer, room: Room, prefer: List[str]):
+    """Piano cucina + penisola alla sua estremità libera. Il piano più lungo non è sempre il migliore:
+    se occupa tutta la parete la penisola non ha dove attaccarsi, quindi si prova ad accorciarlo.
+    Ritorna (piano, penisola inserita?)."""
+    for length in (3.6, 3.0, 2.4, 1.8):
+        counter = _place_counter(P, room, prefer, lengths=(length,))
+        if not counter:
+            continue
+        if _place_peninsula(P, room, counter):
+            return counter, True
+        P.remove(counter)
+    return _place_counter(P, room, prefer), False
+
+
 def furnish_kitchen(P: Placer, room: Room):
     wins = P.window_sides(room)
     prefer = wins + [s for s in "NSEW" if s not in wins]
-    counter = _place_counter(P, room, prefer)
+    want = P.lay.options.get("peninsula")
+    counter, peninsula = _counter_and_peninsula(P, room, prefer) if want else (_place_counter(P, room, prefer), False)
     if not counter:
         P.lay.notes.append(f"{room.name}: piano cucina non inserito")
         return
-    peninsula = P.lay.options.get("peninsula") and _place_peninsula(P, room, counter)
-    if P.lay.options.get("peninsula") and not peninsula:
+    if want and not peninsula:
         P.lay.notes.append(f"{room.name}: la penisola non entra (servono circa 2 × 2,5 m liberi oltre al piano)")
     if room.rect.w * room.rect.h >= 8 and not peninsula:
         for typ, w, h in (("table_round", 1.0, 1.0), ("table", 1.2, 0.8), ("table_round", 0.8, 0.8)):
@@ -959,13 +973,12 @@ def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
         # cucina sul lato più lontano dall'ingresso, preferibilmente con finestra
         far = P.sides_far_from_door(room)
         prefer = [s for s in far if s in P.window_sides(room)] + far
-        counter = _place_counter(P, room, prefer)
+        want = P.lay.options.get("peninsula")
+        counter, peninsula = _counter_and_peninsula(P, room, prefer) if want else (_place_counter(P, room, prefer), False)
         if not counter:
             P.lay.notes.append(f"{room.name}: angolo cottura non inserito")
-        elif P.lay.options.get("peninsula"):
-            peninsula = _place_peninsula(P, room, counter)
-            if not peninsula:
-                P.lay.notes.append(f"{room.name}: la penisola non entra con questo soggiorno")
+        elif want and not peninsula:
+            P.lay.notes.append(f"{room.name}: la penisola non entra con questo soggiorno")
     if not _place_media(P, room) and not _place_media_free(P, room):
         if room.rect.w * room.rect.h >= 14:
             P.lay.notes.append(f"{room.name}: zona TV/divano non inserita")
@@ -1918,7 +1931,7 @@ def serialize(lay: Layout, palette: dict, seed: int) -> dict:
         "notches": compute_notches(lay),
         "rooms": [{"id": r.id, "name": r.name, "kind": r.kind,
                    "x": r.rect.x, "y": r.rect.y, "w": r.rect.w, "h": r.rect.h,
-                   "area": round(r.rect.w * r.rect.h, 2), "zone": r.group,
+                   "area": round(r.rect.w * r.rect.h, 2), "zone": r.group, "size": r.size,
                    "color": palette.get(KIND_GROUP.get(r.kind, "living"), "#f8fafc")} for r in lay.rooms],
         "walls": [{"x": x, "y": y, "w": w, "h": h} for x, y, w, h in walls],
         "doors": [_export_opening(lay, d, True) for d in lay.doors],
