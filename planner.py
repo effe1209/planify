@@ -62,11 +62,14 @@ PALETTES = {
                "hotel_room": "#fbf8f5"},
     "hotel": {"hotel_room": "#fdf8f2", "bath": "#e8f4f8", "corridor": "#f0ece4"},
 }
+for _p in PALETTES.values():
+    _p.setdefault("garage", "#eceef1")
+    _p.setdefault("garden", "#e3efd9")
 KIND_GROUP = {"living": "living", "living_kitchen": "living", "zone_day": "living", "kitchen": "kitchen",
               "bed": "bed", "zone_night": "bed", "bath": "bath", "wc": "bath", "corridor": "corridor",
               "office_open": "office", "meeting": "meeting", "director": "meeting", "study": "study",
               "hotel_room": "living", "closet": "bed", "storage": "corridor", "entry": "corridor",
-              "dining": "living"}
+              "dining": "living", "garage": "garage", "laundry": "bath", "garden": "garden"}
 
 
 def snap(v: float, step: float = 0.05) -> float:
@@ -129,6 +132,7 @@ class Opening:
     room_a: int
     room_b: Optional[int]  # None = esterno
     swing_into: Optional[int] = None
+    kind: str = ""         # "" porta | "garage" basculante | "gate" cancello del giardino
 
 
 @dataclass
@@ -268,15 +272,16 @@ class Layout:
         self.doors.append(d)
         return d
 
-    def add_entrance(self, room_id: int, side: str, width: float = DOOR_W, at: float = 0.5) -> Opening:
+    def add_entrance(self, room_id: int, side: str, width: float = DOOR_W, at: float = 0.5,
+                     kind: str = "") -> Opening:
         room = self.room(room_id)
         orient, line, lo, hi = self._side_geom(room, side)
-        margin = 0.35
+        margin = 0.35 if kind != "garage" else 0.25
         avail = hi - lo - 2 * margin
         w = min(width, avail)
         start = snap(lo + margin + (avail - w) * at)
         start = clamp(start, lo + margin, hi - margin - w)
-        d = Opening(orient, line, round(start, 3), round(w, 3), room_id, None, room_id)
+        d = Opening(orient, line, round(start, 3), round(w, 3), room_id, None, room_id, kind)
         self.doors.append(d)
         return d
 
@@ -335,7 +340,7 @@ class Layout:
         """Finestre sui tratti di muro che affacciano su una rientranza (L/U/T) senza coprire tutto il lato."""
         widths = {"bed": 1.3, "study": 1.2, "bath": 0.6, "wc": 0.6}
         for room in list(self.rooms):
-            if room.kind in ("corridor", "entry", "closet", "storage"):
+            if room.kind in ("corridor", "entry", "closet", "storage", "garage", "garden"):
                 continue
             full = set(self.ext_sides(room))
             for s in "NESW":
@@ -488,6 +493,16 @@ class Placer:
             if room.id not in (d.room_a, d.room_b):
                 continue
             into = d.swing_into == room.id
+            if d.kind in ("garage", "gate"):
+                # basculante o cancello: basta lasciare libera la soglia
+                depth = 0.6 if d.kind == "garage" else 1.2
+                if d.orient == "h":
+                    below = room.rect.cy > d.line
+                    zones.append(Rect(d.start, d.line if below else d.line - depth, d.w, depth))
+                else:
+                    right = room.rect.cx > d.line
+                    zones.append(Rect(d.line if right else d.line - depth, d.start, depth, d.w))
+                continue
             depth = d.w + 0.1 if into else 0.9
             if d.orient == "h":
                 below = room.rect.cy > d.line
@@ -1123,9 +1138,6 @@ def furnish_service(P: Placer, room: Room):
                 P.place_wall(room, "wardrobe", snap(min(span - 0.05, 2.4) - 0.024), 0.55, side, gap=0.0, front=0.6)
         if not P.placed[room.id]:
             P.place_wall(room, "wardrobe", snap(min(max(inn.w, inn.h) - 0.05, 2.0) - 0.024), 0.5, "NSEW", gap=0.0)
-    elif room.kind == "storage":
-        P.place_corner(room, "washer", 0.6, 0.6, front=0.5)
-        P.place_wall(room, "wardrobe", 0.9 if max(inn.w, inn.h) >= 1.6 else 0.6, 0.4, "NSEW", gap=0.05, front=0.5)
     elif room.kind == "entry":
         P.place_wall(room, "console", 1.0, 0.35, "NSEW", gap=0.05, zone_gap=0.3, front=0.9)
 
@@ -1154,7 +1166,11 @@ def furnish(lay: Layout):
         elif k == "meeting":        furnish_meeting(P, r)
         elif k == "director":       furnish_director(P, r)
         elif k == "office_open":    furnish_office_open(P, r)
-        elif k in ("closet", "storage", "entry"): furnish_service(P, r)
+        elif k in ("closet", "entry"): furnish_service(P, r)
+        elif k == "storage":        furnish_storage(P, r)
+        elif k == "laundry":        furnish_laundry(P, r)
+        elif k == "garage":         furnish_garage(P, r)
+        elif k == "garden":         furnish_garden(P, r)
     for plist in P.placed.values():
         lay.items.extend(plist)
 
@@ -1299,6 +1315,7 @@ ROOM_W = {
     ("bath", "service"): (1.8, 0.45, 2.6),
     ("study", ""): (2.6, 0.7, 3.4),
     ("storage", ""): (1.4, 0.3, 1.9),
+    ("laundry", ""): (1.8, 0.35, 2.6),
 }
 SUITE_STRIP = 1.9   # larghezza della fascia bagno privato + cabina armadio nella suite
 
@@ -1358,7 +1375,7 @@ def _fit_night(doubles: int, singles: int, baths: int, two_order, W: float, L: f
     Le camere rispettano le superfici minime, quindi conta anche la profondità della fila.
     `baths` comprende il bagno della suite."""
     cur = {"doubles": doubles, "singles": singles, "baths": baths, "suite": suite and doubles > 0,
-           "extras": [e for e in ("storage", "study") if e in extras]}
+           "extras": [e for e in ("storage", "laundry", "study") if e in extras]}
     while True:
         beds = ["double"] * cur["doubles"] + ["single"] * cur["singles"]
         if cur["suite"]:
@@ -1535,7 +1552,7 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
     asked_baths = baths
     if suite and baths < 2:
         baths = 2   # il bagno privato della suite si aggiunge a quello per gli ospiti
-    extras = [k for k in ("storage", "study") if needs.get(k)]
+    extras = [k for k in ("storage", "laundry", "study") if needs.get(k)]
     # una sola fila di camere solo se la pianta è poco profonda: altrimenti le camere diventano corridoi
     two_order = (True,) if L >= 8.5 else (True, False) if L >= 7.2 else (False,)
     if len(two_order) == 2 and shape not in ("t", "step") and rng.random() < 0.3:
@@ -1560,7 +1577,7 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
         lay.notes.append("La suite padronale (bagno privato e cabina armadio) non entra con queste misure.")
     elif suite and asked_baths < 2:
         lay.notes.append("Suite padronale: aggiunto il bagno privato oltre al bagno per gli ospiti.")
-    for k, name in (("study", "Lo studio"), ("storage", "Il ripostiglio/lavanderia")):
+    for k, name in (("study", "Lo studio"), ("storage", "Il ripostiglio"), ("laundry", "La lavanderia")):
         if k in extras and k not in got["extras"]:
             lay.notes.append(f"{name} non entra con queste misure.")
 
@@ -1622,9 +1639,9 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
             if notch and notch[0] <= idx < notch[1]:
                 # la rientranza della sagoma non può rendere il locale inabitabile: resta la superficie
                 # minima per il suo uso e almeno 2,7 m di profondità
-                need = {"bath": 3.5, "study": 7.0, "storage": 2.0}.get(k, MIN_AREA.get((k, size), 9.0))
+                need = {"bath": 3.5, "study": 7.0, "storage": 2.0, "laundry": 3.0}.get(k, MIN_AREA.get((k, size), 9.0))
                 # +15% sul minimo: la stanza deve anche potersi arredare (letto, armadio, passaggi)
-                keep = max(2.7 if k != "storage" else 1.5, need * 1.15 / max(0.1, x1 - x0))
+                keep = max(2.7 if k not in ("storage", "laundry") else 1.5, need * 1.15 / max(0.1, x1 - x0))
                 cut = max(0.0, min(notch[2], (y1 - y0) - keep))
                 if side == "N":
                     ya = snap(y0 + cut)
@@ -1657,6 +1674,8 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
                 room = lay.add_room("Bagno" if i == 0 else f"Bagno {i + 1}", "bath", x0, ya, x1, yb)
             elif k == "storage":
                 room = lay.add_room("Ripostiglio", "storage", x0, ya, x1, yb)
+            elif k == "laundry":
+                room = lay.add_room("Lavanderia", "laundry", x0, ya, x1, yb)
             else:
                 room = lay.add_room("Studio", "study", x0, ya, x1, yb)
             rooms.append((room, side))
@@ -1708,9 +1727,9 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
         return best
 
     for room, side in night:
-        wd = DOOR_W_BATH if room.kind in ("bath", "storage") else DOOR_W
+        wd = DOOR_W_BATH if room.kind in ("bath", "storage", "laundry") else DOOR_W
         lay.add_door(room.id, circulation_for(room).id, wd, 0.15, into=room.id)
-        ww = {"bed": 1.5, "bath": 0.7, "study": 1.3}.get(room.kind)
+        ww = {"bed": 1.5, "bath": 0.7, "study": 1.3, "laundry": 0.6}.get(room.kind)
         if ww:
             lay.add_windows(room.id, side, ww, 2)
     for bed, bath, closet, side in suites:
@@ -1720,6 +1739,135 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
             lay.add_door(bed.id, closet.id, DOOR_W_BATH, 0.5, into=bed.id)
     lay.add_partial_windows()
     return lay
+
+
+def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
+                  needs: Optional[dict] = None) -> Layout:
+    """Garage / piano interrato: box auto con basculante sulla facciata sud (lato W) e, sul fondo,
+    una fascia di servizi (lavanderia, ripostiglio, cantina) se richiesti e se c'è profondità."""
+    rng = rng or random.Random(0)
+    needs = needs or {}
+    lay = Layout(W, L)
+    lay.room_type = "garage"
+    lay.shape = "rect"
+    # lavanderia e ripostiglio ci sono salvo indicazione contraria
+    service = [k for k in ("laundry", "storage") if needs.get(k) is not False]
+    strip = 2.2 if service and L >= 7.4 else 0.0
+    if service and not strip:
+        lay.notes.append("Garage poco profondo: lavanderia e ripostiglio non entrano (servono almeno 7,4 m).")
+    garage = lay.add_room("Garage", "garage", 0, strip, W, L)
+    rooms = []
+    if strip:
+        specs = [(1.8, 1.0, 3.2) if k == "laundry" else (1.4, 0.7, 2.6) for k in service]
+        if W - sum(sp[2] for sp in specs) >= 1.8:
+            service.append("cellar")
+            specs.append((1.8, 1.2, 99.0))
+        xs = _edges(0.0, W, distribute(W, specs))
+        names = {"laundry": ("Lavanderia", "laundry"), "storage": ("Ripostiglio", "storage"),
+                 "cellar": ("Cantina", "storage")}
+        for i, k in enumerate(service):
+            nm, kind = names[k]
+            rooms.append(lay.add_room(nm, kind, xs[i], 0, xs[i + 1], strip))
+    cars = int(clamp((W - 0.4) // 2.8, 1, 3))
+    if rooms and L - strip < 6.4 and cars > 1:
+        # box poco profondo: il passaggio verso i servizi sul fondo occupa lo spazio di un posto auto
+        cars -= 1
+        lay.notes.append(f"Garage: {cars} {'posto auto' if cars == 1 else 'posti auto'}, "
+                         "lo spazio restante serve per accedere ai locali di servizio.")
+    lay.add_entrance(garage.id, "S", min(W - 0.6, 2.5 * cars if cars > 1 else 2.5), 0.5, kind="garage")
+    for r in rooms:
+        # porte verso un'estremità: il resto della parete di fondo resta per il muso delle auto
+        lay.add_door(garage.id, r.id, DOOR_W_BATH, 0.1, into=r.id)
+        if r.kind == "laundry" and lay.ext_sides(r):
+            lay.add_windows(r.id, lay.best_ext_side(r), 0.6, 1)
+    # finestrature alte di aerazione sui lati del box
+    for side in ("E", "W"):
+        if side in lay.ext_sides(garage):
+            lay.add_windows(garage.id, side, 0.8, 1)
+    lay.options["cars"] = cars
+    return lay
+
+
+def layout_garden(W: float, L: float, rng: Optional[random.Random] = None) -> Layout:
+    """Giardino / area esterna: nessun muro. La casa è sul lato nord, l'accesso dalla strada a sud
+    con cancello pedonale e carrabile; recinzione su strada, siepi sui confini laterali."""
+    lay = Layout(W, L)
+    lay.room_type = "garden"
+    lay.shape = "rect"
+    garden = lay.add_room("Giardino", "garden", 0, 0, W, L)
+    lay.add_entrance(garden.id, "S", 1.0, 0.18, kind="gate")
+    lay.notes.append("Giardino: casa sul lato nord, strada sul lato sud.")
+    return lay
+
+
+def furnish_garden(P: Placer, room: Room) -> None:
+    """Recinzione e cancelli su strada, siepi laterali, camminamento dal cancello alla casa,
+    gazebo in un angolo e qualche albero dove resta spazio."""
+    lay, r = P.lay, room.rect
+    gate = next(d for d in lay.doors if d.kind == "gate")
+    drive_w = 3.0 if r.w >= 7 else 0.0
+    drive_x = snap(r.x2 - 0.6 - drive_w)
+    # su strada (sud): recinzione con i varchi dei due cancelli
+    cuts = sorted([(gate.start, gate.start + gate.w)] + ([(drive_x, drive_x + drive_w)] if drive_w else []))
+    x = r.x
+    for a, b in cuts + [(r.x2, r.x2)]:
+        if a - x > 0.3:
+            P._put(room, "fence", Rect(x, r.y2 - 0.15, a - x, 0.15), 0.0, None, "N")
+        x = b
+    if drive_w:
+        P._put(room, "gate_driveway", Rect(drive_x, r.y2 - 0.15, drive_w, 0.15), 0.0, None, "N")
+    P._put(room, "gate_pedestrian", Rect(gate.start, r.y2 - 0.15, gate.w, 0.15), 0.0, None, "N")
+    # siepi sui confini laterali
+    for xx in (r.x, r.x2 - 0.5):
+        P._put(room, "hedge", Rect(xx, r.y, 0.5, r.h - 0.2), 0.0, None, "E" if xx == r.x else "W")
+    # camminamento dal cancello pedonale verso la casa, vialetto carrabile
+    P._put(room, "path", Rect(gate.start, r.y + 0.3, gate.w, r.h - 0.5), 0.0, None, "N")
+    if drive_w:
+        dl = min(6.0, r.h * 0.6)
+        P._put(room, "path", Rect(drive_x, r.y2 - dl, drive_w, dl - 0.15), 0.0, None, "N")
+    # gazebo in un angolo libero, poi alberi
+    for gw in (3.0, 2.5):
+        if P.place_free(room, "gazebo", gw, gw, near=(r.x2 - gw, r.y + gw), gap=0.6, step=0.25):
+            break
+    for near in ((r.x + 2, r.cy), (r.x2 - 2, r.cy + 2), (r.cx, r.y + 2)):
+        P.place_free(room, "tree", 1.4, 1.4, near=near, gap=0.8, step=0.25)
+
+
+def furnish_garage(P: Placer, room: Room) -> None:
+    """Auto nei posti, muso verso la basculante; banco da lavoro e scaffalature sulle pareti libere."""
+    cars = P.lay.options.get("cars", 1)
+    inn = P.inner(room)
+    bay = inn.w / cars
+    for i in range(cars):
+        target = inn.x + bay * (i + 0.5)
+        if not (P.place_wall(room, "car", 1.9, 4.5, ["N"], target=target, gap=0.4, zone_gap=0.1) or
+                P.place_free(room, "car", 1.9, 4.5, near=(target, inn.cy), gap=0.4, step=0.1)):
+            P.lay.notes.append(f"{room.name}: posto auto {i + 1} troppo stretto per un'auto")
+    P.place_wall(room, "workbench", 1.8, 0.6, "EW", gap=0.3, front=0.6)
+    P.place_wall(room, "shelving_heavy", 2.0, 0.5, "EWN", gap=0.2, front=0.5)
+    P.place_free(room, "motorbike", 0.8, 2.1, gap=0.3, step=0.1)
+
+
+def furnish_laundry(P: Placer, room: Room) -> None:
+    """Lavatrice e asciugatrice affiancate, lavatoio, cesto della biancheria."""
+    washer = P.place_wall(room, "washer", 0.6, 0.6, P.sides_far_from_door(room), order="start", gap=0.02, front=0.7)
+    if washer:
+        if not P.place_beside(room, "dryer", washer, 0.6, 0.6, gap=0.02, sides=("right",), front=0.7):
+            P.place_beside(room, "dryer", washer, 0.6, 0.6, gap=0.02, sides=("left",), front=0.7)
+    else:
+        P.lay.notes.append(f"{room.name}: lavatrice non inserita")
+    P.place_wall(room, "utility_sink", 0.6, 0.5, "NSEW", gap=0.1, front=0.5)
+    P.place_free(room, "laundry_basket", 0.45, 0.45, gap=0.1, step=0.1)
+
+
+def furnish_storage(P: Placer, room: Room) -> None:
+    """Scaffali modulari sulle pareti lunghe, aspirapolvere/elettrodomestici in un angolo."""
+    inn = P.inner(room)
+    for side in ("EW" if inn.h >= inn.w else "NS"):
+        span = inn.h if side in "EW" else inn.w
+        if span >= 0.8:
+            P.place_wall(room, "shelving", snap(min(span - 0.2, 2.4) - 0.024), 0.4, side, gap=0.0, front=0.5)
+    P.place_corner(room, "vacuum", 0.4, 0.4, gap=0.05)
 
 
 def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
@@ -1850,6 +1998,8 @@ def validate(lay: Layout) -> List[str]:
     # 1) arredi
     for it in lay.items:
         room = lay.room(it.room_id)
+        if room.kind == "garden":
+            continue   # recinzioni e siepi stanno sul confine, il vialetto parte dal cancello: niente muri qui
         if not it.rect.inside(P.inner(room)):
             issues.append(f"{it.type} fuori da {room.name}")
         for z in P.door_zones(room):
@@ -2095,7 +2245,7 @@ def design_review(lay: Layout, issues: List[str], wants: dict, furnished: bool =
             score -= 8
     if wants.get("entry") is True and not by_kind("entry"):
         score -= 8
-    for k, name in (("study", "studio"), ("storage", "ripostiglio")):
+    for k, name in (("study", "studio"), ("storage", "ripostiglio"), ("laundry", "lavanderia")):
         if wants.get(k):
             if by_kind(k):
                 good.append(f"Spazio dedicato: {name}")
@@ -2137,6 +2287,8 @@ def _export_opening(lay: Layout, o: Opening, is_door: bool) -> dict:
         # il frontend usa rotate(rot): con rot=90 l'asse locale +y punta verso -x, quindi si inverte
         d["openDir"] = dirn if o.orient == "h" else -dirn
         d["entrance"] = o.room_b is None
+        if o.kind:
+            d["kind"] = o.kind
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items()}
 
 
@@ -2192,6 +2344,10 @@ def _build_layout(Wn: float, Ln: float, rt: str, n: int, palette: dict, shape: s
         return layout_hotel_room(Wn, Ln, shape=shape, rng=rng)
     if rt == "open-space":
         return layout_loft(Wn, Ln, office=False, shape=shape, rng=rng)
+    if rt == "garage":
+        return layout_garage(Wn, Ln, rng=rng, needs=opts["needs"])
+    if rt == "garden":
+        return layout_garden(Wn, Ln, rng=rng)
     return layout_apartment(Wn, Ln, opts["doubles"], opts["singles"], opts["baths"],
                             shape=shape, rng=rng, kitchen=opts["kitchen"], needs=opts["needs"])
 
@@ -2223,8 +2379,12 @@ def generate(width: float, length: float, room_type: str = "apartment",
         rt = "open-space"
     elif rt in ("hotel-room", "hotel_room", "hotel", "camera hotel", "camera"):
         rt = "hotel-room"
+    elif rt in ("garage", "box", "interrato", "basement", "piano interrato"):
+        rt = "garage"
+    elif rt in ("garden", "giardino", "esterno", "cortile"):
+        rt = "garden"
 
-    min_dim = 3.5 if rt == "hotel-room" else 4.5
+    min_dim = 3.5 if rt == "hotel-room" else 3.0 if rt in ("garage", "garden") else 4.5
     W0 = snap(clamp(width, min_dim, 60.0))
     L0 = snap(clamp(length, min_dim, 60.0))
     early_notes = []
@@ -2232,7 +2392,8 @@ def generate(width: float, length: float, room_type: str = "apartment",
     if rt == "apartment" and W0 * L0 < 30:
         rt = "open-space"
         early_notes.append("Superficie troppo piccola per una camera separata: generato un monolocale.")
-    transposed = W0 < L0 and rt != "hotel-room"
+    # garage e giardino hanno il fronte strada a sud: non si ruotano
+    transposed = W0 < L0 and rt not in ("hotel-room", "garage", "garden")
     Wn, Ln = (L0, W0) if transposed else (W0, L0)
     n = int(clamp(num_rooms, 1, 8))
     base_palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
@@ -2261,7 +2422,7 @@ def generate(width: float, length: float, room_type: str = "apartment",
         rng = random.Random(base * 101 + k * 7919)
         lay = _build_layout(Wn, Ln, rt, n, palette, shape, rng, opts)
         ensure_daylight(lay)
-        lay.options = {"peninsula": bool(peninsula)}
+        lay.options["peninsula"] = bool(peninsula)
         lay.notes[:0] = early_notes
         # si confronta il punteggio grezzo: il tetto a 100 appiattirebbe le differenze tra varianti buone
         drafts.append((design_review(lay, [], wants, furnished=False)["raw"] - len(lay.notes), k, lay, rng))
@@ -2282,8 +2443,8 @@ def generate(width: float, length: float, room_type: str = "apartment",
     review.pop("raw", None)
     if transposed:
         lay.transpose()
-    if rt == "hotel-room":
-        lay.flip(rng.random() < 0.5, False)
+    if rt in ("hotel-room", "garage", "garden"):
+        lay.flip(rt == "hotel-room" and rng.random() < 0.5, False)
     else:
         lay.flip(rng.random() < 0.5, rng.random() < 0.5)       # varianti speculari
     plan = serialize(lay, palette, base)
@@ -2293,7 +2454,7 @@ def generate(width: float, length: float, room_type: str = "apartment",
 
 def serialize(lay: Layout, palette: dict, seed: int) -> dict:
     """Layout -> dizionario nel formato di PlanResponse (usato da generate e dall'import DXF)."""
-    walls = build_walls(lay)
+    walls = [] if lay.room_type == "garden" else build_walls(lay)
     kinds = [r.kind for r in lay.rooms]
     stats = {
         "grossArea": round(sum(r.rect.w * r.rect.h for r in lay.rooms), 2),

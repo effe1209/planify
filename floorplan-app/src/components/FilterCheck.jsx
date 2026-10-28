@@ -31,6 +31,7 @@ function checkFilters(plan, params) {
   if (params.suite) rows.push({ label: 'Suite padronale', want: true, got: has('closet') || plan.rooms.some((r) => r.name === 'Bagno padronale'), text: yesNo });
   if (params.study) rows.push({ label: 'Studio', want: true, got: has('study'), text: yesNo });
   if (params.storage) rows.push({ label: 'Ripostiglio', want: true, got: has('storage'), text: yesNo });
+  if (params.laundry) rows.push({ label: 'Lavanderia', want: true, got: has('laundry'), text: yesNo });
   if (params.peninsula) {
     rows.push({ label: 'Penisola', want: true, got: got.peninsula, text: (v) => (v ? 'presente' : 'assente') });
   }

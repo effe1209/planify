@@ -15,6 +15,7 @@ import LayoutOptions from './components/LayoutOptions';
 import HistoryPanel from './components/HistoryPanel';
 import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
+import ErrorBoundary from './components/ErrorBoundary';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -69,7 +70,8 @@ export default function App() {
   const [form, setForm] = useState({
     width: 10, length: 8, roomType: 'apartment', rooms: 3, style: 'modern', shape: 'auto', seed: '',
     doubles: 1, singles: 1, baths: 'auto', kitchen: 'auto', peninsula: false,
-    entry: 'auto', suite: false, study: false, storage: false,
+    entry: 'auto', suite: false, study: false, storage: false, laundry: false,
+    garageLaundry: true, garageStorage: true,
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [autoSeed, setAutoSeed] = useState(true);
@@ -163,7 +165,7 @@ export default function App() {
       params: {
         roomType: form.roomType, rooms: Number(form.rooms), style: form.style, shape: form.shape,
         doubles: form.doubles, singles: form.singles, baths: form.baths, kitchen: form.kitchen, peninsula: form.peninsula,
-        entry: form.entry, suite: form.suite, study: form.study, storage: form.storage,
+        entry: form.entry, suite: form.suite, study: form.study, storage: form.storage, laundry: form.laundry,
       },
       ...extra,
     });
@@ -252,8 +254,9 @@ export default function App() {
           bathrooms: form.baths === 'auto' ? null : form.baths,
           kitchen: form.kitchen,
           peninsula: form.peninsula,
-          needs: { entry: form.entry, suite: form.suite, study: form.study, storage: form.storage },
+          needs: { entry: form.entry, suite: form.suite, study: form.study, storage: form.storage, laundry: form.laundry },
         }),
+        ...(form.roomType === 'garage' && { needs: { laundry: form.garageLaundry, storage: form.garageStorage } }),
       };
       const request = async () => readJson(await postJson(base, '/generate-plan', body, controller.signal));
       let data;
@@ -489,9 +492,23 @@ export default function App() {
                   </span>
                 </div>
               )}
+              {form.roomType === 'garage' && (
+                <div className="pf-program">
+                  {[['garageLaundry', 'Lavanderia sul fondo'], ['garageStorage', 'Ripostiglio / cantina']].map(([k, label]) => (
+                    <label key={k} className="pf-check">
+                      <input type="checkbox" checked={form[k]} onChange={(e) => setF(k, e.target.checked)} />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                  <p className="pf-hint">Basculante sul lato sud (la larghezza). Posti auto in base alla larghezza: circa 2,8 m l'uno.</p>
+                </div>
+              )}
+              {form.roomType === 'garden' && (
+                <p className="pf-hint">Giardino con la casa sul lato nord e la strada a sud: recinzione, cancello pedonale e carrabile, siepi, camminamento, gazebo e alberi.</p>
+              )}
               {form.roomType === 'apartment' ? (
                 <LayoutOptions form={form} setF={setF} />
-              ) : form.roomType !== 'hotel-room' && (
+              ) : !['hotel-room', 'garage', 'garden'].includes(form.roomType) && (
                 <div className="pf-range">
                   <div>
                     <span>{form.roomType === 'office' ? 'Locali (open space incluso)' : 'Locali principali'}</span>
@@ -631,6 +648,7 @@ export default function App() {
             {sketch ? (
               <SketchBoard initialShapes={sketch.shapes} onClose={() => setSketch(null)} onGenerate={generateFromSketch} />
             ) : plan ? (
+              <ErrorBoundary key={current.id}>
               <div className="pf-sheet" key={current.id}>
                 <PlanSvg
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
@@ -639,6 +657,7 @@ export default function App() {
                   style={current.meta?.style}
                 />
               </div>
+              </ErrorBoundary>
             ) : (
               !isLoading && (
                 <div className="pf-empty">

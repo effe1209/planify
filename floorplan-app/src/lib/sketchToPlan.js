@@ -18,7 +18,8 @@ const DOOR_W = 0.9;
 const DOOR_W_BATH = 0.8;
 
 /* Quanto "costa" attraversare una stanza per raggiungerne un'altra: meglio passare dal disimpegno che dal bagno. */
-const PASS_COST = { corridor: 0, living: 0.5, living_kitchen: 0.5, hotel_room: 1, kitchen: 1, study: 2, bed: 3, bed_single: 3, bath: 8 };
+const PASS_COST = { corridor: 0, entry: 0, garden: 0.5, living: 0.5, living_kitchen: 0.5, garage: 1, hotel_room: 1, kitchen: 1, dining: 1,
+  study: 2, laundry: 3, bed: 3, bed_single: 3, storage: 5, closet: 6, bath: 8 };
 const ENTRANCE_PREF = ['corridor', 'living_kitchen', 'living', 'hotel_room', 'kitchen', 'study', 'bed', 'bed_single', 'bath'];
 
 /* ── Analisi dei lati ──────────────────────────────────────────────────── */
@@ -529,6 +530,36 @@ function furnishRoom(P, room, notes, opts) {
       if (room.area >= 8 && !peninsula) placeTable(P, label, room);
       break;
     }
+    case 'laundry': {
+      const washer = P.place({ type: 'washer', sizes: [[0.6, 0.6]], front: 0.7, gap: 0.02, score: corner });
+      if (!washer) missing('lavatrice');
+      else if (!P.beside(washer, 'dryer', 0.6, 0.6, { side: 'right' })) P.beside(washer, 'dryer', 0.6, 0.6, { side: 'left' });
+      P.place({ type: 'utility_sink', sizes: [[0.6, 0.5]], front: 0.5, gap: 0.1 });
+      P.place({ type: 'laundry_basket', sizes: [[0.45, 0.45]], wall: false, gap: 0.1 });
+      break;
+    }
+    case 'storage': {
+      P.place({ type: 'shelving', sizes: [[2.0, 0.4], [1.6, 0.4], [1.0, 0.4]], front: 0.5 });
+      P.place({ type: 'shelving', sizes: [[1.6, 0.4], [1.0, 0.4]], front: 0.5 });
+      P.place({ type: 'vacuum', sizes: [[0.4, 0.4]], gap: 0.05, score: corner });
+      break;
+    }
+    case 'garage': {
+      for (let i = 0; i < 3; i++) {
+        if (!P.place({ type: 'car', sizes: [[1.9, 4.5]], front: 0.4, gap: 0.5, score: farFromDoor })) {
+          if (i === 0) missing('posto auto');
+          break;
+        }
+      }
+      P.place({ type: 'workbench', sizes: [[1.8, 0.6]], front: 0.6, gap: 0.3 });
+      P.place({ type: 'shelving_heavy', sizes: [[2.0, 0.5]], front: 0.5, gap: 0.2 });
+      break;
+    }
+    case 'garden': {
+      P.place({ type: 'gazebo', sizes: [[3.0, 3.0], [2.5, 2.5]], wall: false, gap: 0.6, score: corner });
+      for (let i = 0; i < 3; i++) P.place({ type: 'tree', sizes: [[1.4, 1.4]], wall: false, gap: 0.8, score: ({ centre }) => -G.dist(centre, label) });
+      break;
+    }
     case 'study': {
       if (!P.place({ type: 'desk', sizes: [[1.4, 0.7], [1.2, 0.6]], front: 0.7, gap: 0.3, score: nearWindow })) missing('scrivania');
       break;
@@ -638,7 +669,7 @@ export function sketchToPlan(shapes, { style = 'modern', peninsula = false } = {
   const windows = [];
   const windowsByRoom = new Map(rooms.map((r) => [r.id, []]));
   for (const r of rooms) {
-    if (r.kind === 'corridor') continue;
+    if (['corridor', 'storage', 'closet', 'garden', 'entry'].includes(r.kind)) continue;   // locali senza finestre
     const spans = [];
     for (const run of runsByRoom.get(r.id)) {
       // togli dal tratto le porte d'ingresso
@@ -656,7 +687,7 @@ export function sketchToPlan(shapes, { style = 'modern', peninsula = false } = {
       windows.push({ x: o.x, y: o.y, w: o.w, rot: o.rot, chord: o.chord });
       windowsByRoom.get(r.id).push({ centre: o.centre, w: o.w });
     }
-    if (!windowsByRoom.get(r.id).length && !['bath', 'corridor'].includes(r.kind)) {
+    if (!windowsByRoom.get(r.id).length && !['bath', 'corridor', 'garage', 'laundry'].includes(r.kind)) {
       notes.push(`${r.name}: nessun muro esterno libero per una finestra.`);
     }
   }

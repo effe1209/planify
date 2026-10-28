@@ -1,0 +1,33 @@
+[
+  {
+    "category": "Intrusione Interna",
+    "models": [
+      { "id": "motionprotect", "name": "MotionProtect", "type": "PIR Motion", "use": "Volumetrico ambienti interni" },
+      { "id": "motioncam_phod", "name": "MotionCam PhOD", "type": "PIR + Camera", "use": "Fotoverifica su richiesta/allarme" },
+      { "id": "doorprotect_plus", "name": "DoorProtect Plus", "type": "Magnetico + Urto + Inclinazione", "use": "Porte, finestre, basculanti garage" },
+      { "id": "combiprotect", "name": "CombiProtect", "type": "PIR + Rottura Vetro", "use": "Stanze con ampie vetrate" }
+    ]
+  },
+  {
+    "category": "Intrusione Esterna & Perimetrale",
+    "models": [
+      { "id": "motioncam_outdoor", "name": "MotionCam Outdoor PhOD", "type": "Doppio PIR + Camera", "use": "Giardino e cortili" },
+      { "id": "dualcurtain_outdoor", "name": "DualCurtain Outdoor", "type": "Tenda Perimetrale", "use": "Lati della casa, facciate, balconi" }
+    ]
+  },
+  {
+    "category": "Sicurezza Ambientale",
+    "models": [
+      { "id": "fireprotect2_co", "name": "FireProtect 2 (Fumo/Calore/CO)", "type": "Antincendio + CO", "use": "Garage, cucina, locale tecnico, ripostiglio" },
+      { "id": "leaksprotect", "name": "LeaksProtect", "type": "Allagamento", "use": "Lavanderia, sotto lavelli, zona caldaia" }
+    ]
+  },
+  {
+    "category": "Hub e Sirene",
+    "models": [
+      { "id": "hub2_plus", "name": "Hub 2 Plus", "type": "Centrale di controllo", "use": "Posizione centrale protetta" },
+      { "id": "streetsiren", "name": "StreetSiren", "type": "Sirena Esterna", "use": "Facciata visibile dall'esterno" },
+      { "id": "keypad_touchscreen", "name": "KeyPad TouchScreen", "type": "Tastiera di comando", "use": "Ingressi principali" }
+    ]
+  }
+]

@@ -25,13 +25,13 @@ app = FastAPI(
     title="Planify AI - FloorPlan Engine",
     description="Generatore di planimetrie con sagome varie (rettangolo, L, U, T, scalare), "
                 "stanze, muri, porte, finestre e arredi coerenti.",
-    version="7.0.0",
+    version="7.1.0",
 )
 
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
-            "needs", "design_review"]
+            "needs", "design_review", "garage", "garden", "laundry"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,7 +64,8 @@ class Needs(BaseModel):
     entry: Union[bool, Literal["auto"]] = Field("auto", description="Ingresso separato")
     suite: bool = Field(False, description="Camera padronale con bagno privato e cabina armadio")
     study: bool = Field(False, description="Studio / smart working")
-    storage: bool = Field(False, description="Ripostiglio / lavanderia")
+    storage: Optional[bool] = Field(None, description="Ripostiglio (nel garage: ripostiglio/cantina, attivo se non indicato)")
+    laundry: Optional[bool] = Field(None, description="Lavanderia (nel garage: attiva se non indicato)")
 
 
 PlanRequest.model_rebuild()
@@ -104,6 +105,7 @@ class Door(BaseModel):
     rot: float
     openDir: int
     entrance: bool = False  # True = porta d'ingresso dell'unità
+    kind: str = ""          # "" porta | "garage" basculante | "gate" cancello del giardino
 
 
 class Window(BaseModel):

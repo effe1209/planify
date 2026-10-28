@@ -37,7 +37,168 @@ function Oriented({ item, scale, children }) {
 const F_STROKE = '#5b6472';
 const F_SOFT = '#bcc3ce';
 
+const GROUND = new Set(['path', 'hedge']);
+const GREEN = '#7fae7a';
+const GREEN_DARK = '#4f7a4b';
+const METAL = '#c9ced6';
+
 const FURNITURE = {
+  /* ── garage ── */
+  car: (w, h) => (
+    <>
+      <rect x={w * 0.04} width={w * 0.92} height={h} rx={w * 0.28} fill="#d5dde8" stroke={F_STROKE} strokeWidth="1.2" />
+      {[[0.16, 0.0], [0.16, 0.74], [0.84, 0.0], [0.84, 0.74]].map(([x, y]) => (
+        <rect key={`${x}-${y}`} x={w * x - w * 0.09} y={h * (y + 0.1)} width={w * 0.18} height={h * 0.14} rx={2} fill="#3a404a" />
+      ))}
+      <path d={`M${w * 0.2} ${h * 0.62}Q${w / 2} ${h * 0.56} ${w * 0.8} ${h * 0.62}L${w * 0.86} ${h * 0.74}Q${w / 2} ${h * 0.7} ${w * 0.14} ${h * 0.74}Z`}
+        fill="#9fb4cc" stroke={F_STROKE} strokeWidth="0.7" />
+      <path d={`M${w * 0.22} ${h * 0.22}Q${w / 2} ${h * 0.27} ${w * 0.78} ${h * 0.22}L${w * 0.82} ${h * 0.14}Q${w / 2} ${h * 0.18} ${w * 0.18} ${h * 0.14}Z`}
+        fill="#9fb4cc" stroke={F_STROKE} strokeWidth="0.7" />
+      <rect x={w * 0.24} y={h * 0.3} width={w * 0.52} height={h * 0.28} rx={3} fill="#e6ecf3" stroke={F_SOFT} />
+    </>
+  ),
+  motorbike: (w, h) => (
+    <>
+      <rect x={w * 0.36} y={0} width={w * 0.28} height={h * 0.2} rx={3} fill="#3a404a" />
+      <rect x={w * 0.36} y={h * 0.8} width={w * 0.28} height={h * 0.2} rx={3} fill="#3a404a" />
+      <ellipse cx={w / 2} cy={h / 2} rx={w * 0.22} ry={h * 0.32} fill="#d9534f" stroke={F_STROKE} strokeWidth="0.9" />
+      <line x1={w * 0.08} y1={h * 0.72} x2={w * 0.92} y2={h * 0.72} stroke={F_STROKE} strokeWidth="1.4" strokeLinecap="round" />
+    </>
+  ),
+  workbench: (w, h, s, t) => (
+    <>
+      <rect width={w} height={h} fill={t.wood} stroke={t.woodLine} strokeWidth="1.1" />
+      <rect x={w * 0.06} y={h * 0.15} width={Math.min(0.25 * s, w * 0.15)} height={h * 0.45} fill={METAL} stroke={F_STROKE} strokeWidth="0.7" />
+      {[0.4, 0.55, 0.7, 0.85].map((x) => <circle key={x} cx={w * x} cy={h * 0.35} r={1.2} fill={F_STROKE} />)}
+    </>
+  ),
+  shelving_heavy: (w, h) => {
+    const n = Math.max(1, Math.round(w / h / 2));
+    return (
+      <>
+        <rect width={w} height={h} fill="#e3e6eb" stroke={F_STROKE} strokeWidth="1.1" />
+        {Array.from({ length: n }, (_, i) => (
+          <line key={i} x1={(w * (i + 1)) / (n + 1)} y1={0} x2={(w * (i + 1)) / (n + 1)} y2={h} stroke={F_STROKE} strokeWidth="1" />
+        ))}
+        <line x1={0} y1={0} x2={w} y2={h} stroke={F_SOFT} />
+        <line x1={0} y1={h} x2={w} y2={0} stroke={F_SOFT} />
+      </>
+    );
+  },
+  /* ── lavanderia e ripostiglio ── */
+  dryer: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={2} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />
+      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.3} fill="#fff" stroke={F_STROKE} strokeWidth="0.8" />
+      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.16} fill="none" stroke={F_SOFT} strokeDasharray="2 1.5" />
+      <rect x={w * 0.15} y={h * 0.1} width={w * 0.3} height={h * 0.08} fill={F_SOFT} />
+    </>
+  ),
+  utility_sink: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={2} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
+      <rect x={w * 0.12} y={h * 0.22} width={w * 0.76} height={h * 0.66} rx={3} fill="#e3eefb" stroke={F_SOFT} />
+      <circle cx={w / 2} cy={h * 0.12} r={1.8} fill={F_STROKE} />
+    </>
+  ),
+  laundry_basket: (w, h) => (
+    <>
+      <ellipse cx={w / 2} cy={h / 2} rx={w / 2 - 1} ry={h / 2 - 1} fill="#efe3c8" stroke="#a88f68" strokeWidth="0.9" />
+      <ellipse cx={w / 2} cy={h / 2} rx={w * 0.3} ry={h * 0.3} fill="none" stroke="#a88f68" strokeDasharray="1.5 1.5" />
+    </>
+  ),
+  shelving: (w, h, s, t) => {
+    const n = Math.max(1, Math.round(w / (0.8 * s)) - 1);
+    return (
+      <>
+        <rect width={w} height={h} fill={t.cabinet} stroke={F_STROKE} strokeWidth="1" />
+        {Array.from({ length: n }, (_, i) => (
+          <line key={i} x1={(w * (i + 1)) / (n + 1)} y1={0} x2={(w * (i + 1)) / (n + 1)} y2={h} stroke={F_SOFT} />
+        ))}
+        <line x1={0} y1={h / 2} x2={w} y2={h / 2} stroke={F_SOFT} strokeDasharray="2 2" />
+      </>
+    );
+  },
+  vacuum: (w, h) => (
+    <>
+      <circle cx={w / 2} cy={h * 0.6} r={Math.min(w, h) * 0.38} fill="#dfe3ea" stroke={F_STROKE} strokeWidth="0.9" />
+      <line x1={w / 2} y1={h * 0.25} x2={w / 2} y2={0} stroke={F_STROKE} strokeWidth="1.4" strokeLinecap="round" />
+    </>
+  ),
+  /* ── giardino ── */
+  hedge: (w, h) => {
+    const horiz = w >= h;
+    const n = Math.max(2, Math.round((horiz ? w : h) / Math.min(w, h)));
+    const r = Math.min(w, h) / 2;
+    return (
+      <>
+        <rect width={w} height={h} rx={r} fill={GREEN} fillOpacity="0.55" />
+        {Array.from({ length: n }, (_, i) => (
+          <circle key={i} cx={horiz ? (w * (i + 0.5)) / n : w / 2} cy={horiz ? h / 2 : (h * (i + 0.5)) / n} r={r * 0.95}
+            fill={GREEN} fillOpacity="0.8" stroke={GREEN_DARK} strokeWidth="0.6" />
+        ))}
+      </>
+    );
+  },
+  fence: (w, h) => {
+    const posts = Math.max(2, Math.round(w / 30)) + 1;
+    return (
+      <>
+        <line x1={0} y1={h / 2} x2={w} y2={h / 2} stroke="#6b5a45" strokeWidth="1.6" />
+        {Array.from({ length: posts }, (_, i) => (
+          <rect key={i} x={(w * i) / (posts - 1) - 1.5} y={0} width={3} height={Math.max(h, 3)} fill="#6b5a45" />
+        ))}
+      </>
+    );
+  },
+  gate_pedestrian: (w, h) => (
+    <>
+      <rect x={-2} y={-1} width={4} height={Math.max(h, 4) + 2} fill={INK} />
+      <rect x={w - 2} y={-1} width={4} height={Math.max(h, 4) + 2} fill={INK} />
+      <path d={`M2 ${h / 2}A${w - 4} ${w - 4} 0 0 0 ${w - 2} ${h / 2 - (w - 4)}`} fill="none" stroke="#d92d20" strokeWidth="0.9" strokeDasharray="3 2.5" />
+      <line x1={2} y1={h / 2} x2={w - 2} y2={h / 2 - (w - 4)} stroke="#d92d20" strokeWidth="2" />
+    </>
+  ),
+  gate_driveway: (w, h) => (
+    <>
+      <rect x={-2} y={-1} width={4} height={Math.max(h, 4) + 2} fill={INK} />
+      <rect x={w - 2} y={-1} width={4} height={Math.max(h, 4) + 2} fill={INK} />
+      <line x1={2} y1={h / 2} x2={w - 2} y2={h / 2} stroke="#d92d20" strokeWidth="2.2" />
+      <line x1={2} y1={h / 2 + 4} x2={w - 2} y2={h / 2 + 4} stroke="#d92d20" strokeWidth="0.8" strokeDasharray="4 3" />
+    </>
+  ),
+  gazebo: (w, h, s, t) => (
+    <>
+      <rect width={w} height={h} fill={t.wood} fillOpacity="0.35" stroke={t.woodLine} strokeWidth="1.2" strokeDasharray="5 3" />
+      <line x1={0} y1={0} x2={w} y2={h} stroke={t.woodLine} strokeOpacity="0.6" />
+      <line x1={w} y1={0} x2={0} y2={h} stroke={t.woodLine} strokeOpacity="0.6" />
+      {[[0, 0], [w, 0], [0, h], [w, h]].map(([x, y]) => (
+        <rect key={`${x}-${y}`} x={x - 3} y={y - 3} width={6} height={6} fill={t.woodLine} />
+      ))}
+    </>
+  ),
+  path: (w, h) => {
+    const step = Math.min(w, h) * 0.9;
+    const horiz = w >= h;
+    const n = Math.max(1, Math.floor((horiz ? w : h) / step));
+    return (
+      <>
+        {Array.from({ length: n }, (_, i) => (
+          <rect key={i} x={horiz ? i * step + 2 : 2} y={horiz ? 2 : i * step + 2}
+            width={horiz ? step - 4 : w - 4} height={horiz ? h - 4 : step - 4} rx={3}
+            fill="#e4ded3" stroke="#b9ae9c" strokeWidth="0.8" />
+        ))}
+      </>
+    );
+  },
+  tree: (w, h) => (
+    <>
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) / 2} fill={GREEN} fillOpacity="0.45" stroke={GREEN_DARK} strokeWidth="0.8" />
+      <circle cx={w * 0.4} cy={h * 0.42} r={Math.min(w, h) * 0.28} fill={GREEN} fillOpacity="0.7" />
+      <circle cx={w * 0.62} cy={h * 0.6} r={Math.min(w, h) * 0.24} fill={GREEN} fillOpacity="0.7" />
+      <circle cx={w / 2} cy={h / 2} r={2.2} fill="#7a5a3a" />
+    </>
+  ),
   washer: (w, h) => (
     <>
       <rect width={w} height={h} rx={2} fill="#f4f6f8" stroke={F_STROKE} strokeWidth="1.1" />
@@ -371,6 +532,7 @@ function rugsFor(plan) {
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
+  laundry: 'tile', garage: 'concrete', garden: 'lawn',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
 };
 
@@ -452,6 +614,9 @@ export default function PlanSvg({
         <pattern id={`herringbone-${uid}`} width="16" height="16" patternUnits="userSpaceOnUse">
           <path d="M0 8L8 0M8 16L16 8M0 8L8 16M8 0L16 8" fill="none" stroke={theme.floorInk} strokeOpacity="0.13" />
         </pattern>
+        <pattern id={`lawn-${uid}`} width="12" height="12" patternUnits="userSpaceOnUse">
+          <path d="M2 10l1-3M7 5l1-3M10 11l1-3" stroke="#5f8f55" strokeOpacity="0.35" strokeWidth="0.8" />
+        </pattern>
         <pattern id={`concrete-${uid}`} width="90" height="90" patternUnits="userSpaceOnUse">
           <path d="M90 0H0V90" fill="none" stroke={theme.floorInk} strokeOpacity="0.10" />
           {[[12, 20], [47, 33], [70, 64], [25, 71], [61, 11]].map(([x, y]) => (
@@ -502,7 +667,7 @@ export default function PlanSvg({
         </g>
         {plan.rooms.map((r) => {
           const kind = FLOOR_BY_KIND[r.kind];
-          const fl = kind === 'wood' ? theme.floor : kind;
+          const fl = kind === 'wood' ? theme.floor : kind;   // 'concrete' e 'lawn' sono fissi
           return fl ? (
             <RoomShape key={`fl-${r.id}`} room={r} s={s} fill={ref(fl)} />
           ) : null;
@@ -529,7 +694,9 @@ export default function PlanSvg({
         )}
         {showFurn && (
           <g filter={ref('fshadow')}>
-            {plan.furniture.map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
+            {/* camminamenti e siepi sotto, poi il resto */}
+            {[...plan.furniture].sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
+              .map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
         )}
 
@@ -549,6 +716,21 @@ export default function PlanSvg({
           const dir = d.openDir;
           const col = d.entrance ? '#d92d20' : '#1f4fd8';
           const cy = wt / 2;
+          if (d.kind === 'gate') return null;   // il cancello è disegnato con gli arredi del giardino
+          if (d.kind === 'garage') {
+            // basculante: varco nel muro e pannello che ruota verso l'alto dentro il garage
+            const depth = Math.min(sw * 0.42, 0.7 * s);   // ingombro del pannello che sale (come la soglia libera nel motore)
+            return (
+              <g key={`d-${i}`} transform={`translate(${d.x * s},${d.y * s}) rotate(${d.rot})`}>
+                <rect x={0} y={-0.4} width={sw} height={wt + 0.8} fill="#fff" />
+                <rect x={0} y={0} width={2.2} height={wt} fill={INK} />
+                <rect x={sw - 2.2} y={0} width={2.2} height={wt} fill={INK} />
+                <rect x={3} y={dir > 0 ? cy : cy - depth} width={sw - 6} height={depth} fill="none"
+                  stroke={col} strokeWidth="1" strokeDasharray="5 3" />
+                <line x1={0} y1={cy} x2={sw} y2={cy} stroke={col} strokeWidth="2.6" />
+              </g>
+            );
+          }
           return (
             <g key={`d-${i}`} transform={`translate(${d.x * s},${d.y * s}) rotate(${d.rot})`}>
               <rect x={0} y={-0.4} width={sw} height={wt + 0.8} fill="#fff" />

@@ -1,4 +1,4 @@
-import { Home, Briefcase, Maximize2, BedDouble } from 'lucide-react';
+import { Home, Briefcase, Maximize2, BedDouble, Car, Trees } from 'lucide-react';
 
 export const SHAPES = [
   { id: 'auto', label: 'Varia', d: null },
@@ -17,12 +17,16 @@ export const TYPES = [
   { id: 'open-space', label: 'Open space', Icon: Maximize2 },
   { id: 'office', label: 'Ufficio', Icon: Briefcase },
   { id: 'hotel-room', label: 'Camera Hotel', Icon: BedDouble },
+  { id: 'garage', label: 'Garage / interrato', Icon: Car },
+  { id: 'garden', label: 'Giardino', Icon: Trees },
 ];
 export const TYPE_NAME = {
   apartment: 'Appartamento',
   'open-space': 'Open space',
   office: 'Ufficio',
   'hotel-room': 'Camera Hotel',
+  garage: 'Garage / interrato',
+  garden: 'Giardino',
   sketch: 'Schizzo',
   dxf: 'Import DXF',
 };
@@ -45,6 +49,8 @@ export const PRESETS = [
   { label: 'Camera Std', w: 4.2, l: 6.0, type: 'hotel-room', rooms: 1 },
   { label: 'Camera Deluxe', w: 5.0, l: 6.8, type: 'hotel-room', rooms: 1 },
   { label: 'Suite Hotel', w: 6.0, l: 8.0, type: 'hotel-room', rooms: 1 },
+  { label: 'Box auto', w: 6.0, l: 9.0, type: 'garage', rooms: 1 },
+  { label: 'Giardino', w: 14, l: 10, type: 'garden', rooms: 1 },
 ];
 
 export const FLOOR_PALETTES = [
@@ -72,6 +78,9 @@ export const ROOM_KINDS = [
   { id: 'dining', label: 'Zona pranzo', name: 'Zona Pranzo' },
   { id: 'closet', label: 'Cabina armadio', name: 'Cabina armadio' },
   { id: 'storage', label: 'Ripostiglio', name: 'Ripostiglio' },
+  { id: 'laundry', label: 'Lavanderia', name: 'Lavanderia' },
+  { id: 'garage', label: 'Garage', name: 'Garage' },
+  { id: 'garden', label: 'Giardino / esterno', name: 'Giardino' },
   { id: 'hotel_room', label: 'Camera hotel', name: 'Camera' },
 ];
 export const ROOM_KIND_NAME = Object.fromEntries(ROOM_KINDS.map((k) => [k.id, k.name]));
@@ -108,7 +117,23 @@ export const FURNITURE = [
   { id: 'minibar', type: 'minibar', label: 'Minibar', w: 0.8, h: 0.5, group: 'Giorno' },
   { id: 'console', type: 'console', label: 'Credenza / mobile basso', w: 1.4, h: 0.4, group: 'Giorno' },
   { id: 'plant', type: 'plant', label: 'Pianta', w: 0.5, h: 0.5, group: 'Giorno' },
-  { id: 'washer', type: 'washer', label: 'Lavatrice', w: 0.6, h: 0.6, group: 'Bagno' },
+  { id: 'washer', type: 'washer', label: 'Lavatrice', w: 0.6, h: 0.6, group: 'Lavanderia' },
+  { id: 'dryer', type: 'dryer', label: 'Asciugatrice', w: 0.6, h: 0.6, group: 'Lavanderia' },
+  { id: 'utility_sink', type: 'utility_sink', label: 'Lavatoio', w: 0.6, h: 0.5, group: 'Lavanderia' },
+  { id: 'laundry_basket', type: 'laundry_basket', label: 'Cesto biancheria', w: 0.45, h: 0.45, group: 'Lavanderia' },
+  { id: 'shelving', type: 'shelving', label: 'Scaffali modulari', w: 1.6, h: 0.4, group: 'Ripostiglio' },
+  { id: 'vacuum', type: 'vacuum', label: 'Aspirapolvere / elettrodomestici', w: 0.4, h: 0.4, group: 'Ripostiglio' },
+  { id: 'car', type: 'car', label: 'Auto', w: 1.9, h: 4.5, group: 'Garage' },
+  { id: 'motorbike', type: 'motorbike', label: 'Moto', w: 0.8, h: 2.1, group: 'Garage' },
+  { id: 'workbench', type: 'workbench', label: 'Banco da lavoro', w: 1.8, h: 0.6, group: 'Garage' },
+  { id: 'shelving_heavy', type: 'shelving_heavy', label: 'Scaffalatura pesante', w: 2.0, h: 0.5, group: 'Garage' },
+  { id: 'hedge', type: 'hedge', label: 'Siepe', w: 3.0, h: 0.5, group: 'Giardino' },
+  { id: 'fence', type: 'fence', label: 'Recinzione', w: 3.0, h: 0.15, group: 'Giardino' },
+  { id: 'gate_pedestrian', type: 'gate_pedestrian', label: 'Cancello pedonale', w: 1.0, h: 0.15, group: 'Giardino' },
+  { id: 'gate_driveway', type: 'gate_driveway', label: 'Cancello carrabile', w: 3.0, h: 0.15, group: 'Giardino' },
+  { id: 'gazebo', type: 'gazebo', label: 'Gazebo / pergolato', w: 3.0, h: 3.0, group: 'Giardino' },
+  { id: 'path', type: 'path', label: 'Camminamento', w: 1.0, h: 4.0, group: 'Giardino' },
+  { id: 'tree', type: 'tree', label: 'Albero', w: 1.4, h: 1.4, group: 'Giardino' },
 ];
 export const FURNITURE_LABEL = {
   bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', sofa: 'Divano',
@@ -116,7 +141,10 @@ export const FURNITURE_LABEL = {
   table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola',
   shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',
   toilet: 'WC', bidet: 'Bidet', sink: 'Lavabo', minibar: 'Minibar', console: 'Credenza', plant: 'Pianta',
-  washer: 'Lavatrice',
+  washer: 'Lavatrice', dryer: 'Asciugatrice', utility_sink: 'Lavatoio', laundry_basket: 'Cesto biancheria',
+  shelving: 'Scaffali', vacuum: 'Aspirapolvere', car: 'Auto', motorbike: 'Moto', workbench: 'Banco da lavoro',
+  shelving_heavy: 'Scaffalatura pesante', hedge: 'Siepe', fence: 'Recinzione', gate_pedestrian: 'Cancello pedonale',
+  gate_driveway: 'Cancello carrabile', gazebo: 'Gazebo', path: 'Camminamento', tree: 'Albero',
 };
 
 export const LOADING_STEPS = [
@@ -138,10 +166,14 @@ export const PALETTES = {
 export const KIND_GROUP = {
   living: 'living', living_kitchen: 'living', zone_day: 'living', kitchen: 'kitchen', bed: 'bed', bed_single: 'bed',
   zone_night: 'bed', bath: 'bath', wc: 'bath', corridor: 'corridor', study: 'study', hotel_room: 'bed',
-  entry: 'corridor', dining: 'living', closet: 'bed', storage: 'corridor',
+  entry: 'corridor', dining: 'living', closet: 'bed', storage: 'corridor', laundry: 'bath', garage: 'garage',
+  garden: 'garden',
 };
-export const roomColor = (kind, style = 'modern') =>
-  (PALETTES[style] || PALETTES.modern)[KIND_GROUP[kind] || 'living'] || '#f8fafc';
+const OUTDOOR_COLORS = { garage: '#eceef1', garden: '#e3efd9' };
+export const roomColor = (kind, style = 'modern') => {
+  const group = KIND_GROUP[kind] || 'living';
+  return (PALETTES[style] || PALETTES.modern)[group] || OUTDOOR_COLORS[group] || '#f8fafc';
+};
 
 /* Spessore muri e scala di disegno: allineati a planner.py. */
 export const WALL = 0.2;
