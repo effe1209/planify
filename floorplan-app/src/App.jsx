@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
+import './apple.css';
 
 import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME } from './constants';
 import PlanSvg from './components/PlanSvg';
