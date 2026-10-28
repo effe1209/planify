@@ -58,4 +58,20 @@ export function saveBlob(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export const normalizeBaseUrl = (url) => url.trim().replace(/\/+$/, '');
+/*
+ * URL del motore come lo incolla l'utente → base pulita per le richieste.
+ * Render e Hugging Face rispondono a http:// con un reindirizzamento senza intestazioni CORS, che il browser
+ * blocca come errore di rete: per gli host pubblici si usa sempre https://. Senza schema la richiesta finirebbe
+ * sul sito stesso. Si tolgono anche /health o /docs incollati per sbaglio.
+ */
+const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|[^/:]+\.local)(:\d+)?$/i;
+
+export function normalizeBaseUrl(url) {
+  let u = String(url || '').trim().replace(/\s+/g, '');
+  if (!u) return '';
+  u = u.replace(/\/(health|docs|openapi\.json)\/?$/i, '').replace(/\/+$/, '');
+  const m = u.match(/^(https?):\/\/(.*)$/i);
+  const host = (m ? m[2] : u).split('/')[0];
+  const scheme = LOCAL_HOST.test(host) ? (m ? m[1].toLowerCase() : 'http') : 'https';
+  return `${scheme}://${m ? m[2] : u}`;
+}
