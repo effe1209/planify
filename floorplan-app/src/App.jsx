@@ -31,7 +31,7 @@ import { sketchToPlan } from './lib/sketchToPlan';
 import { buildDxf, parseDxfClientSide } from './lib/dxf';
 import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
-import { waitForEngine } from './lib/engine';
+import { requestBase, waitForEngine } from './lib/engine';
 
 const REQUEST_TIMEOUT_MS = 90000;
 const NEXT_FACING = { S: 'W', W: 'N', N: 'E', E: 'S' };
@@ -158,7 +158,7 @@ export default function App() {
     ? plan.furniture.map((item, index) => ({ item, index })).filter(({ item }) => item.room === selectedRoom.id)
     : [];
   const totalArea = plan ? plan.rooms.reduce((a, r) => a + (r.area ?? r.w * r.h), 0) : 0;
-  const base = normalizeBaseUrl(backendUrl);
+  const base = requestBase(normalizeBaseUrl(backendUrl));
 
   const say = (msg) => {
     clearTimeout(flashTimer.current);

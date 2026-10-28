@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { normalizeBaseUrl } from '../lib/utils';
-import { waitForEngine } from '../lib/engine';
+import { requestBase, waitForEngine } from '../lib/engine';
 
 /* Funzioni che il sito si aspetta dal motore (vedi FEATURES in main.py). */
 export const REQUIRED_FEATURES = ['room_program', 'kitchen_mode', 'peninsula'];
@@ -17,7 +17,7 @@ const KEEP_ALIVE_MS = 10 * 60 * 1000;   // sotto i ~15 minuti dopo cui Render sp
  *   error    nessuna risposta dopo ~3 minuti (`reason` dice perché); `retry()` riprova
  */
 export function useEngine(backendUrl) {
-  const base = normalizeBaseUrl(backendUrl);
+  const base = requestBase(normalizeBaseUrl(backendUrl));
   const [result, setResult] = useState({ base: null });
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
