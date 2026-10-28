@@ -53,9 +53,13 @@ caricato a mano. Se il backend è vecchio, il sito funziona ma ignora i filtri n
   ogni volta che cambiano; lo Space si ricostruisce da solo.
 * **Render**: verifica che il branch del servizio sia quello con le modifiche e che l'ultimo deploy sia andato a buon fine.
 
-**Come verificare**: apri `https://TUO-BACKEND/health`. Deve rispondere con `"version": "6.0.0"` (o superiore) e un
-elenco `features` che contiene `room_program`, `kitchen_mode` e `peninsula`. Il sito mostra lo stesso controllo in alto a
-destra: «Motore collegato · v6.0.0» se è aggiornato, «Motore da aggiornare» se è vecchio.
+**Come verificare**: apri `https://TUO-BACKEND/health`. Deve rispondere con `"version": "7.0.0"` (o superiore) e un
+elenco `features` che contiene `room_program`, `kitchen_mode`, `peninsula`, `needs` e `design_review`. Il sito mostra lo
+stesso controllo in alto a destra: «Motore collegato · v7.0.0» se è aggiornato, «Motore da aggiornare» se è vecchio.
+
+**Piano gratuito di Render**: dopo circa 15 minuti senza richieste il servizio va in pausa e la prima richiesta lo
+risveglia (di solito in meno di un minuto). Il sito lo gestisce da solo: mostra «Motore in avvio…», aspetta e riprova.
+Finché la pagina resta aperta, un controllo ogni 10 minuti lo tiene sveglio.
 
 ---
 

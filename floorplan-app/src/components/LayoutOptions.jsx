@@ -31,6 +31,12 @@ function Segmented({ label, value, options, onChange }) {
   );
 }
 
+const NEEDS = [
+  ['suite', 'Suite padronale', '(bagno privato e cabina armadio)'],
+  ['study', 'Studio', '(smart working)'],
+  ['storage', 'Ripostiglio / lavanderia', ''],
+];
+
 export default function LayoutOptions({ form, setF }) {
   const beds = form.doubles + form.singles;
   return (
@@ -47,6 +53,18 @@ export default function LayoutOptions({ form, setF }) {
         <input type="checkbox" checked={form.peninsula} onChange={(e) => setF('peninsula', e.target.checked)} />
         <span>Penisola in cucina <em>(se lo spazio lo consente)</em></span>
       </label>
+
+      <div className="pf-needs">
+        <span className="pf-needs-title">Come vivi la casa</span>
+        <Segmented label="Ingresso separato" value={form.entry} onChange={(v) => setF('entry', v)}
+          options={[['auto', 'Il migliore'], [true, 'Sì'], [false, 'No']]} />
+        {NEEDS.map(([key, label, hint]) => (
+          <label key={key} className="pf-check" title={hint}>
+            <input type="checkbox" checked={form[key]} onChange={(e) => setF(key, e.target.checked)} />
+            <span>{label} <em>{hint}</em></span>
+          </label>
+        ))}
+      </div>
       <p className="pf-hint">
         {beds} {beds === 1 ? 'camera' : 'camere'} · {beds + 1} locali. Se qualcosa non entra nelle misure, la pianta lo
         segnala nelle note e propone il massimo possibile.

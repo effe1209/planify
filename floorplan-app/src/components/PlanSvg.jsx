@@ -4,8 +4,9 @@
  */
 import { useId } from 'react';
 import { SHAPE_NAME } from '../constants';
-import { polyPath } from '../lib/geometry';
+import { pointInPolygon, polyPath } from '../lib/geometry';
 import { sheetBox } from '../lib/sheet';
+import { THEMES } from '../lib/themes';
 import { clamp, fmt, fmtM } from '../lib/utils';
 
 const INK = '#14181f';
@@ -35,18 +36,44 @@ function Oriented({ item, scale, children }) {
 
 const F_STROKE = '#5b6472';
 const F_SOFT = '#bcc3ce';
-const WOOD = '#f5ead6';
-const WOOD_LINE = '#b89d6e';
 
 const FURNITURE = {
-  bed: (w, h, s) => {
+  washer: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={2} fill="#f4f6f8" stroke={F_STROKE} strokeWidth="1.1" />
+      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.3} fill="#e3eefb" stroke={F_SOFT} />
+      <line x1={w * 0.15} y1={h * 0.15} x2={w * 0.5} y2={h * 0.15} stroke={F_SOFT} />
+    </>
+  ),
+  console: (w, h, s, t) => (
+    <>
+      <rect width={w} height={h} rx={1.5} fill={t.wood} stroke={t.woodLine} strokeWidth="1" />
+      <line x1={w / 3} y1={1} x2={w / 3} y2={h - 1} stroke={t.woodLine} strokeOpacity="0.5" />
+      <line x1={(2 * w) / 3} y1={1} x2={(2 * w) / 3} y2={h - 1} stroke={t.woodLine} strokeOpacity="0.5" />
+    </>
+  ),
+  plant: (w, h, s, t) => {
+    const r = Math.min(w, h) / 2;
+    const leaves = Array.from({ length: 7 }, (_, i) => (i / 7) * Math.PI * 2);
+    return (
+      <>
+        <circle cx={w / 2} cy={h / 2} r={r * 0.55} fill={t.pot} stroke={t.woodLine} strokeWidth="0.8" />
+        {leaves.map((a, i) => (
+          <ellipse key={i} cx={w / 2 + Math.cos(a) * r * 0.45} cy={h / 2 + Math.sin(a) * r * 0.45} rx={r * 0.42} ry={r * 0.2}
+            transform={`rotate(${(a * 180) / Math.PI} ${w / 2 + Math.cos(a) * r * 0.45} ${h / 2 + Math.sin(a) * r * 0.45})`}
+            fill="#7fae7a" fillOpacity="0.85" stroke="#4f7a4b" strokeWidth="0.6" />
+        ))}
+      </>
+    );
+  },
+  bed: (w, h, s, t) => {
     const n = w > 1.3 * s ? 2 : 1;
     const gap = 3;
     const pw = (w - gap * (n + 1)) / n;
     return (
       <>
         <rect width={w} height={h} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.2" />
-        <rect x={1.5} y={h * 0.3} width={w - 3} height={h * 0.7 - 1.5} rx={2} fill="#dde7f6" stroke={F_SOFT} />
+        <rect x={1.5} y={h * 0.3} width={w - 3} height={h * 0.7 - 1.5} rx={2} fill={t.duvet} stroke={F_SOFT} />
         <line x1={1.5} y1={h * 0.3} x2={w - 1.5} y2={h * 0.3} stroke={F_SOFT} />
         {Array.from({ length: n }, (_, i) => (
           <rect key={i} x={gap + i * (pw + gap)} y={h * 0.05} width={pw} height={h * 0.18} rx={3} fill="#fff" stroke={F_SOFT} />
@@ -54,24 +81,24 @@ const FURNITURE = {
       </>
     );
   },
-  sofa: (w, h, s) => {
+  sofa: (w, h, s, t) => {
     const back = Math.min(h * 0.3, 0.3 * s);
     const arm = Math.min(w * 0.1, 0.14 * s);
     const n = w > 1.9 * s ? 3 : 2;
     const seat = (w - 2 * arm) / n;
     return (
       <>
-        <rect width={w} height={h} rx={4} fill="#e4e9f1" stroke={F_STROKE} strokeWidth="1.2" />
-        <rect x={arm} y={back} width={w - 2 * arm} height={h - back - 1.5} rx={2} fill="#f3f5f9" stroke={F_SOFT} />
+        <rect width={w} height={h} rx={4} fill={t.fabric} stroke={F_STROKE} strokeWidth="1.2" />
+        <rect x={arm} y={back} width={w - 2 * arm} height={h - back - 1.5} rx={2} fill={t.fabricSoft} stroke={F_SOFT} />
         {Array.from({ length: n - 1 }, (_, i) => (
           <line key={i} x1={arm + seat * (i + 1)} y1={back} x2={arm + seat * (i + 1)} y2={h - 1.5} stroke={F_SOFT} />
         ))}
-        <rect x={0} y={back * 0.5} width={arm} height={h - back * 0.5} rx={2} fill="#d6dde8" stroke={F_SOFT} />
-        <rect x={w - arm} y={back * 0.5} width={arm} height={h - back * 0.5} rx={2} fill="#d6dde8" stroke={F_SOFT} />
+        <rect x={0} y={back * 0.5} width={arm} height={h - back * 0.5} rx={2} fill={t.fabricArm} stroke={F_SOFT} />
+        <rect x={w - arm} y={back * 0.5} width={arm} height={h - back * 0.5} rx={2} fill={t.fabricArm} stroke={F_SOFT} />
       </>
     );
   },
-  table: (w, h, s) => {
+  table: (w, h, s, t) => {
     const horiz = w >= h;
     const long = Math.max(w, h);
     const n = clamp(Math.floor(long / (0.55 * s)), 1, 8);
@@ -94,16 +121,16 @@ const FURNITURE = {
     return (
       <>
         {chairs.map(([x, y, cw, ch], i) => (
-          <rect key={i} x={x} y={y} width={cw} height={ch} rx={3} fill="#eadfca" stroke={WOOD_LINE} strokeWidth="0.8" />
+          <rect key={i} x={x} y={y} width={cw} height={ch} rx={3} fill={t.chair} stroke={t.woodLine} strokeWidth="0.8" />
         ))}
-        <rect width={w} height={h} rx={3} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1.2" />
+        <rect width={w} height={h} rx={3} fill={t.wood} stroke={t.woodLine} strokeWidth="1.2" />
       </>
     );
   },
-  desk: (w, h, s) => (
+  desk: (w, h, s, t) => (
     <>
       <rect x={w / 2 - 0.21 * s} y={h - 0.1 * s} width={0.42 * s} height={0.4 * s} rx={5} fill="#e3e7ee" stroke={F_STROKE} strokeWidth="0.9" />
-      <rect width={w} height={h} rx={2} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1.2" />
+      <rect width={w} height={h} rx={2} fill={t.wood} stroke={t.woodLine} strokeWidth="1.2" />
       <rect x={w / 2 - 0.2 * s} y={h * 0.12} width={0.4 * s} height={Math.max(2, h * 0.09)} rx={1} fill="#2b3340" />
       <rect x={w / 2 - 0.17 * s} y={h * 0.5} width={0.34 * s} height={Math.max(2, h * 0.12)} rx={1} fill="#fff" stroke={F_SOFT} strokeWidth="0.7" />
     </>
@@ -162,13 +189,13 @@ const FURNITURE = {
       <circle cx={w * 0.3} cy={h * 0.3} r={3} fill="#fff" stroke={F_STROKE} />
     </>
   ),
-  nightstand: (w, h) => (
+  nightstand: (w, h, s, t) => (
     <>
-      <rect width={w} height={h} rx={2} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1" />
-      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.22} fill="#fff7d6" stroke={WOOD_LINE} strokeWidth="0.8" />
+      <rect width={w} height={h} rx={2} fill={t.wood} stroke={t.woodLine} strokeWidth="1" />
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.22} fill="#fff7d6" stroke={t.woodLine} strokeWidth="0.8" />
     </>
   ),
-  table_round: (w, h, s) => {
+  table_round: (w, h, s, t) => {
     const r = Math.min(w, h) / 2;
     const n = clamp(Math.round((2 * Math.PI * (r / s)) / 0.6), 2, 8);
     const cr = 0.2 * s;
@@ -177,44 +204,44 @@ const FURNITURE = {
         {Array.from({ length: n }, (_, i) => {
           const a = (2 * Math.PI * i) / n - Math.PI / 2;
           return <circle key={i} cx={w / 2 + Math.cos(a) * (r + cr * 0.6)} cy={h / 2 + Math.sin(a) * (r + cr * 0.6)}
-            r={cr} fill="#eadfca" stroke={WOOD_LINE} strokeWidth="0.8" />;
+            r={cr} fill={t.chair} stroke={t.woodLine} strokeWidth="0.8" />;
         })}
-        <circle cx={w / 2} cy={h / 2} r={r} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1.2" />
+        <circle cx={w / 2} cy={h / 2} r={r} fill={t.wood} stroke={t.woodLine} strokeWidth="1.2" />
       </>
     );
   },
-  coffee_table: (w, h) => (
-    <rect x={1} y={1} width={w - 2} height={h - 2} rx={Math.min(w, h) * 0.25} fill={WOOD} stroke={WOOD_LINE} strokeWidth="1" />
+  coffee_table: (w, h, s, t) => (
+    <rect x={1} y={1} width={w - 2} height={h - 2} rx={Math.min(w, h) * 0.25} fill={t.wood} stroke={t.woodLine} strokeWidth="1" />
   ),
-  armchair: (w, h) => (
+  armchair: (w, h, s, t) => (
     <>
-      <rect width={w} height={h} rx={5} fill="#e4e9f1" stroke={F_STROKE} strokeWidth="1.1" />
-      <rect x={w * 0.18} y={h * 0.28} width={w * 0.64} height={h * 0.66} rx={3} fill="#f3f5f9" stroke={F_SOFT} />
+      <rect width={w} height={h} rx={5} fill={t.fabric} stroke={F_STROKE} strokeWidth="1.1" />
+      <rect x={w * 0.18} y={h * 0.28} width={w * 0.64} height={h * 0.66} rx={3} fill={t.fabricSoft} stroke={F_SOFT} />
     </>
   ),
   /* divano angolare: schienale in alto, penisola (chaise) a destra verso il basso */
-  sofa_corner: (w, h, s) => {
+  sofa_corner: (w, h, s, t) => {
     const back = 0.25 * s;
     const seatD = Math.min(0.95 * s, h * 0.55);
     const chaise = Math.min(0.95 * s, w * 0.4);
     const path = `M0 0H${w}V${h}H${w - chaise}V${seatD}H0Z`;
     return (
       <>
-        <path d={path} fill="#e4e9f1" stroke={F_STROKE} strokeWidth="1.2" strokeLinejoin="round" />
+        <path d={path} fill={t.fabric} stroke={F_STROKE} strokeWidth="1.2" strokeLinejoin="round" />
         <path d={`M${back} ${back}H${w - back}V${h - 2}H${w - chaise + 2}V${seatD - 2}H${back}Z`}
-          fill="#f3f5f9" stroke={F_SOFT} />
+          fill={t.fabricSoft} stroke={F_SOFT} />
         <line x1={w - chaise} y1={back} x2={w - chaise} y2={seatD - 2} stroke={F_SOFT} />
         <line x1={(w - chaise) / 2} y1={back} x2={(w - chaise) / 2} y2={seatD - 2} stroke={F_SOFT} />
       </>
     );
   },
   /* penisola: piano lungo che sporge dal muro (in alto), sgabelli sul lato destro */
-  kitchen_peninsula: (w, h, s) => {
+  kitchen_peninsula: (w, h, s, t) => {
     const n = clamp(Math.floor(h / (0.6 * s)), 1, 4);
     return (
       <>
         {Array.from({ length: n }, (_, i) => (
-          <circle key={i} cx={w + 0.22 * s} cy={(h * (i + 0.5)) / n} r={0.17 * s} fill="#eadfca" stroke={WOOD_LINE} strokeWidth="0.8" />
+          <circle key={i} cx={w + 0.22 * s} cy={(h * (i + 0.5)) / n} r={0.17 * s} fill={t.chair} stroke={t.woodLine} strokeWidth="0.8" />
         ))}
         <rect width={w} height={h} fill="#f1f2f5" stroke={F_STROKE} strokeWidth="1.1" />
         <rect x={w * 0.2} y={h * 0.12} width={w * 0.45} height={Math.min(h * 0.25, 0.5 * s)} rx={2} fill="#e3eefb" stroke={F_SOFT} />
@@ -269,11 +296,11 @@ const FURNITURE = {
       </>
     );
   },
-  wardrobe: (w, h) => {
+  wardrobe: (w, h, s, t) => {
     const n = Math.max(2, Math.round(w / 38));
     return (
       <>
-        <rect width={w} height={h} fill="#ece7df" stroke={F_STROKE} strokeWidth="1.1" />
+        <rect width={w} height={h} fill={t.cabinet} stroke={F_STROKE} strokeWidth="1.1" />
         {Array.from({ length: n - 1 }, (_, i) => (
           <line key={i} x1={(w / n) * (i + 1)} y1={0} x2={(w / n) * (i + 1)} y2={h} stroke={F_SOFT} />
         ))}
@@ -283,7 +310,7 @@ const FURNITURE = {
   },
 };
 
-function Furn({ item, scale }) {
+function Furn({ item, scale, theme }) {
   const draw = FURNITURE[item.type];
   if (!draw) {
     return (
@@ -291,15 +318,59 @@ function Furn({ item, scale }) {
         fill="#f1f3f6" stroke={F_STROKE} strokeWidth="1" />
     );
   }
-  return <Oriented item={item} scale={scale}>{(w, h) => draw(w, h, scale)}</Oriented>;
+  return <Oriented item={item} scale={scale}>{(w, h) => draw(w, h, scale, theme)}</Oriented>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
    Pavimenti, quote, etichette
    ──────────────────────────────────────────────────────────────────────────── */
+/*
+ * Tappeti: definiscono le zone come farebbe un arredatore. Sotto il tavolino del salotto (largo
+ * abbastanza da toccare divano e poltrone) e sotto la parte bassa dei letti matrimoniali.
+ * Sempre dentro la stanza, a 25 cm dai muri.
+ */
+function rugsFor(plan) {
+  const rooms = new Map(plan.rooms.map((r) => [r.id, r]));
+  const out = [];
+  const clipTo = (r, room) => {
+    const m = 0.25;
+    const x0 = Math.max(r.x, room.x + m);
+    const y0 = Math.max(r.y, room.y + m);
+    const x1 = Math.min(r.x + r.w, room.x + room.w - m);
+    const y1 = Math.min(r.y + r.h, room.y + room.h - m);
+    return x1 - x0 > 0.8 && y1 - y0 > 0.8 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+  };
+  for (const it of plan.furniture) {
+    const room = rooms.get(it.room);
+    if (!room) continue;
+    let rug = null;
+    if (it.type === 'coffee_table') {
+      rug = { x: it.x - 0.55, y: it.y - 0.55, w: it.w + 1.1, h: it.h + 1.1 };
+    } else if (it.type === 'bed' && it.w >= 1.3 && it.h >= 1.3) {
+      // dalla metà del letto verso i piedi, 50 cm oltre i lati
+      const f = it.facing || 'S';
+      const hx = f === 'E' ? it.w / 2 : 0;
+      const hy = f === 'S' ? it.h / 2 : 0;
+      const w = f === 'E' || f === 'W' ? it.w / 2 + 0.6 : it.w + 1.0;
+      const h = f === 'S' || f === 'N' ? it.h / 2 + 0.6 : it.h + 1.0;
+      rug = {
+        x: f === 'E' || f === 'W' ? it.x + hx - (f === 'W' ? 0.6 : 0) : it.x - 0.5,
+        y: f === 'S' || f === 'N' ? it.y + hy - (f === 'N' ? 0.6 : 0) : it.y - 0.5,
+        w, h,
+      };
+    }
+    const clipped = rug && clipTo(rug, room);
+    // stanze di forma libera: il tappeto si disegna solo se sta tutto dentro (a 25 cm dal muro)
+    const inside = (r) => !room.poly || [[r.x - 0.25, r.y - 0.25], [r.x + r.w + 0.25, r.y - 0.25],
+      [r.x + r.w + 0.25, r.y + r.h + 0.25], [r.x - 0.25, r.y + r.h + 0.25]].every((p) => pointInPolygon(p, room.poly));
+    if (clipped && inside(clipped)) out.push(clipped);
+  }
+  return out;
+}
+
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
-  kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood',
+  kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
 };
 
@@ -348,9 +419,10 @@ function roomLabel(room, s) {
    ──────────────────────────────────────────────────────────────────────────── */
 export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
-  thumb = false, svgRef, zoom = 1, typeLabel = '',
+  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern',
 }) {
   const uid = useId().replace(/:/g, '');
+  const theme = THEMES[style] || THEMES.modern;
   const s = plan.scale;
   const W = plan.svgWidth;
   const H = plan.svgHeight;
@@ -373,9 +445,18 @@ export default function PlanSvg({
       aria-label={`Planimetria ${shapeName}, ${fmt(plan.dimensions.width)} per ${fmt(plan.dimensions.length)} metri`}
     >
       <defs>
-        <pattern id={`wood-${uid}`} width="44" height="9" patternUnits="userSpaceOnUse">
-          <line x1="0" y1="8.5" x2="44" y2="8.5" stroke="#8a6f3e" strokeOpacity="0.10" />
-          <line x1="22" y1="0" x2="22" y2="8.5" stroke="#8a6f3e" strokeOpacity="0.08" />
+        <pattern id={`plank-${uid}`} width="44" height="9" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="8.5" x2="44" y2="8.5" stroke={theme.floorInk} strokeOpacity="0.12" />
+          <line x1="22" y1="0" x2="22" y2="8.5" stroke={theme.floorInk} strokeOpacity="0.09" />
+        </pattern>
+        <pattern id={`herringbone-${uid}`} width="16" height="16" patternUnits="userSpaceOnUse">
+          <path d="M0 8L8 0M8 16L16 8M0 8L8 16M8 0L16 8" fill="none" stroke={theme.floorInk} strokeOpacity="0.13" />
+        </pattern>
+        <pattern id={`concrete-${uid}`} width="90" height="90" patternUnits="userSpaceOnUse">
+          <path d="M90 0H0V90" fill="none" stroke={theme.floorInk} strokeOpacity="0.10" />
+          {[[12, 20], [47, 33], [70, 64], [25, 71], [61, 11]].map(([x, y]) => (
+            <circle key={`${x}-${y}`} cx={x} cy={y} r="0.9" fill={theme.floorInk} fillOpacity="0.14" />
+          ))}
         </pattern>
         <pattern id={`tile-${uid}`} width="14" height="14" patternUnits="userSpaceOnUse">
           <path d="M14 0H0V14" fill="none" stroke="#3b6ea5" strokeOpacity="0.14" />
@@ -420,7 +501,8 @@ export default function PlanSvg({
           ))}
         </g>
         {plan.rooms.map((r) => {
-          const fl = FLOOR_BY_KIND[r.kind];
+          const kind = FLOOR_BY_KIND[r.kind];
+          const fl = kind === 'wood' ? theme.floor : kind;
           return fl ? (
             <RoomShape key={`fl-${r.id}`} room={r} s={s} fill={ref(fl)} />
           ) : null;
@@ -438,8 +520,16 @@ export default function PlanSvg({
         })}
 
         {showFurn && (
+          <g pointerEvents="none">
+            {rugsFor(plan).map((r, i) => (
+              <rect key={`rug-${i}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} rx={3}
+                fill={theme.rug} stroke={theme.rugLine} strokeWidth="0.8" strokeDasharray="1.5 2" />
+            ))}
+          </g>
+        )}
+        {showFurn && (
           <g filter={ref('fshadow')}>
-            {plan.furniture.map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} />)}
+            {plan.furniture.map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
         )}
 

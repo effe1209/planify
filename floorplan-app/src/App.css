@@ -565,7 +565,8 @@
 
 /* ── Stato del motore e controllo dei filtri ───────────────────────────── */
 .pf-status.is-ok i { background: #34c759; }
-.pf-status.is-checking i { background: #f59e0b; }
+.pf-status.is-checking i, .pf-status.is-waking i { background: #f59e0b; animation: pf-pulse 1.2s ease-in-out infinite; }
+@keyframes pf-pulse { 50% { opacity: 0.3; } }
 .pf-status.is-old i { background: #f59e0b; }
 .pf-status.is-old { color: #b45309; font-weight: 600; }
 .pf-alert-warn { background: rgba(245, 158, 11, 0.12); color: #b45309; margin: 12px 0 0; }
@@ -575,3 +576,19 @@
 .pf-filters li b { font-weight: 600; text-align: right; }
 .pf-filters li.is-ok svg { color: #34c759; }
 .pf-filters li.is-bad svg, .pf-filters li.is-bad b { color: #d97706; }
+
+/* ── Valutazione del progetto e bisogni ────────────────────────────────── */
+.pf-design-score { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.pf-design-score.is-great { color: #16a34a; }
+.pf-design-score.is-good { color: #0071e3; }
+.pf-design-score.is-weak { color: #d97706; }
+.pf-design-score strong { display: block; font-size: 22px; line-height: 1; color: var(--text); }
+.pf-design-score strong small { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.pf-design-score span { font-size: 12px; font-weight: 600; }
+.pf-design-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pf-design-list li { display: flex; gap: 6px; font-size: 12px; line-height: 1.4; }
+.pf-design-list li svg { flex-shrink: 0; margin-top: 1px; }
+.pf-design-list li.is-ok svg { color: #16a34a; }
+.pf-design-list li.is-tip svg { color: #d97706; }
+.pf-needs { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.pf-needs-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }

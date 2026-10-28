@@ -68,6 +68,10 @@ export const ROOM_KINDS = [
   { id: 'bath', label: 'Bagno', name: 'Bagno' },
   { id: 'study', label: 'Studio', name: 'Studio' },
   { id: 'corridor', label: 'Disimpegno', name: 'Disimpegno' },
+  { id: 'entry', label: 'Ingresso', name: 'Ingresso' },
+  { id: 'dining', label: 'Zona pranzo', name: 'Zona Pranzo' },
+  { id: 'closet', label: 'Cabina armadio', name: 'Cabina armadio' },
+  { id: 'storage', label: 'Ripostiglio', name: 'Ripostiglio' },
   { id: 'hotel_room', label: 'Camera hotel', name: 'Camera' },
 ];
 export const ROOM_KIND_NAME = Object.fromEntries(ROOM_KINDS.map((k) => [k.id, k.name]));
@@ -102,13 +106,17 @@ export const FURNITURE = [
   { id: 'sink', type: 'sink', label: 'Lavabo', w: 0.6, h: 0.5, group: 'Bagno' },
   { id: 'sink_double', type: 'sink', label: 'Lavabo doppio', w: 1.2, h: 0.5, group: 'Bagno' },
   { id: 'minibar', type: 'minibar', label: 'Minibar', w: 0.8, h: 0.5, group: 'Giorno' },
+  { id: 'console', type: 'console', label: 'Credenza / mobile basso', w: 1.4, h: 0.4, group: 'Giorno' },
+  { id: 'plant', type: 'plant', label: 'Pianta', w: 0.5, h: 0.5, group: 'Giorno' },
+  { id: 'washer', type: 'washer', label: 'Lavatrice', w: 0.6, h: 0.6, group: 'Bagno' },
 ];
 export const FURNITURE_LABEL = {
   bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', sofa: 'Divano',
   sofa_corner: 'Divano angolare', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
   table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola',
   shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',
-  toilet: 'WC', bidet: 'Bidet', sink: 'Lavabo', minibar: 'Minibar',
+  toilet: 'WC', bidet: 'Bidet', sink: 'Lavabo', minibar: 'Minibar', console: 'Credenza', plant: 'Pianta',
+  washer: 'Lavatrice',
 };
 
 export const LOADING_STEPS = [
@@ -130,6 +138,7 @@ export const PALETTES = {
 export const KIND_GROUP = {
   living: 'living', living_kitchen: 'living', zone_day: 'living', kitchen: 'kitchen', bed: 'bed', bed_single: 'bed',
   zone_night: 'bed', bath: 'bath', wc: 'bath', corridor: 'corridor', study: 'study', hotel_room: 'bed',
+  entry: 'corridor', dining: 'living', closet: 'bed', storage: 'corridor',
 };
 export const roomColor = (kind, style = 'modern') =>
   (PALETTES[style] || PALETTES.modern)[KIND_GROUP[kind] || 'living'] || '#f8fafc';
