@@ -34,7 +34,8 @@ function Segmented({ label, value, options, onChange }) {
 const NEEDS = [
   ['suite', 'Suite padronale', '(bagno privato e cabina armadio)'],
   ['study', 'Studio', '(smart working)'],
-  ['storage', 'Ripostiglio / lavanderia', ''],
+  ['storage', 'Ripostiglio', ''],
+  ['laundry', 'Lavanderia', '(lavatrice, asciugatrice, lavatoio)'],
 ];
 
 export default function LayoutOptions({ form, setF }) {
