@@ -1,0 +1,90 @@
+/*
+ * Livello visivo in stile Apple (HIG), caricato dopo App.css.
+ * Solo aspetto: materiali traslucidi, tipografia di sistema, angoli continui, feedback al press.
+ */
+
+/* ── Token ─────────────────────────────────────────────────────────────── */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --hairline: rgba(0, 0, 0, 0.08);
+  --fill: rgba(118, 118, 128, 0.12);        /* riempimento dei controlli (systemFill) */
+  --fill-strong: rgba(118, 118, 128, 0.2);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.6);   /* bordo luminoso in alto: la luce sul materiale */
+  --shadow-float: 0 1px 1px rgba(0, 0, 0, 0.03), 0 8px 24px rgba(0, 0, 0, 0.06), 0 24px 60px rgba(0, 0, 0, 0.06);
+  --bg-canvas: #f2f2f7;
+  --bg-panel: #ffffff;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --border: var(--hairline);
+}
+
+.pf-app[data-theme="dark"] {
+  --hairline: rgba(255, 255, 255, 0.12);
+  --fill: rgba(118, 118, 128, 0.24);
+  --fill-strong: rgba(118, 118, 128, 0.36);
+  --glass: rgba(44, 44, 46, 0.68);
+  --glass-strong: rgba(44, 44, 46, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --shadow-float: 0 1px 1px rgba(0, 0, 0, 0.2), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --bg-canvas: #1c1c1e;
+  --bg-panel: #2c2c2e;
+  --text: #f5f5f7;
+  --text-muted: #98989d;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --border: var(--hairline);
+}
+
+/* ── Tipografia ────────────────────────────────────────────────────────── */
+.pf-app, .pf-dialog, .pf-cookie-banner {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+}
+.pf-app button, .pf-app input, .pf-app select, .pf-app textarea { font-family: inherit; letter-spacing: inherit; }
+.pf-brand { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.022em; }
+.pf-empty h3, .pf-dialog-head h2, .pf-design-score strong {
+  font-family: var(--font-display); letter-spacing: -0.02em;
+}
+.pf-empty h3 { font-size: 20px; font-weight: 600; line-height: 1.15; }
+/* intestazioni di sezione: maiuscoletto piccolo, tracking leggermente positivo */
+.pf-sec h2, .pf-history h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-muted); }
+.pf-hint { font-size: 12px; line-height: 1.45; }
+
+/* ── Feedback al press: immediato, su ogni elemento cliccabile ─────────── */
+.pf-app button, .pf-dialog button, .pf-cookie-banner button, .pf-app summary {
+  transition: transform 160ms var(--ease-out), background-color 200ms var(--ease-out),
+    color 200ms var(--ease-out), border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), opacity 200ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.pf-app button:not(:disabled):active, .pf-dialog button:not(:disabled):active,
+.pf-cookie-banner button:not(:disabled):active, .pf-app summary:active {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+.pf-app :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+
+/* ── Comparsa di menu, pannelli e finestre ─────────────────────────────── */
+@keyframes pf-materialize {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.pf-floor-menu, .pf-dialog[open], .pf-cookie-banner, .pf-customizer, .pf-sketch-panel, .pf-flash {
+  animation: pf-materialize 420ms var(--ease-out) both;
+}
+
+@keyframes pf-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pf-floor-menu, .pf-dialog[open], .pf-cookie-banner, .pf-customizer, .pf-sketch-panel, .pf-flash {
+    animation-name: pf-fade !important;
+  }
+  .pf-app button:active, .pf-dialog button:active, .pf-cookie-banner button:active { transform: none !important; }
+}
