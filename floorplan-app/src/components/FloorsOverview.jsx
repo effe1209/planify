@@ -1,12 +1,13 @@
-import { levelLabel } from '../lib/project';
+import { houseFor, levelLabel } from '../lib/project';
 import { sheetBox } from '../lib/sheet';
 import PlanSvg from './PlanSvg';
 
 const LAYERS = { furniture: true, labels: true, dims: true, grid: false };
 
 /* Vista globale: tutti i piani affiancati, ognuno adattato al suo riquadro. Clic = apri il piano. */
-export default function FloorsOverview({ project, stage, devices, onOpen }) {
+export default function FloorsOverview({ project, stage, devices, stairs, onOpen }) {
   const n = project.floors.length;
+  const house = houseFor(project);
   const cols = n <= 2 ? n : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
   const cellW = Math.max(200, (stage.w - 40) / cols - 16);
@@ -22,7 +23,7 @@ export default function FloorsOverview({ project, stage, devices, onOpen }) {
             <span><em>{levelLabel(f.level)}</em> {f.name}</span>
             <div className="pf-sheet">
               <PlanSvg plan={f.plan} layers={LAYERS} zoom={z} typeLabel={f.name} style={f.meta?.style}
-                devices={devices?.filter((d) => d.floor === f.id)} />
+                devices={devices?.filter((d) => d.floor === f.id)} stairs={stairs?.[f.id]} house={house} />
             </div>
           </button>
         );

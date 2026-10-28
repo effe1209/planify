@@ -76,6 +76,13 @@ export function moveFloor(project, floorId, delta) {
   return { ...project, floors };
 }
 
+/* La casa vista dal giardino: il piano terra (o il primo piano abitato) con la sua larghezza. */
+export function houseFor(project) {
+  const built = (project?.floors || []).filter((f) => typeof f.level === 'number' && f.level >= 0 && f.plan);
+  const f = built.find((x) => x.level === 0) || built.sort((a, b) => a.level - b.level)[0];
+  return f ? { w: f.plan.dimensions.width, name: f.name } : null;
+}
+
 /* Etichetta breve del livello: «-1», «PT», «1°», «Est.» */
 export function levelLabel(level) {
   if (level === 'out') return 'Est.';

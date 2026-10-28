@@ -5,8 +5,9 @@
 import { useId } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
+import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
 import { pointInPolygon, polyPath } from '../lib/geometry';
-import { sheetBox } from '../lib/sheet';
+import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
 import { THEMES } from '../lib/themes';
 import { clamp, fmt, fmtM } from '../lib/utils';
 
@@ -491,6 +492,103 @@ function Furn({ item, scale, theme }) {
  * abbastanza da toccare divano e poltrone) e sotto la parte bassa dei letti matrimoniali.
  * Sempre dentro la stanza, a 25 cm dai muri.
  */
+/*
+ * Scala in pianta, disegnata nel suo verso di salita (x lungo la rampa, y attraverso):
+ * pedate, linea di salita con freccia; sul piano da cui si sale la rampa è tagliata a metà.
+ */
+const STAIR_FRAME = {
+  E: (st, s) => `translate(${st.x * s},${st.y * s})`,
+  W: (st, s) => `translate(${(st.x + st.w) * s},${(st.y + st.h) * s}) rotate(180)`,
+  S: (st, s) => `translate(${(st.x + st.w) * s},${st.y * s}) rotate(90)`,
+  N: (st, s) => `translate(${st.x * s},${(st.y + st.h) * s}) rotate(-90)`,
+};
+function Stair({ st, s }) {
+  const horiz = st.up === 'E' || st.up === 'W';
+  const run = (horiz ? st.w : st.h) * s;
+  const wid = (horiz ? st.h : st.w) * s;
+  const tread = TREAD * s;
+  const cut = st.role === 'up';
+  const u = st.type === 'u';
+  const flight = u ? run - LANDING * s : run;          // lunghezza delle rampe
+  const gap = u ? 0.1 * s : 0;
+  const half = (wid - gap) / 2;
+  const cutX = flight * 0.55;
+  const steps = Math.max(1, Math.floor(flight / tread));
+  const line = (x, y0, y1, after) => (
+    <line key={`${x}-${y0}`} x1={x} y1={y0} x2={x} y2={y1} stroke="#5b6472" strokeWidth="0.8"
+      strokeDasharray={after ? '3 2.5' : undefined} strokeOpacity={after ? 0.55 : 1} />
+  );
+  const treads = [];
+  for (let k = 1; k < steps; k++) {
+    const x = k * tread;
+    if (u) {
+      treads.push(line(x, 0, half, cut && x > cutX));
+      treads.push(line(x, half + gap, wid, cut));
+    } else {
+      treads.push(line(x, 0, wid, cut && x > cutX));
+    }
+  }
+  const aY = u ? half / 2 : wid / 2;
+  const bY = wid - half / 2;
+  const walk = u
+    ? `M ${0.25 * s} ${aY} H ${run - (LANDING * s) / 2} V ${bY} H ${0.35 * s}`
+    : `M ${0.25 * s} ${aY} H ${run - 0.2 * s}`;
+  const end = u ? [0.35 * s, bY, -1] : [run - 0.2 * s, aY, 1];
+  const z = 0.16 * s;   // ampiezza del taglio a zig-zag
+  return (
+    <g transform={STAIR_FRAME[st.up](st, s)}>
+      <rect width={run} height={wid} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />
+      {u && <rect x={0} y={half} width={flight} height={gap} fill={INK} />}
+      {u && line(flight, 0, wid, cut)}
+      {treads}
+      <path d={walk} fill="none" stroke="#1f4fd8" strokeWidth="1.1" />
+      <circle cx={0.25 * s} cy={aY} r="2.4" fill="#1f4fd8" />
+      <path d={`M ${end[0] - 6 * end[2]} ${end[1] - 3.5} L ${end[0]} ${end[1]} L ${end[0] - 6 * end[2]} ${end[1] + 3.5}`}
+        fill="none" stroke="#1f4fd8" strokeWidth="1.1" />
+      {cut && (
+        <path d={`M ${cutX - z} 0 L ${cutX} ${(u ? half : wid) * 0.45} L ${cutX - z * 0.6} ${(u ? half : wid) * 0.55} L ${cutX + z * 0.4} ${u ? half : wid}`}
+          fill="none" stroke={INK} strokeWidth="1.3" />
+      )}
+    </g>
+  );
+}
+
+/*
+ * Giardino: la casa sta sul lato nord, fuori dal lotto. Si disegna come un edificio sopra il giardino,
+ * largo quanto il piano terra del progetto se c'è, con l'ingresso dove arriva il camminamento; sotto,
+ * oltre la recinzione, la strada.
+ */
+function HouseMark({ plan, s, house }) {
+  const W = plan.svgWidth;
+  const H = plan.svgHeight;
+  const paths = plan.furniture.filter((f) => f.type === 'path').sort((a, b) => a.y - b.y);
+  const doorX = paths.length ? (paths[0].x + paths[0].w / 2) * s : W / 2;
+  const hw = Math.min(W, Math.max(4 * s, house?.w ? house.w * s : W * 0.65));
+  const hx = clamp(doorX - hw / 2, 0, W - hw);
+  const top = -HOUSE_BAND + 12;
+  const hh = HOUSE_BAND - 14;
+  return (
+    <g fontFamily={FONT} pointerEvents="none">
+      <rect x={hx} y={top} width={hw} height={hh} fill="#e8e4dc" stroke={INK} strokeWidth="2.6" />
+      <path d={`M ${hx} ${top} L ${hx + hw} ${top + hh} M ${hx + hw} ${top} L ${hx} ${top + hh}`}
+        stroke={INK} strokeOpacity="0.12" strokeWidth="1" />
+      <text x={hx + hw / 2} y={top + hh / 2 - 2} textAnchor="middle" fontSize="13" fontWeight="800" fill={INK}
+        letterSpacing="2" stroke="#e8e4dc" strokeWidth="4" paintOrder="stroke">CASA</text>
+      <text x={hx + hw / 2} y={top + hh / 2 + 12} textAnchor="middle" fontSize="9" fill="#3d4654"
+        stroke="#e8e4dc" strokeWidth="3" paintOrder="stroke">
+        {house?.name ? `${house.name} · ` : ''}lato nord del giardino
+      </text>
+      <rect x={doorX - 0.5 * s} y={top + hh - 3} width={s} height={5} fill="#d92d20" />
+      <text x={doorX} y={top + hh - 7} textAnchor="middle" fontSize="8" fontWeight="700" fill="#d92d20"
+        stroke="#e8e4dc" strokeWidth="3" paintOrder="stroke">ingresso</text>
+      <line x1={0} y1={H + 12} x2={W} y2={H + 12} stroke="#8a8f98" strokeWidth="1" strokeDasharray="8 5" />
+      <text x={W / 2} y={H + 26} textAnchor="middle" fontSize="10.5" fontWeight="700" letterSpacing="3" fill="#6b7482">
+        STRADA
+      </text>
+    </g>
+  );
+}
+
 function rugsFor(plan) {
   const rooms = new Map(plan.rooms.map((r) => [r.id, r]));
   const out = [];
@@ -582,7 +680,7 @@ function roomLabel(room, s) {
    ──────────────────────────────────────────────────────────────────────────── */
 export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
-  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null,
+  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
 }) {
   const uid = useId().replace(/:/g, '');
   const theme = THEMES[style] || THEMES.modern;
@@ -594,6 +692,8 @@ export default function PlanSvg({
   const notches = plan.notches || [];
   const ref = (n) => `url(#${n}-${uid})`;
   const showFurn = layers.furniture && !thumb;
+  const garden = !thumb && isGardenPlan(plan);
+  const band = garden ? HOUSE_BAND : 0;
   const gross = plan.stats?.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0);
   const shapeName = SHAPE_NAME[plan.shape] || 'rettangolare';
 
@@ -648,6 +748,7 @@ export default function PlanSvg({
       {!thumb && <rect x="10" y="10" width={box.w - 20} height={box.h - 20} fill="none" stroke={INK} strokeWidth="1.2" />}
 
       <g transform={`translate(${box.ox},${box.oy})`}>
+        {garden && <HouseMark plan={plan} s={s} house={house} />}
         {notches.map((n, i) => (
           <g key={`n-${i}`}>
             <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill="#f3f6f1" />
@@ -687,7 +788,7 @@ export default function PlanSvg({
 
         {showFurn && (
           <g pointerEvents="none">
-            {rugsFor(plan).map((r, i) => (
+            {rugsFor(plan).filter((r) => !coveredByStairs(r, stairs)).map((r, i) => (
               <rect key={`rug-${i}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} rx={3}
                 fill={theme.rug} stroke={theme.rugLine} strokeWidth="0.8" strokeDasharray="1.5 2" />
             ))}
@@ -696,8 +797,21 @@ export default function PlanSvg({
         {showFurn && (
           <g filter={ref('fshadow')}>
             {/* camminamenti e siepi sotto, poi il resto */}
-            {[...plan.furniture].sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
+            {plan.furniture.filter((it) => !coveredByStairs(it, stairs))
+              .sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
               .map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
+          </g>
+        )}
+        {stairs?.length > 0 && (
+          <g pointerEvents="none">
+            {stairs.map((st) => <Stair key={st.id} st={st} s={s} />)}
+            {!thumb && layers.labels && stairs.map((st) => (
+              <text key={`stl-${st.id}`} x={(st.x + st.w / 2) * s} y={(st.y + st.h / 2) * s + 3} textAnchor="middle"
+                fontSize="9" fontWeight="700" fontFamily={FONT} fill="#1f4fd8"
+                stroke="#fff" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">
+                {st.role === 'up' ? 'SALE' : 'SCENDE'} a {st.other}
+              </text>
+            ))}
           </g>
         )}
 
@@ -802,12 +916,12 @@ export default function PlanSvg({
         {!thumb && layers.dims && (
           <g fontFamily={FONT}>
             <g stroke={INK} strokeWidth="0.8">
-              <line x1={0} y1={-6} x2={0} y2={-42} />
-              <line x1={W} y1={-6} x2={W} y2={-42} />
+              <line x1={0} y1={-6 - band} x2={0} y2={-42 - band} />
+              <line x1={W} y1={-6 - band} x2={W} y2={-42 - band} />
               <line x1={-6} y1={0} x2={-42} y2={0} />
               <line x1={-6} y1={H} x2={-42} y2={H} />
             </g>
-            <g transform="translate(0,-34)"><Dim len={W} label={`${fmtM(plan.dimensions.width)} m`} /></g>
+            <g transform={`translate(0,${-34 - band})`}><Dim len={W} label={`${fmtM(plan.dimensions.width)} m`} /></g>
             <g transform={`translate(-34,${H}) rotate(-90)`}><Dim len={H} label={`${fmtM(plan.dimensions.length)} m`} /></g>
           </g>
         )}
