@@ -25,13 +25,13 @@ app = FastAPI(
     title="Planify AI - FloorPlan Engine",
     description="Generatore di planimetrie con sagome varie (rettangolo, L, U, T, scalare), "
                 "stanze, muri, porte, finestre e arredi coerenti.",
-    version="7.2.0",
+    version="7.3.0",
 )
 
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
-            "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house"]
+            "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +63,7 @@ class PlanRequest(BaseModel):
     access: Literal["street", "stairs", "both"] = Field("street", description="Da dove si entra: porta sulla facciata, scala o entrambe")
     stair_type: Literal["auto", "u", "l", "straight"] = Field("auto", description="Scala a U, a L o a rampa unica")
     core: Optional["StairCore"] = Field(None, description="Scala di un altro piano (plan.stairs[i].core): va nello stesso punto")
+    wet: Optional[List[Dict[str, float]]] = Field(None, description="Bagni del piano accanto ({x, y, w, h}): si cerca di sovrapporli")
 
 
 class StairCore(BaseModel):
@@ -77,7 +78,7 @@ class StairCore(BaseModel):
 
 class HouseFloor(BaseModel):
     level: int = Field(0, ge=-3, le=5, description="-1 interrato, 0 terra, 1 primo…")
-    program: Literal["full", "day", "night"] = "full"
+    program: Literal["full", "day", "night", "garage"] = "full"
     double_bedrooms: Optional[int] = Field(None, ge=0, le=5)
     single_bedrooms: Optional[int] = Field(None, ge=0, le=5)
     bathrooms: Optional[int] = Field(None, ge=1, le=3)
@@ -230,6 +231,7 @@ def generate_floor_plan(request: PlanRequest):
             access=request.access,
             stair_type=request.stair_type,
             core=request.core.model_dump() if request.core else None,
+            wet=request.wet,
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")

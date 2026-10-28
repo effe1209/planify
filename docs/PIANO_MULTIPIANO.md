@@ -67,8 +67,8 @@ ripiego), tipi **U, L e rampa unica**, distribuzione **preset + personalizza**, 
 | 5 Frontend: scale dal motore | fatto | `lib/stairs.js` (vano del motore, ripiego sul vecchio metodo), `PlanSvg.jsx` (`EngineStair`) |
 | 6 «Aggiungi piano» intelligente | fatto | stesse misure del piano accanto, `core`, `access`, programma proposto; pulsante «Rigenera questo piano con la scala allineata» per i piani creati prima |
 | 7 «Casa su più piani» | fatto | `components/HouseOptions.jsx`, `lib/house.js` |
-| 8 Coerenza verticale | in parte | stessa sagoma (rettangolare) e misure; vista globale e PDF mostrano le scale. Da fare: bagni sovrapposti, sagome L/U/T su più piani, interrato/garage con scala |
+| 8 Coerenza verticale | quasi tutto | stessa sagoma (rettangolare) e misure; **garage interrato** con vano scala chiuso e porta sul box (`layout_garage(stair=…)`, casella «Piano interrato con garage»); **bagni sovrapposti** (`wet`: tra le varianti si preferiscono quelle con bagni sopra/sotto quelli del piano accanto, 100% dei casi di prova contro 58% senza). Da fare: sagome L/U/T su più piani |
 | 9 Verifica | fatto | `tests/test_house.py`; nessuna differenza sugli appartamenti senza scala a parità di seed |
 
 Limiti noti: con la scala la pianta è rettangolare; le camere si dividono tra i piani in automatico
-(prima i piani «Notte»); il garage interrato non ha ancora il vano scala.
+(prima i piani «Notte»); nel garage il vano scala può ridurre i posti auto.

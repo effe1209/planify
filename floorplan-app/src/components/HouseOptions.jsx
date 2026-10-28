@@ -21,7 +21,7 @@ function Seg({ label, value, options, onChange }) {
   );
 }
 
-export default function HouseOptions({ form, setF, pending = null, stairFixed = false }) {
+export default function HouseOptions({ form, setF, pending = null, stairFixed = false, garage = false }) {
   if (pending) {
     return (
       <div className="pf-needs">
@@ -75,10 +75,17 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
                 onClick={() => setFloors([...floors, { level: top + 1, program: 'night' }])}><Plus size={13} /></button>
             </div>
           </div>
+          {garage && (
+            <label className="pf-check">
+              <input type="checkbox" checked={form.houseGarage} onChange={(e) => setF('houseGarage', e.target.checked)} />
+              <span>Piano interrato con garage <em>(la scala scende in un vano chiuso con porta sul box)</em></span>
+            </label>
+          )}
           <Seg label="Scala" value={form.stairType} options={STAIR_TYPES} onChange={(v) => setF('stairType', v)} />
           <p className="pf-hint">
             Le misure valgono per ogni piano; la pianta è rettangolare così i piani si sovrappongono. Le camere si
-            dividono tra i piani «Notte» (poi «Completo»); studio, ripostiglio e lavanderia vanno al piano giorno.
+            dividono tra i piani «Notte» (poi «Completo»); studio, ripostiglio e lavanderia vanno al piano giorno;
+            ogni piano cerca di avere i bagni sopra quelli del piano di sotto.
           </p>
         </>
       )}
