@@ -21,8 +21,9 @@ Il backend elabora i calcoli procedurali/AI per generare le stanze e l'arredamen
    * Clicca su **Create Space**.
 3. **Carica i File**:
    * Vai nella scheda **Files and versions** del tuo Space.
-   * Carica i 3 file creati nell'editor:
-     * `main.py`
+   * Carica i 4 file del backend, presi dalla radice del repository:
+     * `main.py` (l'API)
+     * `planner.py` (il motore: senza questo il server non parte)
      * `requirements.txt`
      * `Dockerfile`
 4. **Ottieni l'URL dell'API**:
@@ -35,9 +36,26 @@ Il backend elabora i calcoli procedurali/AI per generare le stanze e l'arredamen
 ### Opzione B: Render.com (Alternativa per Web Service)
 
 1. Registrati su [Render.com](https://render.com/).
-2. Crea un nuovo **Web Service** collegato al tuo repository GitHub contenente `main.py`, `requirements.txt` e `Dockerfile`.
-3. Seleziona il piano **Free**.
-4. Render rileverà il `Dockerfile` ed eseguirà l'applicazione esponendola su una porta pubblica HTTPS.
+2. Crea un nuovo **Web Service** collegato al tuo repository GitHub (contiene `main.py`, `planner.py`, `requirements.txt` e `Dockerfile`).
+3. In **Branch** scegli il branch da pubblicare (`main`, oppure `new_features` per avere subito le ultime funzioni).
+4. Seleziona il piano **Free**.
+5. Render rileverà il `Dockerfile` ed eseguirà l'applicazione esponendola su una porta pubblica HTTPS.
+   Con **Auto-Deploy** attivo, ogni push sul branch scelto aggiorna il backend da solo.
+
+---
+
+### Aggiornare il backend (importante)
+
+Il sito e il motore sono due servizi separati: aggiornare il codice su GitHub **non** aggiorna da solo un backend
+caricato a mano. Se il backend è vecchio, il sito funziona ma ignora i filtri nuovi (camere, bagni, cucina, penisola).
+
+* **Hugging Face (file caricati a mano)**: ricarica `main.py` e `planner.py` nella scheda *Files and versions*
+  ogni volta che cambiano; lo Space si ricostruisce da solo.
+* **Render**: verifica che il branch del servizio sia quello con le modifiche e che l'ultimo deploy sia andato a buon fine.
+
+**Come verificare**: apri `https://TUO-BACKEND/health`. Deve rispondere con `"version": "6.0.0"` (o superiore) e un
+elenco `features` che contiene `room_program`, `kitchen_mode` e `peninsula`. Il sito mostra lo stesso controllo in alto a
+destra: «Motore collegato · v6.0.0» se è aggiornato, «Motore da aggiornare» se è vecchio.
 
 ---
 

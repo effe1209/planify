@@ -562,3 +562,16 @@
 .pf-check input { accent-color: var(--accent); width: 15px; height: 15px; }
 .pf-check em { font-style: normal; color: var(--text-muted); }
 .pf-furn-row em { font-style: normal; color: var(--text-muted); margin-left: 4px; }
+
+/* ── Stato del motore e controllo dei filtri ───────────────────────────── */
+.pf-status.is-ok i { background: #34c759; }
+.pf-status.is-checking i { background: #f59e0b; }
+.pf-status.is-old i { background: #f59e0b; }
+.pf-status.is-old { color: #b45309; font-weight: 600; }
+.pf-alert-warn { background: rgba(245, 158, 11, 0.12); color: #b45309; margin: 12px 0 0; }
+.pf-filters { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pf-filters li { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.pf-filters li span { flex: 1; color: var(--text-muted); }
+.pf-filters li b { font-weight: 600; text-align: right; }
+.pf-filters li.is-ok svg { color: #34c759; }
+.pf-filters li.is-bad svg, .pf-filters li.is-bad b { color: #d97706; }

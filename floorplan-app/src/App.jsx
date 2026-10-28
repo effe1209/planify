@@ -13,10 +13,12 @@ import SketchBoard from './components/SketchBoard';
 import RoomEditor from './components/RoomEditor';
 import LayoutOptions from './components/LayoutOptions';
 import HistoryPanel from './components/HistoryPanel';
+import FilterCheck from './components/FilterCheck';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
 import { usePlanHistory } from './hooks/usePlanHistory';
+import { useEngine } from './hooks/useEngine';
 import { sketchToPlan } from './lib/sketchToPlan';
 import { buildDxf, parseDxfClientSide } from './lib/dxf';
 import { serializeSvg, sheetBox } from './lib/sheet';
@@ -50,6 +52,7 @@ export default function App() {
     storage.get('planify.theme', window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   const [backendUrl, setBackendUrl] = useState(() => storage.get('planify.backend', import.meta.env.VITE_BACKEND_URL || ''));
   const [connOpen, setConnOpen] = useState(false);
+  const engine = useEngine(backendUrl);
 
   const [form, setForm] = useState({
     width: 10, length: 8, roomType: 'apartment', rooms: 3, style: 'modern', shape: 'auto', seed: '',
@@ -378,9 +381,15 @@ export default function App() {
           <span className="pf-name">Planify</span>
         </div>
         <div className="pf-top-right">
-          <span className={`pf-status ${backendUrl ? 'is-on' : ''}`}>
+          <span className={`pf-status is-${engine.status}`} title={engine.version ? `Versione del motore: ${engine.version}` : undefined}>
             <i aria-hidden="true" />
-            {backendUrl ? 'Motore collegato' : 'Motore offline (schizzi e DXF funzionano in locale)'}
+            {{
+              off: 'Motore offline (schizzi e DXF funzionano in locale)',
+              checking: 'Verifico il motore…',
+              ok: `Motore collegato · v${engine.version}`,
+              old: `Motore da aggiornare · v${engine.version || '?'}`,
+              error: 'Motore non raggiungibile',
+            }[engine.status]}
           </span>
           <button type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
             <Cookie size={14} /> Cookie
@@ -435,6 +444,15 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {form.roomType === 'apartment' && engine.status === 'old' && (
+                <div className="pf-alert pf-alert-warn" role="alert">
+                  <AlertCircle size={16} />
+                  <span>
+                    Il motore collegato (v{engine.version || '?'}) è una versione vecchia: camere, bagni, cucina e penisola
+                    verrebbero ignorati. Aggiorna il backend all'ultima versione del branch <b>new_features</b>.
+                  </span>
+                </div>
+              )}
               {form.roomType === 'apartment' ? (
                 <LayoutOptions form={form} setF={setF} />
               ) : form.roomType !== 'hotel-room' && (
@@ -681,6 +699,10 @@ export default function App() {
                   </p>
                 )}
               </section>
+
+              {current.meta?.type === 'apartment' && current.params?.doubles != null && (
+                <FilterCheck plan={plan} params={current.params} />
+              )}
 
               <section className="pf-sec">
                 <h2>Locali (clicca per personalizzare)</h2>
