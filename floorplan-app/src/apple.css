@@ -1,0 +1,403 @@
+/*
+ * Livello visivo in stile Apple (HIG), caricato dopo App.css.
+ * Solo aspetto: materiali traslucidi, tipografia di sistema, angoli continui, feedback al press.
+ */
+
+/* ── Token ─────────────────────────────────────────────────────────────── */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --hairline: rgba(0, 0, 0, 0.08);
+  --fill: rgba(118, 118, 128, 0.12);        /* riempimento dei controlli (systemFill) */
+  --fill-strong: rgba(118, 118, 128, 0.2);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.6);   /* bordo luminoso in alto: la luce sul materiale */
+  --shadow-float: 0 1px 1px rgba(0, 0, 0, 0.03), 0 8px 24px rgba(0, 0, 0, 0.06), 0 24px 60px rgba(0, 0, 0, 0.06);
+  --bg-canvas: #f2f2f7;
+  --bg-panel: #ffffff;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --border: var(--hairline);
+}
+
+.pf-app[data-theme="dark"] {
+  --hairline: rgba(255, 255, 255, 0.12);
+  --fill: rgba(118, 118, 128, 0.24);
+  --fill-strong: rgba(118, 118, 128, 0.36);
+  --glass: rgba(44, 44, 46, 0.68);
+  --glass-strong: rgba(44, 44, 46, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --shadow-float: 0 1px 1px rgba(0, 0, 0, 0.2), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --bg-canvas: #1c1c1e;
+  --bg-panel: #2c2c2e;
+  --text: #f5f5f7;
+  --text-muted: #98989d;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --border: var(--hairline);
+}
+
+/* ── Tipografia ────────────────────────────────────────────────────────── */
+.pf-app, .pf-dialog, .pf-cookie-banner {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+}
+.pf-app button, .pf-app input, .pf-app select, .pf-app textarea { font-family: inherit; letter-spacing: inherit; }
+.pf-brand { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: -0.022em; }
+.pf-empty h3, .pf-dialog-head h2, .pf-design-score strong {
+  font-family: var(--font-display); letter-spacing: -0.02em;
+}
+.pf-empty h3 { font-size: 20px; font-weight: 600; line-height: 1.15; }
+/* intestazioni di sezione: maiuscoletto piccolo, tracking leggermente positivo */
+.pf-sec h2, .pf-history h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-muted); }
+.pf-hint { font-size: 12px; line-height: 1.45; }
+
+/* ── Feedback al press: immediato, su ogni elemento cliccabile ─────────── */
+.pf-app button, .pf-dialog button, .pf-cookie-banner button, .pf-app summary {
+  transition: transform 160ms var(--ease-out), background-color 200ms var(--ease-out),
+    color 200ms var(--ease-out), border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), opacity 200ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.pf-app button:not(:disabled):active, .pf-dialog button:not(:disabled):active,
+.pf-cookie-banner button:not(:disabled):active, .pf-app summary:active {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+.pf-app :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+
+/* ── Comparsa di menu, pannelli e finestre ─────────────────────────────── */
+@keyframes pf-materialize {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.pf-floor-menu, .pf-dialog[open], .pf-cookie-banner, .pf-customizer, .pf-sketch-panel, .pf-flash {
+  animation: pf-materialize 420ms var(--ease-out) both;
+}
+
+@keyframes pf-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pf-floor-menu, .pf-dialog[open], .pf-cookie-banner, .pf-customizer, .pf-sketch-panel, .pf-flash {
+    animation-name: pf-fade !important;
+  }
+  .pf-app button:active, .pf-dialog button:active, .pf-cookie-banner button:active { transform: none !important; }
+}
+
+/* ── TopBar: barra traslucida con controlli a pillola ──────────────────── */
+.pf-app {
+  background:
+    radial-gradient(1200px 600px at 85% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    var(--bg-canvas);
+}
+.pf-top {
+  position: relative;
+  z-index: 20;
+  height: 56px;
+  padding: 0 16px 0 20px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--hairline);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
+}
+.pf-brand { gap: 10px; }
+.pf-top-right { gap: 6px; }
+.pf-status {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--fill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.pf-status i { width: 7px; height: 7px; }
+.pf-status.is-ok i { box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.18); }
+.pf-top .pf-mini, .pf-top .pf-icon-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.pf-top .pf-mini:hover, .pf-top .pf-icon-btn:hover { background: var(--fill); }
+.pf-top .pf-mini.is-accent { color: var(--accent); }
+.pf-top .pf-icon-btn { padding: 0; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .pf-top { background: var(--bg-panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ── Pannelli laterali fluttuanti in vetro, sezioni a card ─────────────── */
+:root {
+  --sidebar-material: rgba(242, 242, 247, 0.72);
+  --card: #ffffff;
+}
+.pf-app[data-theme="dark"] {
+  --sidebar-material: rgba(28, 28, 30, 0.72);
+  --card: #2c2c2e;
+}
+.pf-body {
+  padding: 12px;
+  gap: 12px;
+  background-image: radial-gradient(var(--hairline) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.pf-stage { background: transparent; background-image: none; border-radius: var(--radius-lg); overflow: hidden; }
+
+.pf-rail, .pf-inspector {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--sidebar-material);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-edge);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill-strong) transparent;
+}
+.pf-rail { width: 320px; flex: none; }
+.pf-inspector {
+  width: 316px;
+  flex: none;
+  padding: 12px 12px 24px;
+  gap: 12px;
+}
+
+/* card: superficie piena sul materiale (mai vetro su vetro) */
+.pf-inspector > .pf-sec, .pf-inspector > .pf-history, .pf-form > .pf-sec {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.pf-form { padding: 12px; gap: 12px; }
+.pf-inspector > .pf-history { margin-top: 0; }
+.pf-sec h2 { margin-bottom: 12px; }
+.pf-inspector .pf-sec > h2:only-child { margin-bottom: 0; }
+.pf-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 12px;
+  background: transparent;
+  border-top: 1px solid var(--hairline);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* elementi interni più morbidi */
+.pf-customizer { border-radius: 18px; padding: 16px; background: var(--card); box-shadow: 0 0 0 1px var(--accent), var(--shadow-float); border: none; }
+.pf-seedrow, .pf-details, .pf-type-card, .pf-style-card, .pf-shape, .pf-thumb { border-radius: var(--radius-md); }
+.pf-input input, .pf-plain, .pf-input-sm, .pf-add-furn select { border-radius: var(--radius-sm); background: var(--fill); border-color: transparent; }
+.pf-input input:focus, .pf-plain:focus, .pf-input-sm:focus, .pf-add-furn select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.pf-chip { border-radius: 999px; background: var(--fill); border-color: transparent; padding: 6px 12px; }
+.pf-chip:hover { background: var(--fill-strong); }
+.pf-type-card, .pf-style-card, .pf-shape { background: var(--fill); border-color: transparent; }
+.pf-type-card:hover, .pf-style-card:hover, .pf-shape:hover { background: var(--fill-strong); border-color: transparent; }
+.pf-seg { background: var(--fill); border-radius: 10px; padding: 2px; }
+.pf-seg button { border-radius: 8px; min-height: 32px; }
+.pf-seg button.is-on { background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+.pf-room { border-radius: var(--radius-sm); min-height: 40px; }
+.pf-room-bar { left: 8px; right: 8px; width: auto; border-radius: 2px; }
+.pf-facts div { border-bottom-color: var(--hairline); padding-bottom: 8px; }
+.pf-primary, .pf-btn-add { border-radius: 12px; font-weight: 600; }
+.pf-primary { min-height: 44px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent); }
+.pf-secondary { border-radius: 12px; min-height: 44px; min-width: 44px; background: var(--fill); border-color: transparent; }
+.pf-secondary:hover { background: var(--fill-strong); }
+.pf-btn-add { min-height: 36px; padding: 8px 14px; font-size: 12.5px; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .pf-rail, .pf-inspector, .pf-actions { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-canvas); }
+}
+@media (prefers-contrast: more) {
+  .pf-rail, .pf-inspector, .pf-inspector > .pf-sec, .pf-form > .pf-sec { border-color: var(--text-muted); }
+}
+
+/* la toolbar va a capo invece di uscire dal riquadro */
+.pf-toolbar { height: auto; min-height: 56px; flex-wrap: wrap; row-gap: 8px; padding: 8px 12px; }
+.pf-group {
+  border-radius: 14px; border-color: var(--hairline); background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.pf-tool { border-radius: 10px; }
+.pf-tool.is-on, .pf-tool:hover { background: var(--fill); }
+
+/* banner e finestra dei cookie */
+.pf-cookie-banner {
+  left: 344px; border-radius: 20px; border-color: var(--hairline);
+  background: var(--glass-strong); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: var(--shadow-float);
+}
+.pf-dialog { border-radius: 24px; border-color: var(--hairline); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28); }
+.pf-dialog::backdrop { background: rgba(0, 0, 0, 0.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+@media (max-width: 1100px) { .pf-cookie-banner { left: 16px; } }
+
+/* ── Area di clic minima 44 × 44 ───────────────────────────────────────── */
+/* controlli piccoli: l'area cliccabile si allarga in modo invisibile, l'aspetto resta compatto.
+   Nei gruppi affiancati cresce solo in altezza, così due icone vicine non si rubano il clic. */
+.pf-btn-icon, .pf-mini, .pf-stepper button, .pf-chip, .pf-floor-tab, .pf-tool, .pf-seg button, .pf-link,
+.pf-swatch-btn, .pf-customizer-close, .pf-sketch-tool, .pf-kind-chip, .pf-toggle {
+  position: relative;
+}
+.pf-btn-icon::before, .pf-mini::before, .pf-chip::before, .pf-floor-tab::before, .pf-tool::before,
+.pf-seg button::before, .pf-link::before, .pf-swatch-btn::before, .pf-sketch-tool::before, .pf-kind-chip::before,
+.pf-stepper button::before, .pf-customizer-close::before, .pf-toggle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: max(100%, 44px);
+  transform: translateY(-50%);
+}
+/* isolati: l'area cresce anche in larghezza */
+.pf-stepper button::before, .pf-customizer-close::before, .pf-toggle::before {
+  left: 50%;
+  width: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+.pf-btn-icon { min-width: 32px; min-height: 32px; justify-content: center; border-radius: 9px; }
+.pf-stepper button { width: 30px; height: 30px; border-radius: 9px; background: var(--fill); border-color: transparent; }
+.pf-swatch-btn { width: 28px; height: 28px; border-radius: 8px; }
+/* controlli a tutta larghezza: altezza reale da 44 */
+.pf-input input, .pf-plain, .pf-input-sm, .pf-add-furn select, .pf-floor-menu select { min-height: 44px; }
+.pf-btn-add, .pf-room, .pf-style-card, .pf-type-card, .pf-check, .pf-primary { min-height: 44px; }
+.pf-details summary, .pf-bom summary { min-height: 44px; display: flex; align-items: center; }
+.pf-check input { width: 18px; height: 18px; }
+
+/* ── Selettore dei piani: segmented control ────────────────────────────── */
+.pf-floorbar {
+  gap: 8px; padding: 4px 12px 10px; border-bottom: none; background: transparent;
+}
+.pf-floor-seg {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px;
+  border-radius: 13px; background: var(--fill);
+}
+.pf-floor {
+  border: none; border-radius: 10px; background: transparent; box-shadow: none;
+  transition: background-color 260ms var(--ease-out), box-shadow 260ms var(--ease-out);
+}
+.pf-floor:not(.is-on):hover { background: var(--fill); }
+.pf-floor.is-on {
+  border: none; background: var(--card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+.pf-floor-tab { min-height: 32px; padding: 0 12px; font-size: 13px; font-weight: 500; color: var(--text); }
+.pf-floor.is-on .pf-floor-tab { color: var(--text); font-weight: 600; }
+.pf-floor-tab em {
+  display: inline-block; min-width: 22px; padding: 1px 5px; margin-right: 6px; border-radius: 6px;
+  background: var(--fill); font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-align: center;
+}
+.pf-floor.is-on .pf-floor-tab em { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.pf-floor-input { min-height: 32px; border-radius: 8px; }
+.pf-floor-actions { gap: 0; padding-right: 3px; }
+.pf-floor-actions .pf-btn-icon { min-width: 28px; min-height: 28px; }
+.pf-floorbar > .pf-tool, .pf-floor-add > .pf-tool { min-height: 38px; padding: 0 12px; border-radius: 12px; font-size: 13px; }
+.pf-floor-pending { border-radius: 10px; min-height: 32px; }
+.pf-floor-menu {
+  width: 280px; padding: 14px; gap: 10px; border-radius: 20px; border-color: var(--hairline);
+  background: var(--glass-strong); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: var(--shadow-float); transform-origin: top left;
+}
+.pf-floor-menu .pf-tool { min-height: 40px; border-radius: 12px; font-size: 13px; }
+
+/* ── Canvas e contenitori: bento ───────────────────────────────────────── */
+.pf-canvas { margin: 0 12px 12px; border-radius: 26px; background: color-mix(in srgb, var(--card) 45%, transparent); border: 1px solid var(--hairline); }
+.pf-sheet {
+  border-radius: 14px; overflow: hidden;
+  box-shadow: 0 0 0 1px var(--hairline), 0 2px 6px rgba(0, 0, 0, 0.05), 0 18px 48px rgba(0, 0, 0, 0.1);
+}
+.pf-app[data-theme="dark"] .pf-sheet { box-shadow: 0 0 0 1px var(--hairline), 0 18px 48px rgba(0, 0, 0, 0.45); }
+
+/* vista globale: una griglia di riquadri morbidi */
+.pf-overview { gap: 14px; padding: 16px; }
+.pf-overview-cell {
+  gap: 10px; padding: 14px; border-radius: 24px; border: 1px solid var(--hairline); background: var(--card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: transform 320ms var(--ease-out), box-shadow 320ms var(--ease-out), border-color 200ms;
+}
+.pf-overview-cell:hover { border-color: var(--hairline); transform: translateY(-2px); box-shadow: var(--shadow-float); }
+.pf-overview-cell .pf-sheet { border-radius: 12px; }
+.pf-overview-cell > span { font-size: 14px; letter-spacing: -0.01em; }
+
+/* stato vuoto, caricamento e messaggi */
+.pf-empty svg { color: var(--text-muted); opacity: 0.7; }
+.pf-loading { background: color-mix(in srgb, var(--bg-canvas) 40%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.pf-loader {
+  width: 300px; padding: 22px; gap: 10px; border-radius: 24px; border-color: var(--hairline); background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); box-shadow: var(--shadow-float);
+  animation: pf-materialize 420ms var(--ease-out) both;
+}
+.pf-loader strong { font-size: 15px; letter-spacing: -0.015em; }
+.pf-loader span { color: var(--text-muted); font-size: 12.5px; }
+.pf-loader-bar { height: 5px; border-radius: 999px; background: var(--fill); }
+.pf-loader-bar i { border-radius: 999px; }
+.pf-flash {
+  bottom: 22px; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  background: rgba(28, 28, 30, 0.82); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.pf-alert { border-radius: 14px; padding: 12px 14px; }
+
+/* card interne della sidebar */
+.pf-thumb { border-radius: 16px; border-color: var(--hairline); background: var(--fill); transition: transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out); }
+.pf-thumb:hover { border-color: var(--hairline); box-shadow: var(--shadow-float); }
+.pf-thumb.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pf-thumb svg { border-radius: 10px; }
+.pf-thumb-actions .pf-btn-icon { border-radius: 999px; background: var(--glass-strong); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.pf-thumb-actions { transition: opacity 240ms var(--ease-out); }
+.pf-design-score strong { font-size: 28px; font-weight: 700; }
+.pf-furn-row { border-radius: 10px; padding: 6px 8px; border-color: var(--hairline); background: var(--fill); }
+.pf-dev-legend i { border-radius: 999px; }
+.pf-bom table { border-radius: 12px; }
+
+/* barre dello schizzo e pannello di modifica */
+.pf-sketch-bar, .pf-sketch-kinds {
+  background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  border-bottom-color: var(--hairline);
+}
+.pf-sketch-tools { border-radius: 13px; background: var(--fill); border: none; padding: 3px; }
+.pf-sketch-tool { border-radius: 10px; min-height: 32px; }
+.pf-sketch-tool.is-on { background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.pf-sketch-action { border-radius: 12px; min-height: 40px; box-shadow: 0 4px 14px rgba(52, 199, 89, 0.3); }
+.pf-sketch-action:hover { transform: none; }
+.pf-kind-chip { border-radius: 999px; background: var(--fill); border-color: transparent; min-height: 30px; }
+.pf-sketch-panel {
+  border-radius: 20px; padding: 14px; border: none; background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-float); transform-origin: top right;
+}
+.pf-sketch-foot { background: var(--glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-top-color: var(--hairline); }
+
+/* ── Transizioni dei pannelli ──────────────────────────────────────────── */
+.pf-details[open] > *:not(summary), .pf-bom[open] > table { animation: pf-materialize 360ms var(--ease-out) both; }
+.pf-details summary svg { transition: transform 300ms var(--ease-out); }
+.pf-details[open] summary svg { transform: rotate(180deg); }
+.pf-room, .pf-chip, .pf-type-card, .pf-style-card, .pf-shape, .pf-seg button, .pf-floor-tab { transition-timing-function: var(--ease-out); }
+.pf-room-bar b { transition: width 500ms var(--ease-out); }
+.pf-toggle span, .pf-toggle span::after { transition-duration: 320ms; transition-timing-function: var(--ease-out); }
+.pf-dialog[open] { animation-name: pf-materialize; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-details[open] > *:not(summary), .pf-bom[open] > table, .pf-loader { animation-name: pf-fade !important; }
+  .pf-overview-cell:hover { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .pf-floor-menu, .pf-loader, .pf-sketch-panel, .pf-cookie-banner, .pf-group, .pf-sketch-bar, .pf-sketch-kinds {
+    background: var(--bg-panel); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}

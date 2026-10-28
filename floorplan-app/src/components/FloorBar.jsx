@@ -26,41 +26,43 @@ export default function FloorBar({
   return (
     <div className="pf-floorbar" role="tablist" aria-label="Piani del progetto">
       <Layers size={15} className="pf-floorbar-icon" aria-hidden="true" />
-      {floors.map((f, i) => {
-        const on = !globalView && f.id === activeId;
-        return (
-          <div key={f.id} className={`pf-floor ${on ? 'is-on' : ''}`}>
-            {editing === f.id ? (
-              <input
-                className="pf-floor-input"
-                defaultValue={f.name}
-                autoFocus
-                onFocus={(e) => e.target.select()}
-                onBlur={(e) => { onRename(f.id, e.target.value.trim() || f.name); setEditing(null); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur();
-                  if (e.key === 'Escape') setEditing(null);
-                }}
-              />
-            ) : (
-              <button type="button" role="tab" aria-selected={on} className="pf-floor-tab"
-                onClick={() => onSelect(f.id)} onDoubleClick={() => setEditing(f.id)} title="Doppio clic per rinominare">
-                <em>{levelLabel(f.level)}</em> {f.name}
-              </button>
-            )}
-            {on && (
-              <span className="pf-floor-actions">
-                <button type="button" className="pf-btn-icon" disabled={i === 0} onClick={() => onMove(f.id, -1)}
-                  title="Sposta prima" aria-label="Sposta prima"><ChevronLeft size={13} /></button>
-                <button type="button" className="pf-btn-icon" disabled={i === floors.length - 1} onClick={() => onMove(f.id, 1)}
-                  title="Sposta dopo" aria-label="Sposta dopo"><ChevronRight size={13} /></button>
-                <button type="button" className="pf-btn-icon is-danger" disabled={floors.length <= 1}
-                  onClick={() => onRemove(f.id)} title="Elimina piano" aria-label="Elimina piano"><Trash2 size={13} /></button>
-              </span>
-            )}
-          </div>
-        );
-      })}
+      <div className="pf-floor-seg">
+        {floors.map((f, i) => {
+          const on = !globalView && f.id === activeId;
+          return (
+            <div key={f.id} className={`pf-floor ${on ? 'is-on' : ''}`}>
+              {editing === f.id ? (
+                <input
+                  className="pf-floor-input"
+                  defaultValue={f.name}
+                  autoFocus
+                  onFocus={(e) => e.target.select()}
+                  onBlur={(e) => { onRename(f.id, e.target.value.trim() || f.name); setEditing(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    if (e.key === 'Escape') setEditing(null);
+                  }}
+                />
+              ) : (
+                <button type="button" role="tab" aria-selected={on} className="pf-floor-tab"
+                  onClick={() => onSelect(f.id)} onDoubleClick={() => setEditing(f.id)} title="Doppio clic per rinominare">
+                  <em>{levelLabel(f.level)}</em> {f.name}
+                </button>
+              )}
+              {on && (
+                <span className="pf-floor-actions">
+                  <button type="button" className="pf-btn-icon" disabled={i === 0} onClick={() => onMove(f.id, -1)}
+                    title="Sposta prima" aria-label="Sposta prima"><ChevronLeft size={13} /></button>
+                  <button type="button" className="pf-btn-icon" disabled={i === floors.length - 1} onClick={() => onMove(f.id, 1)}
+                    title="Sposta dopo" aria-label="Sposta dopo"><ChevronRight size={13} /></button>
+                  <button type="button" className="pf-btn-icon is-danger" disabled={floors.length <= 1}
+                    onClick={() => onRemove(f.id)} title="Elimina piano" aria-label="Elimina piano"><Trash2 size={13} /></button>
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       <div className="pf-floor-add">
         <button type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu}>
