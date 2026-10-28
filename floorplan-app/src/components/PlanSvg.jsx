@@ -6,6 +6,7 @@ import { useId } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
+import ElectricLayer from './ElectricLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
 import { THEMES } from '../lib/themes';
@@ -772,6 +773,7 @@ function roomLabel(room, s) {
 export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
+  electric = null, electricLinks = true,
 }) {
   const uid = useId().replace(/:/g, '');
   const theme = THEMES[style] || THEMES.modern;
@@ -878,7 +880,7 @@ export default function PlanSvg({
         })}
 
         {showFurn && (
-          <g pointerEvents="none">
+          <g pointerEvents="none" opacity={electric ? 0.22 : 1}>
             {rugsFor(plan).filter((r) => !coveredByStairs(r, stairs)).map((r, i) => (
               <rect key={`rug-${i}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} rx={3}
                 fill={theme.rug} stroke={theme.rugLine} strokeWidth="0.8" strokeDasharray="1.5 2" />
@@ -886,15 +888,15 @@ export default function PlanSvg({
           </g>
         )}
         {showFurn && (
-          <g filter={ref('fshadow')}>
-            {/* camminamenti e siepi sotto, poi il resto */}
+          <g filter={ref('fshadow')} opacity={electric ? 0.22 : 1}>
+            {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
             {plan.furniture.filter((it) => !coveredByStairs(it, stairs))
               .sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
               .map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
         )}
         {stairs?.length > 0 && (
-          <g pointerEvents="none">
+          <g pointerEvents="none" opacity={electric ? 0.45 : 1}>
             {stairs.map((st) => (st.engine ? <EngineStair key={st.id} st={st} s={s} /> : <Stair key={st.id} st={st} s={s} />))}
             {!thumb && layers.labels && stairs.flatMap((st) => stairLabels(st).map((txt, i, all) => (
               <text key={`stl-${st.id}-${i}`} x={(st.x + st.w / 2) * s} y={(st.y + st.h / 2) * s + 3 + (i - (all.length - 1) / 2) * 11}
@@ -988,7 +990,9 @@ export default function PlanSvg({
             onClick={() => onSelect?.(r.id === selectedId ? null : r.id)} />
         ))}
 
-        {!thumb && layers.alarm !== false && devices?.length > 0 && (
+        {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
+
+        {!electric && !thumb && layers.alarm !== false && devices?.length > 0 && (
           <g pointerEvents="none" fontFamily={FONT} fontWeight="700" textAnchor="middle">
             {devices.map((d) => {
               const st = DEVICE_STYLE[d.model] || { tag: '?', color: INK };

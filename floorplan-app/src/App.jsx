@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Unlock, Upload, ZoomIn, ZoomOut,
+  Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -21,6 +21,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import FloorBar from './components/FloorBar';
 import FloorsOverview from './components/FloorsOverview';
 import SecurityPanel from './components/SecurityPanel';
+import ElectricPanel from './components/ElectricPanel';
+import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
 import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
@@ -295,6 +297,29 @@ export default function App() {
     delete next.security;
     return next;
   });
+
+  /* ── Impianto elettrico: impostazioni nel progetto, punti ricalcolati dalle piante (lib/electric.js) ── */
+  const electricCfg = current?.electric || null;
+  const [sheet, setSheet] = useState('arch');   // tavola mostrata: 'arch' (pianta) | 'electric'
+  const electricPlan = useMemo(
+    () => (current && electricCfg ? planElectric(current, { level: electricCfg.level }) : null),
+    [current, electricCfg],
+  );
+  const showElectric = sheet === 'electric' && !!electricPlan;
+  const startElectric = () => {
+    editProject((p) => ({ ...p, electric: { level: 2, links: true } }));
+    setSheet('electric');
+    say('Impianto elettrico di livello 2 su tutti i piani');
+  };
+  const changeElectric = (patch) => editProject((p) => ({ ...p, electric: { ...p.electric, ...patch } }));
+  const clearElectric = () => {
+    setSheet('arch');
+    editProject((p) => {
+      const next = { ...p };
+      delete next.electric;
+      return next;
+    });
+  };
 
   /* ── Personalizzazione: le modifiche finiscono nella voce di cronologia (e quindi vengono salvate) ── */
   const editPlan = (fn) => current && history.updatePlan(current.id, fn);   // agisce sul piano attivo
@@ -604,6 +629,7 @@ export default function App() {
       name: current.name || 'Progetto Planify',
       floors: current.floors.map((f) => ({ name: f.name, level: f.level, plan: f.plan })),
       ...(current.security && { security: current.security }),
+      ...(current.electric && { electric: current.electric }),
     };
     saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'progetto-planify.json');
   };
@@ -866,6 +892,12 @@ export default function App() {
                 <button type="button" className={`pf-tool ${layers.alarm ? 'is-on' : ''}`} aria-pressed={layers.alarm}
                   onClick={() => toggle('alarm')}><ShieldCheck size={15} /> Allarme</button>
               )}
+              {electricCfg && (
+                <button type="button" className={`pf-tool ${showElectric ? 'is-on' : ''}`} aria-pressed={showElectric}
+                  onClick={() => setSheet(showElectric ? 'arch' : 'electric')} title="Tavola dell'impianto elettrico">
+                  <Zap size={15} /> Elettrico
+                </button>
+              )}
             </div>
 
             <div className="pf-group" role="group" aria-label="Disegno e import">
@@ -928,7 +960,7 @@ export default function App() {
             ) : globalView && current?.floors.length > 1 ? (
               <ErrorBoundary key={`all-${current.id}`}>
                 <FloorsOverview project={current} stage={stage} onOpen={selectFloor} devices={layers.alarm ? devices : null}
-                  stairs={stairs.byFloor} />
+                  stairs={stairs.byFloor} electric={showElectric ? electricPlan.floors : null} />
               </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
@@ -938,6 +970,7 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
+                  electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                 />
               </div>
               </ErrorBoundary>
@@ -1038,6 +1071,9 @@ export default function App() {
                   </p>
                 )}
               </section>
+
+              <ElectricPanel config={electricCfg} data={electricPlan} floorId={floor.id} sheet={showElectric ? 'electric' : 'arch'}
+                onStart={startElectric} onSheet={setSheet} onChange={changeElectric} onClear={clearElectric} />
 
               <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm} />
 
