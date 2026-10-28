@@ -54,7 +54,7 @@ export async function waitForEngine(base, { signal, onWaiting, maxMs = WAKE_TIME
     if (r.ok) return r.data;
     const waited = Date.now() - start;
     if (waited >= maxMs) {
-      throw new Error(`il motore non risponde da ${Math.round(waited / 1000)} secondi (${r.reason}). Controlla l'URL e lo stato del servizio su Render.`);
+      throw new Error(`il motore ${base} non risponde da ${Math.round(waited / 1000)} secondi (${r.reason}). Controlla l'URL e lo stato del servizio su Render.`);
     }
     onWaiting?.(Math.round(waited / 1000));
     await sleep(RETRY_EVERY_MS, signal);

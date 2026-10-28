@@ -508,7 +508,8 @@ export default function App() {
           <span className="pf-name">Planify</span>
         </div>
         <div className="pf-top-right">
-          <span className={`pf-status is-${engine.status}`} title={engine.version ? `Versione del motore: ${engine.version}` : undefined}>
+          <span className={`pf-status is-${engine.status}`}
+            title={engine.status === 'error' ? engine.reason : engine.version ? `Versione del motore: ${engine.version}` : undefined}>
             <i aria-hidden="true" />
             {{
               off: 'Motore offline (schizzi e DXF funzionano in locale)',
