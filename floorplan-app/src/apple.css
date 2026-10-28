@@ -401,3 +401,8 @@
     background: var(--bg-panel); -webkit-backdrop-filter: none; backdrop-filter: none;
   }
 }
+
+/* Casa su più piani */
+.pf-chip.is-on { background: var(--accent, #1f4fd8); color: #fff; }
+.pf-house-floor { margin-top: 8px; }
+.pf-realign { margin-top: 10px; width: 100%; justify-content: center; gap: 6px; }

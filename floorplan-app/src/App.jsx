@@ -13,6 +13,7 @@ import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import RoomEditor from './components/RoomEditor';
 import LayoutOptions from './components/LayoutOptions';
+import HouseOptions from './components/HouseOptions';
 import HistoryPanel from './components/HistoryPanel';
 import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
@@ -32,7 +33,8 @@ import { buildDxf, parseDxfClientSide } from './lib/dxf';
 import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
-import { projectStairs, stairsFit } from './lib/stairs';
+import { engineStair, neighbourCore, neighbourWet, projectStairs, stairNote, stairsFit } from './lib/stairs';
+import { HOUSE_PRESETS, floorName, houseFloorsRequest, suggestProgram } from './lib/house';
 
 const REQUEST_TIMEOUT_MS = 90000;
 const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
@@ -69,6 +71,29 @@ async function readJson(res) {
   }
 }
 
+/* Richiesta a /generate-plan dai parametri del modulo (o da quelli salvati con un piano). */
+function planBody(f, width, length, seed) {
+  const apartment = f.roomType === 'apartment';
+  return {
+    width: clamp(width, 3.5, 60),
+    length: clamp(length, 3.5, 60),
+    room_type: f.roomType,
+    num_rooms: apartment ? 1 + f.doubles + f.singles : Number(f.rooms),
+    style: f.style,
+    shape: f.shape,
+    seed,
+    ...(apartment && {
+      double_bedrooms: f.doubles,
+      single_bedrooms: f.singles,
+      bathrooms: f.baths === 'auto' ? null : f.baths,
+      kitchen: f.kitchen,
+      peninsula: f.peninsula,
+      needs: { entry: f.entry, suite: f.suite, study: f.study, storage: f.storage, laundry: f.laundry },
+    }),
+    ...(f.roomType === 'garage' && { needs: { laundry: f.garageLaundry, storage: f.garageStorage } }),
+  };
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() =>
     storage.get('planify.theme', window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
@@ -81,6 +106,10 @@ export default function App() {
     doubles: 1, singles: 1, baths: 'auto', kitchen: 'auto', peninsula: false,
     entry: 'auto', suite: false, study: false, storage: false, laundry: false,
     garageLaundry: true, garageStorage: true,
+    // casa su più piani (vedi lib/house.js)
+    house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto',
+    houseGarage: false,
+    floorProgram: 'full',
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [autoSeed, setAutoSeed] = useState(true);
@@ -101,9 +130,15 @@ export default function App() {
   const floorStairs = floor ? stairs.byFloor[floor.id] : undefined;
   const notes = [
     ...(plan?.notes || []),
-    ...(floorStairs || []).map((st) => `Scala ${st.type === 'u' ? 'a U' : 'a rampa unica'} che ${st.role === 'up' ? 'sale a' : 'scende a'} «${st.other}», nella stessa posizione sui due piani.`),
+    ...(floorStairs || []).filter((st) => !st.engine || st.upTo || st.downTo
+      || !stairs.missing.some((m) => m.withStair === floor?.name)).map(stairNote),
     ...stairs.missing.filter((m) => m.lower === floor?.name || m.upper === floor?.name)
-      .map((m) => `Scale tra «${m.lower}» e «${m.upper}»: nessuno spazio libero nella stessa posizione sui due piani. Rigenera uno dei due piani o disegnalo a mano.`),
+      .map((m) => {
+        if (!m.engine) return `Scale tra «${m.lower}» e «${m.upper}»: nessuno spazio libero nella stessa posizione sui due piani. Rigenera uno dei due piani o disegnalo a mano.`;
+        return m.without === floor?.name
+          ? `Questo piano non ha il vano scala di «${m.withStair}» nella stessa posizione: rigeneralo con la scala allineata.`
+          : `Il vano scala non c'è ancora su «${m.without}»: apri quel piano e rigeneralo con la scala allineata.`;
+      }),
   ];
   const [globalView, setGlobalView] = useState(false);
   const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
@@ -191,6 +226,7 @@ export default function App() {
         roomType: form.roomType, rooms: Number(form.rooms), style: form.style, shape: form.shape,
         doubles: form.doubles, singles: form.singles, baths: form.baths, kitchen: form.kitchen, peninsula: form.peninsula,
         entry: form.entry, suite: form.suite, study: form.study, storage: form.storage, laundry: form.laundry,
+        program: meta?.program || 'full', stairType: form.stairType,
       },
       sketch: shapes,
     };
@@ -227,7 +263,15 @@ export default function App() {
     if (mode === 'sketch') {
       setSketch({ shapes: [] });
     } else {
-      if (type) setForm((f) => ({ ...f, roomType: type }));
+      // stesse misure del piano accanto, così muri perimetrali e scala si sovrappongono
+      const near = typeof level === 'number' && current.floors.find((f) =>
+        typeof f.level === 'number' && Math.abs(f.level - level) === 1 && f.plan?.dimensions);
+      setForm((f) => ({
+        ...f,
+        ...(type && { roomType: type }),
+        floorProgram: suggestProgram(current, level),
+        ...(near && { width: near.plan.dimensions.width, length: near.plan.dimensions.length }),
+      }));
       say('Imposta i parametri a sinistra e premi «Genera»');
     }
   };
@@ -285,6 +329,69 @@ export default function App() {
   };
 
   /* ── Generazione dal motore ── */
+  const engineHas = (feature) => engine.features?.includes(feature) ?? false;
+  const hasNeighbour = (level) => typeof level === 'number' && !!current?.floors.some((f) =>
+    typeof f.level === 'number' && Math.abs(f.level - level) === 1 && f.plan);
+
+  /* Progetto nuovo con tutti i piani della casa (risposta di /generate-house). */
+  const openHouse = (res) => {
+    const floors = res.floors.map(({ level, program, plan: p }) => {
+      const spec = form.houseFloors.find((f) => f.level === level) || { level, program };
+      const type = program === 'garage' ? 'garage' : 'apartment';
+      return makeFloor({
+        name: floorName(spec), level, plan: p,
+        meta: { style: form.style, type, program },
+        params: {
+          roomType: type, rooms: Number(form.rooms), style: form.style, shape: 'rect',
+          garageLaundry: form.garageLaundry, garageStorage: form.garageStorage,
+          doubles: p.stats?.bedrooms ?? form.doubles, singles: 0, baths: form.baths, kitchen: form.kitchen,
+          peninsula: form.peninsula, entry: form.entry, suite: form.suite, study: form.study, storage: form.storage,
+          laundry: form.laundry, program, stairType: form.stairType,
+        },
+      });
+    });
+    const ground = floors.find((f) => f.level === 0) || floors[0];
+    history.add({ name: '', floors, activeFloor: ground.id });
+    say(res.notes?.[0] || `Casa su ${floors.length} piani: zona giorno e notte collegate dalla scala`);
+    setGlobalView(false);
+    setSelectedId(null);
+    setHoverId(null);
+    setZoom(null);
+    const d = res.floors[0]?.plan?.dimensions;
+    if (d) setForm((f) => ({ ...f, width: d.width, length: d.length, seed: res.seed }));
+  };
+
+  /*
+   * Rigenera il piano aperto con la scala nello stesso punto del piano accanto (stessi parametri e misure):
+   * serve per i piani creati prima che il piano accanto avesse il vano scala.
+   */
+  const alignType = floor?.params?.roomType || floor?.meta?.type || 'apartment';
+  const alignCore = floor && plan && !engineStair(plan)
+    && (alignType === 'apartment' ? engineHas('stairs') : alignType === 'garage' && engineHas('garage_stairs'))
+    ? neighbourCore(current, floor.level) : null;
+  const realignFloor = async () => {
+    if (!alignCore || !base) return;
+    const params = { ...form, ...floor.params };
+    const program = params.program || (floor.level > 0 ? 'night' : 'full');
+    const body = {
+      ...planBody(params, plan.dimensions.width, plan.dimensions.length, randomSeed()),
+      program, access: floor.level === 0 ? 'both' : 'stairs', shape: 'rect', core: alignCore,
+      ...(engineHas('wet_align') && neighbourWet(current, floor.level) && { wet: neighbourWet(current, floor.level) }),
+    };
+    setError(null);
+    setIsLoading(true);
+    try {
+      const data = await readJson(await postJson(base, '/generate-plan', body));
+      editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, plan: data, params: { ...f.params, program } })));
+      setSelectedId(null);
+      say(`«${floor.name}» rigenerato con la scala allineata`);
+    } catch (err) {
+      setError(`Impossibile rigenerare il piano: ${err.message}.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const run = async ({ variant = false } = {}) => {
     setError(null);
     if (!base) {
@@ -299,6 +406,11 @@ export default function App() {
       return;
     }
     const apartment = form.roomType === 'apartment';
+    const houseMode = apartment && form.house && !pendingFloor && engineHas('house');
+    const stairsHere = apartment && !!pendingFloor && hasNeighbour(pendingFloor.level) && engineHas('stairs');
+    // garage sotto un piano con il vano scala: la scala scende nello stesso punto
+    const garageCore = form.roomType === 'garage' && pendingFloor && engineHas('garage_stairs')
+      ? neighbourCore(current, pendingFloor.level) : null;
     const seedTxt = String(form.seed).trim();
     const fixedSeed = !autoSeed && !variant && /^\d+$/.test(seedTxt);
     const requestSeed = fixedSeed ? Number(seedTxt) : randomSeed();
@@ -318,24 +430,41 @@ export default function App() {
         if (engine.status === 'error' || engine.status === 'waking') engine.retry();
       }
       timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      const body = {
-        width: clamp(w, 3.5, 60),
-        length: clamp(l, 3.5, 60),
-        room_type: form.roomType,
-        num_rooms: apartment ? 1 + form.doubles + form.singles : Number(form.rooms),
-        style: form.style,
-        shape: form.shape,
-        seed: requestSeed,
-        ...(apartment && {
-          double_bedrooms: form.doubles,
-          single_bedrooms: form.singles,
-          bathrooms: form.baths === 'auto' ? null : form.baths,
-          kitchen: form.kitchen,
-          peninsula: form.peninsula,
-          needs: { entry: form.entry, suite: form.suite, study: form.study, storage: form.storage, laundry: form.laundry },
-        }),
-        ...(form.roomType === 'garage' && { needs: { laundry: form.garageLaundry, storage: form.garageStorage } }),
-      };
+      // casa su più piani: tutti i piani in una richiesta, con la scala allineata dal motore
+      if (houseMode) {
+        const req = {
+          width: clamp(w, 3.5, 60), length: clamp(l, 3.5, 60), style: form.style, seed: requestSeed,
+          stair_type: form.stairType, floors: houseFloorsRequest(form),
+        };
+        const house = async () => readJson(await postJson(base, '/generate-house', req, controller.signal));
+        let res;
+        try {
+          res = await house();
+        } catch (err) {
+          if (err.name === 'AbortError' || /^HTTP \d/.test(err.message)) throw err;
+          setSlow(true);
+          await waitForEngine(base, { signal: controller.signal });
+          res = await house();
+        }
+        clearTimeout(timeout);
+        openHouse(res);
+        return;
+      }
+      const body = planBody(form, w, l, requestSeed);
+      // nuovo piano sopra o sotto uno esistente: il motore mette la scala, nello stesso punto del piano accanto
+      const level = pendingFloor && current ? pendingFloor.level : null;
+      const core = stairsHere ? neighbourCore(current, level) : null;
+      if (stairsHere) {
+        Object.assign(body, {
+          program: form.floorProgram,
+          access: level === 0 ? 'both' : 'stairs',
+          stair_type: form.stairType,
+          shape: 'rect',
+          ...(core && { core }),
+          ...(engineHas('wet_align') && neighbourWet(current, level) && { wet: neighbourWet(current, level) }),
+        });
+      }
+      if (garageCore) body.core = garageCore;
       const request = async () => readJson(await postJson(base, '/generate-plan', body, controller.signal));
       let data;
       try {
@@ -347,9 +476,9 @@ export default function App() {
         await waitForEngine(base, { signal: controller.signal });
         data = await request();
       }
-      // nuovo piano sopra o sotto uno esistente: si sceglie una variante in cui le scale si allineano
-      const level = pendingFloor && current ? pendingFloor.level : null;
-      if (typeof level === 'number' && !fixedSeed && !stairsFit(current, level, data)) {
+      // piante senza vano scala (motore vecchio, altri tipi di pianta): si sceglie una variante in cui
+      // c'è posto per la scala nella stessa posizione del piano accanto
+      if (typeof level === 'number' && !fixedSeed && !engineStair(data) && !stairsFit(current, level, data)) {
         for (let round = 0; round < STAIR_ROUNDS; round++) {
           const tries = await Promise.all(Array.from({ length: STAIR_TRIES }, () =>
             postJson(base, '/generate-plan', { ...body, seed: randomSeed() }, controller.signal).then(readJson).catch(() => null)));
@@ -361,7 +490,7 @@ export default function App() {
         }
       }
       clearTimeout(timeout);
-      openNewPlan(data, { type: form.roomType });
+      openNewPlan(data, { type: form.roomType, ...(stairsHere && { program: form.floorProgram }) });
       setForm((f) => ({
         ...f,
         width: data.dimensions?.width ?? f.width,
@@ -624,6 +753,10 @@ export default function App() {
               {form.roomType === 'garden' && (
                 <p className="pf-hint">Giardino con la casa sul lato nord e la strada a sud: recinzione, cancello pedonale e carrabile, siepi, camminamento, gazebo e alberi.</p>
               )}
+              {form.roomType === 'apartment' && engineHas('stairs') && (pendingFloor ? hasNeighbour(pendingFloor.level) : engineHas('house')) && (
+                <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')}
+                  stairFixed={!!pendingFloor && !!neighbourCore(current, pendingFloor.level)} />
+              )}
               {form.roomType === 'apartment' ? (
                 <LayoutOptions form={form} setF={setF} />
               ) : !['hotel-room', 'garage', 'garden'].includes(form.roomType) && (
@@ -709,7 +842,8 @@ export default function App() {
             <div className="pf-action-row">
               <button type="button" className="pf-primary" disabled={isLoading} onClick={() => run()}>
                 {isLoading ? <Loader2 size={17} className="pf-spin" /> : <Sparkles size={17} />}
-                {isLoading ? 'Sto disegnando…' : pendingFloor ? `Genera «${pendingFloor.name}»` : 'Genera planimetria'}
+                {isLoading ? 'Sto disegnando…' : pendingFloor ? `Genera «${pendingFloor.name}»`
+                  : form.house && form.roomType === 'apartment' && engineHas('house') ? `Genera casa su ${form.houseFloors.length + (form.houseGarage && engineHas('garage_stairs') ? 1 : 0)} piani` : 'Genera planimetria'}
               </button>
               <button type="button" className="pf-secondary" disabled={isLoading} onClick={() => run({ variant: true })}
                 title="Nuovo seed e nuova disposizione" aria-label="Nuova variante">
@@ -943,6 +1077,11 @@ export default function App() {
                       <li key={i}><Info size={14} /> <span>{n}</span></li>
                     ))}
                   </ul>
+                  {alignCore && (
+                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignFloor}>
+                      <Shuffle size={15} /> Rigenera questo piano con la scala allineata
+                    </button>
+                  )}
                 </section>
               )}
 

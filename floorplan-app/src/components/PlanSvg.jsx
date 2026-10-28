@@ -554,6 +554,95 @@ function Stair({ st, s }) {
 }
 
 /*
+ * Vano scala del motore: si disegna in un riferimento locale con X = profondità dal lato d'ingresso
+ * (verso il disimpegno) e Y = distanza dal muro della prima rampa (`hand`), così U, L e rampa unica
+ * valgono per ogni orientamento. Sul piano da cui si sale la rampa è tagliata e il resto è tratteggiato.
+ */
+const AXIS = { N: [0, 1], S: [0, -1], W: [1, 0], E: [-1, 0] };
+function EngineStair({ st, s }) {
+  const ns = st.entry === 'N' || st.entry === 'S';
+  const D = (ns ? st.h : st.w) * s;
+  const A = (ns ? st.w : st.h) * s;
+  const ox = (st.entry === 'E' || st.hand === 'E' ? st.x + st.w : st.x) * s;
+  const oy = (st.entry === 'S' || st.hand === 'S' ? st.y + st.h : st.y) * s;
+  const [dx, dy] = AXIS[st.entry];
+  const [ax, ay] = AXIS[st.hand];
+  const t = TREAD * s;
+  const land = LANDING * s;
+  const cut = !!st.upTo;
+  const fw = Math.min(1.0 * s, A / 2);   // larghezza di una rampa
+  const ink = { stroke: '#5b6472', strokeWidth: 0.8 };
+  const dash = (on) => (on ? { strokeDasharray: '3 2.5', strokeOpacity: 0.55 } : {});
+  const across = (x, y0, y1, after) => <line key={`a${x}-${y0}`} x1={x} y1={y0} x2={x} y2={y1} {...ink} {...dash(after)} />;
+  const along = (y, x0, x1, after) => <line key={`b${y}-${x0}`} x1={x0} y1={y} x2={x1} y2={y} {...ink} {...dash(after)} />;
+  const parts = [];
+  let start;   // primo gradino: [x, y]
+  let walk;
+  let end;   // punta della freccia: [x, y, direzione x, direzione y]
+  let zig = null;
+  if (st.type === 'u') {
+    const gap = 0.1 * s;
+    const half = (A - gap) / 2;
+    const x0 = Math.max(0, D - 2.6 * s);
+    const fEnd = D - land;
+    const cutX = x0 + (fEnd - x0) * 0.55;
+    parts.push(<rect key="o" x={x0} y={0} width={D - x0} height={A} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />);
+    parts.push(<rect key="g" x={x0} y={half} width={fEnd - x0} height={gap} fill={INK} />);
+    parts.push(across(fEnd, 0, A, cut));
+    for (let x = x0 + t; x < fEnd - 1; x += t) {
+      parts.push(across(x, 0, half, cut && x > cutX));
+      parts.push(across(x, half + gap, A, cut));
+    }
+    const yb = A - half / 2;
+    start = [x0 + 0.25 * s, half / 2];
+    walk = `M ${x0 + 0.25 * s} ${half / 2} H ${D - land / 2} V ${yb} H ${x0 + 0.35 * s}`;
+    end = [x0 + 0.35 * s, yb, -1, 0];
+    zig = [cutX, half];
+  } else if (st.type === 'l') {
+    const fEnd = D - fw;
+    const x0 = Math.max(0, fEnd - 2.2 * s);
+    const cutX = x0 + (fEnd - x0) * 0.55;
+    parts.push(<path key="o" d={`M ${x0} 0 H ${D} V ${A} H ${fEnd} V ${fw} H ${x0} Z`} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />);
+    parts.push(across(fEnd, 0, fw, cut));
+    for (let x = x0 + t; x < fEnd - 1; x += t) parts.push(across(x, 0, fw, cut && x > cutX));
+    for (let y = fw + t; y < A - 1; y += t) parts.push(along(y, fEnd, D, cut));
+    start = [x0 + 0.25 * s, fw / 2];
+    walk = `M ${x0 + 0.25 * s} ${fw / 2} H ${D - fw / 2} V ${A - 0.2 * s}`;
+    end = [D - fw / 2, A - 0.2 * s, 0, 1];
+    zig = [cutX, fw];
+  } else {
+    const len = Math.min(3.6 * s, D);
+    const x0 = Math.max(0, Math.min(0.3 * s, D - len));
+    const cutX = x0 + len * 0.55;
+    parts.push(<rect key="o" x={x0} y={0} width={len} height={fw} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />);
+    for (let x = x0 + t; x < x0 + len - 1; x += t) parts.push(across(x, 0, fw, cut && x > cutX));
+    start = [x0 + 0.25 * s, fw / 2];
+    walk = `M ${x0 + 0.25 * s} ${fw / 2} H ${x0 + len - 0.2 * s}`;
+    end = [x0 + len - 0.2 * s, fw / 2, 1, 0];
+    zig = [cutX, fw];
+  }
+  const [ex, ey, ux, uy] = end;
+  const head = `M ${ex - 6 * ux + 3.5 * uy} ${ey - 6 * uy - 3.5 * ux} L ${ex} ${ey} L ${ex - 6 * ux - 3.5 * uy} ${ey - 6 * uy + 3.5 * ux}`;
+  const z = 0.16 * s;
+  return (
+    <g transform={`matrix(${dx} ${dy} ${ax} ${ay} ${ox} ${oy})`}>
+      {parts}
+      <path d={walk} fill="none" stroke="#1f4fd8" strokeWidth="1.1" />
+      <circle cx={start[0]} cy={start[1]} r="2.4" fill="#1f4fd8" />
+      <path d={head} fill="none" stroke="#1f4fd8" strokeWidth="1.1" />
+      {cut && (
+        <path d={`M ${zig[0] - z} 0 L ${zig[0]} ${zig[1] * 0.45} L ${zig[0] - z * 0.6} ${zig[1] * 0.55} L ${zig[0] + z * 0.4} ${zig[1]}`}
+          fill="none" stroke={INK} strokeWidth="1.3" />
+      )}
+    </g>
+  );
+}
+
+const stairLabels = (st) => (st.engine
+  ? [st.upTo && `SALE a ${st.upTo}`, st.downTo && `SCENDE a ${st.downTo}`].filter(Boolean)
+  : [`${st.role === 'up' ? 'SALE' : 'SCENDE'} a ${st.other}`]);
+
+/*
  * Giardino: la casa sta sul lato nord, fuori dal lotto. Si disegna come un edificio sopra il giardino,
  * largo quanto il piano terra del progetto se c'è, con l'ingresso dove arriva il camminamento; sotto,
  * oltre la recinzione, la strada.
@@ -631,7 +720,7 @@ function rugsFor(plan) {
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
-  laundry: 'tile', garage: 'concrete', garden: 'lawn',
+  laundry: 'tile', garage: 'concrete', garden: 'lawn', stairs: 'wood',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
 };
 
@@ -661,6 +750,8 @@ const linePath = ({ pts, closed }, s) =>
   `M${pts.map(([x, y]) => `${(x * s).toFixed(2)} ${(y * s).toFixed(2)}`).join('L')}${closed ? 'Z' : ''}`;
 
 function roomLabel(room, s) {
+  if (room.kind === 'stairs') return null;   // il vano scala ha già «SALE a … / SCENDE a …»
+  if (!room.name) return null;                // pezzi senza nome (il box del garage attorno alla scala)
   const sw = room.w * s;
   const sh = room.h * s;
   if (sw < 52 || sh < 34) return null;
@@ -804,14 +895,14 @@ export default function PlanSvg({
         )}
         {stairs?.length > 0 && (
           <g pointerEvents="none">
-            {stairs.map((st) => <Stair key={st.id} st={st} s={s} />)}
-            {!thumb && layers.labels && stairs.map((st) => (
-              <text key={`stl-${st.id}`} x={(st.x + st.w / 2) * s} y={(st.y + st.h / 2) * s + 3} textAnchor="middle"
-                fontSize="9" fontWeight="700" fontFamily={FONT} fill="#1f4fd8"
+            {stairs.map((st) => (st.engine ? <EngineStair key={st.id} st={st} s={s} /> : <Stair key={st.id} st={st} s={s} />))}
+            {!thumb && layers.labels && stairs.flatMap((st) => stairLabels(st).map((txt, i, all) => (
+              <text key={`stl-${st.id}-${i}`} x={(st.x + st.w / 2) * s} y={(st.y + st.h / 2) * s + 3 + (i - (all.length - 1) / 2) * 11}
+                textAnchor="middle" fontSize="9" fontWeight="700" fontFamily={FONT} fill="#1f4fd8"
                 stroke="#fff" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">
-                {st.role === 'up' ? 'SALE' : 'SCENDE'} a {st.other}
+                {txt}
               </text>
-            ))}
+            )))}
           </g>
         )}
 
