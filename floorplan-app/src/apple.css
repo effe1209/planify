@@ -88,3 +88,53 @@
   }
   .pf-app button:active, .pf-dialog button:active, .pf-cookie-banner button:active { transform: none !important; }
 }
+
+/* ── TopBar: barra traslucida con controlli a pillola ──────────────────── */
+.pf-app {
+  background:
+    radial-gradient(1200px 600px at 85% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    var(--bg-canvas);
+}
+.pf-top {
+  position: relative;
+  z-index: 20;
+  height: 56px;
+  padding: 0 16px 0 20px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--hairline);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
+}
+.pf-brand { gap: 10px; }
+.pf-top-right { gap: 6px; }
+.pf-status {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--fill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.pf-status i { width: 7px; height: 7px; }
+.pf-status.is-ok i { box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.18); }
+.pf-top .pf-mini, .pf-top .pf-icon-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.pf-top .pf-mini:hover, .pf-top .pf-icon-btn:hover { background: var(--fill); }
+.pf-top .pf-mini.is-accent { color: var(--accent); }
+.pf-top .pf-icon-btn { padding: 0; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .pf-top { background: var(--bg-panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
