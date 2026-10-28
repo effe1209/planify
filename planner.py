@@ -1623,7 +1623,8 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
                 # la rientranza della sagoma non può rendere il locale inabitabile: resta la superficie
                 # minima per il suo uso e almeno 2,7 m di profondità
                 need = {"bath": 3.5, "study": 7.0, "storage": 2.0}.get(k, MIN_AREA.get((k, size), 9.0))
-                keep = max(2.7 if k != "storage" else 1.5, need / max(0.1, x1 - x0))
+                # +15% sul minimo: la stanza deve anche potersi arredare (letto, armadio, passaggi)
+                keep = max(2.7 if k != "storage" else 1.5, need * 1.15 / max(0.1, x1 - x0))
                 cut = max(0.0, min(notch[2], (y1 - y0) - keep))
                 if side == "N":
                     ya = snap(y0 + cut)
