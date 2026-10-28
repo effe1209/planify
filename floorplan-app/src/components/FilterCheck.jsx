@@ -25,6 +25,12 @@ function checkFilters(plan, params) {
   if (params.kitchen && params.kitchen !== 'auto') {
     rows.push({ label: 'Cucina', want: params.kitchen, got: got.kitchen, text: (v) => KITCHEN[v] });
   }
+  const has = (kind) => plan.rooms.some((r) => r.kind === kind);
+  const yesNo = (v) => (v ? 'presente' : 'assente');
+  if (params.entry === true) rows.push({ label: 'Ingresso separato', want: true, got: has('entry'), text: yesNo });
+  if (params.suite) rows.push({ label: 'Suite padronale', want: true, got: has('closet') || plan.rooms.some((r) => r.name === 'Bagno padronale'), text: yesNo });
+  if (params.study) rows.push({ label: 'Studio', want: true, got: has('study'), text: yesNo });
+  if (params.storage) rows.push({ label: 'Ripostiglio', want: true, got: has('storage'), text: yesNo });
   if (params.peninsula) {
     rows.push({ label: 'Penisola', want: true, got: got.peninsula, text: (v) => (v ? 'presente' : 'assente') });
   }

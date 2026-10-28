@@ -1,0 +1,18 @@
+/*
+ * Temi per stile d'interni: legni, tessuti, tappeti e pavimento cambiano insieme, come in una
+ * palette da progettista. `floor` è il disegno del pavimento nelle zone giorno e notte.
+ */
+export const THEMES = {
+  modern: { wood: '#f2e6d3', woodLine: '#b89d6e', fabric: '#dfe5ee', fabricSoft: '#f3f5f9', fabricArm: '#d3dae6',
+    chair: '#eadfca', duvet: '#dde7f6', cabinet: '#ece7df', rug: '#e6ebf2', rugLine: '#b9c4d4', pot: '#e9e4dc', floor: 'plank', floorInk: '#8a6f3e' },
+  classic: { wood: '#ead6b3', woodLine: '#9c7a45', fabric: '#eadcc6', fabricSoft: '#f7efe2', fabricArm: '#dfcdb0',
+    chair: '#e2cfa9', duvet: '#f1e6d2', cabinet: '#e6d6bd', rug: '#d8bf98', rugLine: '#a8844f', pot: '#d9b99a', floor: 'herringbone', floorInk: '#7a5a2c' },
+  nordic: { wood: '#f6efe2', woodLine: '#c9b48e', fabric: '#e2e8e0', fabricSoft: '#f4f6f2', fabricArm: '#d4ddd2',
+    chair: '#efe6d4', duvet: '#e9efe8', cabinet: '#f1ece2', rug: '#eef0ea', rugLine: '#c4cdbd', pot: '#f0ede6', floor: 'plank', floorInk: '#b49c70' },
+  industrial: { wood: '#d8c4a2', woodLine: '#7d6a4c', fabric: '#cdd2d6', fabricSoft: '#e5e8ea', fabricArm: '#bfc5ca',
+    chair: '#cdbf9f', duvet: '#dfe3e6', cabinet: '#d7d3cc', rug: '#cbc4b8', rugLine: '#8f877a', pot: '#bdb7ae', floor: 'concrete', floorInk: '#55595e' },
+  japandi: { wood: '#eee1c8', woodLine: '#a88f68', fabric: '#e7e1d4', fabricSoft: '#f5f1e8', fabricArm: '#dcd4c3',
+    chair: '#e6d8bc', duvet: '#efe9dc', cabinet: '#ebe2d1', rug: '#e5dbc9', rugLine: '#b9a98d', pot: '#e2d6c2', floor: 'plank', floorInk: '#9c7f52' },
+  luxury: { wood: '#e5d0ac', woodLine: '#8c6b3a', fabric: '#e6dde8', fabricSoft: '#f5f0f6', fabricArm: '#d8cbdc',
+    chair: '#e3d2b2', duvet: '#efe7f0', cabinet: '#e8dcc6', rug: '#e2d4bf', rugLine: '#b49766', pot: '#d9c8a8', floor: 'herringbone', floorInk: '#6e5025' },
+};

@@ -7,7 +7,7 @@ Avvio:   uvicorn main:app --reload
 Debug:   http://127.0.0.1:8000/preview?width=12&length=9&room_type=apartment&num_rooms=4&shape=l&seed=11
 """
 import io
-from typing import Dict, Iterator, List, Literal, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Literal, Optional, Tuple, Union
 
 try:
     import ezdxf
@@ -25,12 +25,13 @@ app = FastAPI(
     title="Planify AI - FloorPlan Engine",
     description="Generatore di planimetrie con sagome varie (rettangolo, L, U, T, scalare), "
                 "stanze, muri, porte, finestre e arredi coerenti.",
-    version="6.0.0",
+    version="7.0.0",
 )
 
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
-FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export"]
+FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
+            "needs", "design_review"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,6 +57,17 @@ class PlanRequest(BaseModel):
     bathrooms: Optional[int] = Field(None, ge=1, le=3, description="Bagni (vuoto = automatico)")
     kitchen: Literal["auto", "open", "closed"] = Field("auto", description="Cucina a vista nel soggiorno o separata")
     peninsula: bool = Field(False, description="Penisola in cucina, se entra")
+    needs: Optional["Needs"] = Field(None, description="Bisogni dell'utente (solo appartamenti)")
+
+
+class Needs(BaseModel):
+    entry: Union[bool, Literal["auto"]] = Field("auto", description="Ingresso separato")
+    suite: bool = Field(False, description="Camera padronale con bagno privato e cabina armadio")
+    study: bool = Field(False, description="Studio / smart working")
+    storage: bool = Field(False, description="Ripostiglio / lavanderia")
+
+
+PlanRequest.model_rebuild()
 
 
 class DxfImportRequest(BaseModel):
@@ -137,6 +149,7 @@ class PlanResponse(BaseModel):
     windows: List[Window]
     furniture: List[FurnitureItem]
     notes: List[str] = []
+    design: Optional[Dict[str, Any]] = None   # valutazione progettuale: punteggio, punti di forza, criticità
 
 
 # --- ENDPOINT ---------------------------------------------------------------
@@ -161,6 +174,7 @@ def generate_floor_plan(request: PlanRequest):
             bathrooms=request.bathrooms,
             kitchen=request.kitchen,
             peninsula=request.peninsula,
+            needs=request.needs.model_dump() if request.needs else None,
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")

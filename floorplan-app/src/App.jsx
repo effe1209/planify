@@ -14,6 +14,7 @@ import RoomEditor from './components/RoomEditor';
 import LayoutOptions from './components/LayoutOptions';
 import HistoryPanel from './components/HistoryPanel';
 import FilterCheck from './components/FilterCheck';
+import DesignReport from './components/DesignReport';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -23,6 +24,7 @@ import { sketchToPlan } from './lib/sketchToPlan';
 import { buildDxf, parseDxfClientSide } from './lib/dxf';
 import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
+import { waitForEngine } from './lib/engine';
 
 const REQUEST_TIMEOUT_MS = 90000;
 const NEXT_FACING = { S: 'W', W: 'N', N: 'E', E: 'S' };
@@ -47,6 +49,16 @@ async function postJson(base, path, body, signal) {
   return res;
 }
 
+/* JSON della risposta; una pagina HTML (es. «Application loading» di Render) dà un errore comprensibile. */
+async function readJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('il server ha risposto con una pagina invece che con la planimetria: è probabilmente ancora in avvio, riprova tra qualche secondo');
+  }
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() =>
     storage.get('planify.theme', window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
@@ -57,6 +69,7 @@ export default function App() {
   const [form, setForm] = useState({
     width: 10, length: 8, roomType: 'apartment', rooms: 3, style: 'modern', shape: 'auto', seed: '',
     doubles: 1, singles: 1, baths: 'auto', kitchen: 'auto', peninsula: false,
+    entry: 'auto', suite: false, study: false, storage: false,
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [autoSeed, setAutoSeed] = useState(true);
@@ -150,6 +163,7 @@ export default function App() {
       params: {
         roomType: form.roomType, rooms: Number(form.rooms), style: form.style, shape: form.shape,
         doubles: form.doubles, singles: form.singles, baths: form.baths, kitchen: form.kitchen, peninsula: form.peninsula,
+        entry: form.entry, suite: form.suite, study: form.study, storage: form.storage,
       },
       ...extra,
     });
@@ -215,10 +229,16 @@ export default function App() {
     const interval = setInterval(() => setLoadingStep((st) => Math.min(st + 1, LOADING_STEPS.length - 1)), 800);
     const slowTimer = setTimeout(() => setSlow(true), 7000);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let timeout = null;
 
     try {
-      const res = await postJson(base, '/generate-plan', {
+      // motore spento (avvio a freddo su Render): si aspetta che riparta invece di fallire subito
+      if (engine.status !== 'ok' && engine.status !== 'old') {
+        await waitForEngine(base, { signal: controller.signal, onWaiting: () => setSlow(true) });
+        if (engine.status === 'error' || engine.status === 'waking') engine.retry();
+      }
+      timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const body = {
         width: clamp(w, 3.5, 60),
         length: clamp(l, 3.5, 60),
         room_type: form.roomType,
@@ -232,9 +252,21 @@ export default function App() {
           bathrooms: form.baths === 'auto' ? null : form.baths,
           kitchen: form.kitchen,
           peninsula: form.peninsula,
+          needs: { entry: form.entry, suite: form.suite, study: form.study, storage: form.storage },
         }),
-      }, controller.signal);
-      const data = await res.json();
+      };
+      const request = async () => readJson(await postJson(base, '/generate-plan', body, controller.signal));
+      let data;
+      try {
+        data = await request();
+      } catch (err) {
+        if (err.name === 'AbortError' || /^HTTP \d/.test(err.message)) throw err;
+        // il motore si è rimesso in pausa mentre la pagina era aperta: si aspetta che riparta e si riprova
+        setSlow(true);
+        await waitForEngine(base, { signal: controller.signal });
+        data = await request();
+      }
+      clearTimeout(timeout);
       openNewPlan(data, { type: form.roomType });
       setForm((f) => ({
         ...f,
@@ -244,8 +276,8 @@ export default function App() {
       }));
     } catch (err) {
       setError(err.name === 'AbortError'
-        ? 'Il backend non ha risposto entro 90 secondi. Riprova: su Render gratuito la prima richiesta può essere lenta.'
-        : `Impossibile contattare il backend (${err.message}).`);
+        ? 'Il motore non ha completato la pianta entro 90 secondi. Riprova.'
+        : `Impossibile generare la pianta: ${err.message}.`);
     } finally {
       clearInterval(interval);
       clearTimeout(slowTimer);
@@ -278,7 +310,7 @@ export default function App() {
       let data = null;
       if (base) {
         try {
-          data = await (await postJson(base, '/import-dxf', { dxf_content: text, style: form.style })).json();
+          data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style }));
         } catch {
           /* motore non raggiungibile: si prosegue in locale */
         }
@@ -386,11 +418,15 @@ export default function App() {
             {{
               off: 'Motore offline (schizzi e DXF funzionano in locale)',
               checking: 'Verifico il motore…',
+              waking: `Motore in avvio… ${engine.seconds || 0} s`,
               ok: `Motore collegato · v${engine.version}`,
               old: `Motore da aggiornare · v${engine.version || '?'}`,
               error: 'Motore non raggiungibile',
             }[engine.status]}
           </span>
+          {engine.status === 'error' && (
+            <button type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</button>
+          )}
           <button type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
             <Cookie size={14} /> Cookie
           </button>
@@ -600,6 +636,7 @@ export default function App() {
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={TYPE_NAME[current.meta?.type] || 'Planimetria'}
+                  style={current.meta?.style}
                 />
               </div>
             ) : (
@@ -624,7 +661,7 @@ export default function App() {
                 <div className="pf-loader">
                   <div className="pf-loader-bar"><i /></div>
                   <strong>{LOADING_STEPS[loadingStep]}</strong>
-                  <span>{slow ? 'Il server si sta avviando: la prima richiesta può richiedere un minuto.' : 'Generazione in corso…'}</span>
+                  <span>{slow ? 'Il motore si sta avviando (servizio gratuito in pausa): di solito serve meno di un minuto.' : 'Generazione in corso…'}</span>
                 </div>
               </div>
             )}
@@ -699,6 +736,8 @@ export default function App() {
                   </p>
                 )}
               </section>
+
+              <DesignReport design={plan.design} />
 
               {current.meta?.type === 'apartment' && current.params?.doubles != null && (
                 <FilterCheck plan={plan} params={current.params} />

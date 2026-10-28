@@ -34,6 +34,8 @@ Il cuore del sistema è un **motore algoritmico in Python puro** (zero dipendenz
   * Supporto nativo per **Tema Chiaro** e **Tema Scuro**.
 * 💾 **Esportazione Avanzata:** Scarica la tua planimetria in formato **SVG** (vettoriale di alta qualità), **PNG** (raster) o **JSON** (dati grezzi della pianta).
 * ✏️ **Schizzo a mano libera:** disegna le stanze a rettangolo o a mano libera (tonde, a ferro di cavallo, oblique): la forma viene rispettata, i bordi si agganciano a griglia e alle stanze vicine e le porte vengono messe solo sui muri in comune, in modo che ogni stanza sia raggiungibile. Funziona anche senza backend.
+* 🛋️ **Progettata come da un interior designer:** il motore genera più varianti e sceglie la migliore per luce naturale (finestre ≥ 1/8 del pavimento), circolazione compatta, proporzioni, privacy (camere raggiungibili senza attraversare il soggiorno) e arredo completo; la pianta mostra il punteggio con punti di forza e cosa migliorare.
+* 🏠 **Costruita sui tuoi bisogni:** camere matrimoniali e singole, bagni, cucina a vista o separata, penisola, ingresso separato, suite padronale con bagno privato e cabina armadio, studio, ripostiglio/lavanderia.
 * ⭐ **Cronologia salvata:** le planimetrie (e le modifiche fatte) restano nella cronologia; con la stella le salvi in modo permanente. Con il consenso, la cronologia resta sul dispositivo tra una visita e l'altra.
 * 🍪 **Privacy:** banner di consenso e informativa su cookie e archiviazione locale; statistiche anonime attive solo su consenso.
 * 🎲 **Riproducibilità:** Grazie al sistema di *Seed*, puoi bloccare una variante che ti piace o generare infinite disposizioni diverse a parità di dimensioni.

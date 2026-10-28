@@ -19,7 +19,7 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
         <div key={e.id} className={`pf-thumb ${currentId === e.id ? 'is-on' : ''}`}>
           <button type="button" className="pf-thumb-open" onClick={() => onOpen(e)}
             title={`${entryTitle(e)} · ${fmtM(e.plan.dimensions.width)} × ${fmtM(e.plan.dimensions.length)} m`}>
-            <PlanSvg plan={e.plan} layers={THUMB_LAYERS} thumb />
+            <PlanSvg plan={e.plan} layers={THUMB_LAYERS} thumb style={e.meta?.style} />
             <span>{entryTitle(e)}</span>
           </button>
           <div className="pf-thumb-actions">
