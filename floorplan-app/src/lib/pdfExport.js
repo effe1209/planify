@@ -1,6 +1,8 @@
 /*
  * «Esporta progetto PDF»: copertina con riepilogo, una pagina per piano (pianta ad alta
- * risoluzione con i dispositivi e la loro legenda) e, in fondo, la distinta materiali Ajax.
+ * risoluzione con i dispositivi e la loro legenda), la tavola elettrica di ogni piano se il progetto
+ * ha l'impianto elettrico, quella idraulica se ha l'impianto idraulico e, in fondo, circuiti, colonne e
+ * distinte (elettrico, idraulico, allarme Ajax).
  * Caricato solo al clic (import dinamico), così jsPDF non pesa sull'avvio dell'app.
  */
 import { createElement } from 'react';
@@ -10,10 +12,12 @@ import { jsPDF } from 'jspdf';
 import PlanSvg from '../components/PlanSvg';
 import { TYPE_NAME } from '../constants';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
+import { APPLIANCES, KIND_ORDER, KINDS, LEVELS, planElectric } from './electric';
+import { GENERATORS, PIPES, PKIND_ORDER, PKINDS, planPlumbing } from './plumbing';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
-import { fmt } from './utils';
+import { fmt, fmtM } from './utils';
 
 const INK = '#14181f';
 const MUTED = '#6b7482';
@@ -201,6 +205,156 @@ async function floorPage(doc, floor, devices, extra) {
   }
 }
 
+/* Tavola elettrica del piano: pianta con i simboli e legenda con le quantità. */
+async function electricPage(doc, floor, fl, level, extra) {
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK);
+  doc.text(safe(`${levelLabel(floor.level)}  ${floor.name} · impianto elettrico`), M, 16);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe(`${LEVELS[level].label} CEI 64-8 · ${fl.points.length} punti · ${fl.circuits.filter((c) => c.key !== 'S').length} circuiti di potenza`), M, 22);
+
+  const legendW = 70;
+  const img = await floorImage(floor, [], { ...extra, electric: fl, electricLinks: extra.electricLinks });
+  const boxW = pw - 2 * M - legendW - 6;
+  const boxH = ph - 28 - 16;
+  const z = Math.min(boxW / img.w, boxH / img.h);
+  doc.addImage(img.data, 'PNG', M, 27, img.w * z, img.h * z, undefined, 'FAST');
+
+  const x = pw - M - legendW;
+  let y = 30;
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(INK).text('Legenda', x, y);
+  y += 6;
+  const counts = new Map();
+  for (const p of fl.points) {
+    const key = p.kind === 'dedicated' ? `dedicated:${p.tag}` : p.kind;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const rows = [...counts].sort((a, b) => KIND_ORDER.indexOf(a[0].split(':')[0]) - KIND_ORDER.indexOf(b[0].split(':')[0]));
+  for (const [key, qty] of rows) {
+    const [kind, tag] = key.split(':');
+    const st = KINDS[kind];
+    doc.setFillColor(st.color).circle(x + 1.6, y - 1.1, 1.4, 'F');
+    const sigla = tag || st.tag;
+    const label = `${sigla ? `${sigla} ` : ''}${st.label}${tag ? ` (${APPLIANCES[tag] || tag})` : ''}`;
+    const lines = doc.setFont('helvetica', 'normal').setFontSize(7.8).splitTextToSize(safe(label), legendW - 14);
+    doc.setTextColor(INK).text(lines, x + 4.5, y);
+    doc.setFont('helvetica', 'bold').text(`×${qty}`, x + legendW, y, { align: 'right' });
+    y += lines.length * 3.4 + 1.6;
+    if (y > ph - 40) break;
+  }
+  if (fl.notes.length) {
+    y += 3;
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(MUTED);
+    for (const n of fl.notes.slice(0, 4)) {
+      const lines = doc.splitTextToSize(safe(n), legendW);
+      doc.text(lines, x, y);
+      y += lines.length * 3.2 + 1.5;
+    }
+  }
+}
+
+/* Quadri e circuiti di ogni piano, poi la distinta dei componenti elettrici. */
+function electricSummary(doc, project, data) {
+  doc.addPage('a4', 'portrait');
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Impianto elettrico: quadri e circuiti', M, 18);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe(`${LEVELS[data.level].label} CEI 64-8 · ${LEVELS[data.level].desc}`), M, 24);
+  let y = 30;
+  for (const f of project.floors) {
+    const fl = data.floors[f.id];
+    if (!fl || !fl.circuits.length) continue;
+    doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(INK).text(safe(`${levelLabel(f.level)}  ${f.name}`), M, y + 4);
+    y = table(doc, y + 7, ['Circuito', 'Protezione', 'Cavo', 'Punti'],
+      fl.circuits.map((c) => [[c.key, c.name], c.prot, c.cable, String(c.points)]), [0.38, 0.36, 0.14, 0.12],
+      { onNewPage: () => doc.addPage('a4', 'portrait') }) + 6;
+  }
+  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(MUTED);
+  const note = doc.splitTextToSize(safe('Generale magnetotermico in base alla potenza del contratto; differenziali 30 mA tipo A '
+    + 'in almeno due gruppi (giorno / notte). Schema indicativo: il progetto esecutivo e la dichiarazione di conformità '
+    + 'spettano a un tecnico abilitato (DM 37/08).'), doc.internal.pageSize.getWidth() - 2 * M);
+  doc.text(note, M, y);
+  y += note.length * 4 + 6;
+  doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(INK).text('Distinta componenti elettrici', M, y);
+  table(doc, y + 4, ['Componente', 'Q.tà'], data.bom.map((b) => [b.label, String(b.qty)]), [0.85, 0.15],
+    { onNewPage: () => doc.addPage('a4', 'portrait') });
+}
+
+/* Tavola idraulica del piano: pianta con tubazioni e simboli, legenda, apparecchi e note. */
+async function plumbingPage(doc, floor, fl, data, extra) {
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK);
+  doc.text(safe(`${levelLabel(floor.level)}  ${floor.name} · impianto idraulico`), M, 16);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  const supply = fl.supply ? ` · dorsale ${fmtM(fl.supply.q)} l/s, multistrato ${fl.supply.pipe}` : '';
+  doc.text(safe(`${fl.fixtures.length} apparecchi${supply} · acqua calda: ${GENERATORS[data.generator].label}`), M, 22);
+
+  const legendW = 70;
+  const img = await floorImage(floor, [], { ...extra, plumbing: fl, generator: data.generator });
+  const boxW = pw - 2 * M - legendW - 6;
+  const boxH = ph - 28 - 16;
+  const z = Math.min(boxW / img.w, boxH / img.h);
+  doc.addImage(img.data, 'PNG', M, 27, img.w * z, img.h * z, undefined, 'FAST');
+
+  const x = pw - M - legendW;
+  let y = 30;
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(INK).text('Legenda', x, y);
+  y += 6;
+  const counts = new Map();
+  for (const p of fl.points) counts.set(p.kind, (counts.get(p.kind) || 0) + 1);
+  for (const [kind, qty] of [...counts].sort((a, b) => PKIND_ORDER.indexOf(a[0]) - PKIND_ORDER.indexOf(b[0]))) {
+    doc.setFillColor(PKINDS[kind].color).circle(x + 1.6, y - 1.1, 1.4, 'F');
+    const label = kind === 'generator' ? GENERATORS[data.generator].label : PKINDS[kind].label;
+    const lines = doc.setFont('helvetica', 'normal').setFontSize(7.8).splitTextToSize(safe(label), legendW - 14);
+    doc.setTextColor(INK).text(lines, x + 4.5, y);
+    doc.setFont('helvetica', 'bold').text(`×${qty}`, x + legendW, y, { align: 'right' });
+    y += lines.length * 3.4 + 1.6;
+  }
+  for (const k of [...new Set(fl.lines.map((l) => l.kind))]) {
+    doc.setDrawColor(PIPES[k].stroke).setLineWidth(0.6).line(x, y - 1.2, x + 3.4, y - 1.2);
+    doc.setFont('helvetica', 'normal').setFontSize(7.8).setTextColor(INK).text(safe(PIPES[k].label), x + 4.5, y);
+    y += 5;
+  }
+  y += 2;
+  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(MUTED);
+  for (const n of fl.notes.slice(0, 5)) {
+    const lines = doc.splitTextToSize(safe(n), legendW);
+    if (y + lines.length * 3.2 > ph - 16) break;
+    doc.text(lines, x, y);
+    y += lines.length * 3.2 + 1.5;
+  }
+}
+
+/* Colonne di scarico, collettori e distinta dell'impianto idraulico. */
+function plumbingSummary(doc, project, data) {
+  doc.addPage('a4', 'portrait');
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Impianto idraulico: colonne e distinta', M, 18);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe(`Acqua calda: ${GENERATORS[data.generator].label} · scarichi: Qww = 0,5 x radice di (somma DU), UNI EN 12056-2`), M, 24);
+  let y = table(doc, 30, ['Colonna', 'Locali serviti', 'Somma DU', 'Portata', 'Diametro'],
+    data.stacks.map((s) => [[s.id, `${s.floors} piani · ${fmtM(s.length)} m`], s.rooms.join(', '), fmtM(s.du), `${fmtM(s.q)} l/s`, `Ø${s.d}`]),
+    [0.16, 0.44, 0.12, 0.14, 0.14], { onNewPage: () => doc.addPage('a4', 'portrait') }) + 6;
+  const floorsRows = project.floors.filter((f) => data.floors[f.id]?.supply).map((f) => {
+    const fl = data.floors[f.id];
+    return [`${levelLabel(f.level)}  ${f.name}`, String(fl.fixtures.length),
+      String(fl.points.find((p) => p.kind === 'manifold')?.outputs || '-'), `${fmtM(fl.supply.q)} l/s`, fl.supply.pipe];
+  });
+  if (floorsRows.length) {
+    y = table(doc, y, ['Piano', 'Apparecchi', 'Uscite collettore', 'Portata dorsale', 'Multistrato'], floorsRows,
+      [0.34, 0.14, 0.18, 0.17, 0.17], { onNewPage: () => doc.addPage('a4', 'portrait') }) + 6;
+  }
+  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(MUTED);
+  const note = doc.splitTextToSize(safe('Colonne con ventilazione primaria prolungata oltre la copertura; scarichi orizzontali '
+    + 'con pendenza 1-2%; pozzetto di ispezione prima dell\'allaccio in fognatura. Schema indicativo: il progetto esecutivo e '
+    + 'la dichiarazione di conformità spettano a un tecnico abilitato (DM 37/08).'), doc.internal.pageSize.getWidth() - 2 * M);
+  doc.text(note, M, y);
+  y += note.length * 4 + 6;
+  doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(INK).text('Distinta componenti idraulici', M, y);
+  table(doc, y + 4, ['Componente', 'Q.tà'], data.bom.map((b) => [b.label, `${fmtM(b.qty)} ${b.unit}`]), [0.82, 0.18],
+    { onNewPage: () => doc.addPage('a4', 'portrait') });
+}
+
 export async function exportProjectPdf(project) {
   const devices = project.security?.devices || [];
   const bom = billOfMaterials(project, devices);
@@ -210,10 +364,24 @@ export async function exportProjectPdf(project) {
   cover(doc, project, devices, bom);
   const { byFloor } = projectStairs(project);
   const house = houseFor(project);
+  const electric = project.electric ? planElectric(project, { level: project.electric.level }) : null;
+  const plumbing = project.plumbing ? planPlumbing(project, { generator: project.plumbing.generator }) : null;
   for (const f of project.floors.filter((x) => x.plan)) {
     doc.addPage('a4', 'landscape');
     await floorPage(doc, f, devices, { stairs: byFloor[f.id], house });
+    const fl = electric?.floors[f.id];
+    if (fl?.points.length) {
+      doc.addPage('a4', 'landscape');
+      await electricPage(doc, f, fl, electric.level, { stairs: byFloor[f.id], house, electricLinks: project.electric.links !== false });
+    }
+    const pl = plumbing?.floors[f.id];
+    if (pl?.points.length) {
+      doc.addPage('a4', 'landscape');
+      await plumbingPage(doc, f, pl, plumbing, { stairs: byFloor[f.id], house, plumbingLines: project.plumbing.lines !== false });
+    }
   }
+  if (electric?.bom.length) electricSummary(doc, project, electric);
+  if (plumbing?.bom.length) plumbingSummary(doc, project, plumbing);
 
   if (bom.length) {
     doc.addPage('a4', 'portrait');
