@@ -6,6 +6,12 @@
  * passaggio o di giorno, lontano dalle porte e con il minimo di arredi da spostare.
  * Scala = { id, x, y, w, h, type: 'straight' | 'u', up: 'N'|'S'|'E'|'W', role: 'up' | 'down', other }
  *   x, y, w, h in metri; `up` è il verso in cui si sale; `other` è il nome del piano collegato.
+ *
+ * Le piante generate dal motore con la scala (plan.stairs) hanno già un vano scala vero, nella stessa
+ * posizione su tutti i piani: allora si usa quello.
+ * Scala del motore = { id, engine: true, x, y, w, h, type: 'u' | 'l' | 'straight', entry, hand, upTo?, downTo? }
+ *   entry = lato da cui si parte e si arriva (verso il disimpegno), hand = muro lungo cui corre la prima rampa,
+ *   upTo / downTo = nome del piano raggiunto salendo / scendendo.
  */
 import { pointInPolygon } from './geometry';
 
@@ -113,6 +119,33 @@ function place(lowerPlan, upperPlan, takenL = [], takenU = []) {
   return { x: r(c.x), y: r(c.y), w: c.w, h: c.h, type: c.t.type, up: ascent(lowerPlan, c) };
 }
 
+/* Vano scala del motore nella pianta (il primo), o null. */
+export const engineStair = (plan) => plan?.stairs?.[0] || null;
+
+/* Da passare al motore (`core`) per generare un piano con la scala nello stesso punto di `plan`. */
+export const stairCore = (plan) => engineStair(plan)?.core || null;
+
+const sameCore = (a, b) => ['x', 'y', 'w', 'h'].every((k) => Math.abs(a[k] - b[k]) < 0.05);
+
+/* La scala del motore di `lower` (o di `upper`) collega i due piani se l'altro ha il vano nello stesso punto. */
+function engineLink(lower, upper) {
+  const a = engineStair(lower.plan);
+  const b = engineStair(upper.plan);
+  if (!a || !b || !sameCore(a.core, b.core)) return null;
+  return a;
+}
+
+function addEngine(byFloor, floor, st, patch) {
+  const list = (byFloor[floor.id] ||= []);
+  let item = list.find((x) => x.engine);
+  if (!item) {
+    item = { id: `st-${floor.id}`, engine: true, x: st.x, y: st.y, w: st.w, h: st.h,
+      type: st.type, entry: st.entry, hand: st.hand };
+    list.push(item);
+  }
+  Object.assign(item, patch);
+}
+
 /*
  * Scale di tutto il progetto: { byFloor: { [floorId]: [scala] }, missing: [{ lower, upper }] }.
  * Si parte dal basso, così le scale già messe su un piano diventano ostacoli per la coppia successiva.
@@ -130,6 +163,18 @@ export function projectStairs(project) {
     if (sorted[i + 1] - sorted[i] !== 1) continue;
     const lower = levels.get(sorted[i]);
     const upper = levels.get(sorted[i + 1]);
+    const linked = engineLink(lower, upper);
+    if (linked) {
+      addEngine(byFloor, lower, linked, { upTo: upper.name });
+      addEngine(byFloor, upper, linked, { downTo: lower.name });
+      continue;
+    }
+    if (engineStair(lower.plan) || engineStair(upper.plan)) {
+      // uno dei due piani ha già il suo vano scala ma l'altro no (o non allineato): va rigenerato quello
+      const [withStair, without] = engineStair(lower.plan) ? [lower, upper] : [upper, lower];
+      missing.push({ lower: lower.name, upper: upper.name, engine: true, withStair: withStair.name, without: without.name });
+      continue;
+    }
     byFloor[lower.id] ||= [];
     byFloor[upper.id] ||= [];
     const s = place(lower.plan, upper.plan, byFloor[lower.id], byFloor[upper.id]);
@@ -140,6 +185,11 @@ export function projectStairs(project) {
     const id = `st-${lower.id}-${upper.id}`;
     byFloor[lower.id].push({ ...s, id, role: 'up', other: upper.name });
     byFloor[upper.id].push({ ...s, id, role: 'down', other: lower.name });
+  }
+  // vano scala del motore senza ancora il piano collegato: si disegna comunque
+  for (const f of project.floors) {
+    const st = engineStair(f.plan);
+    if (st && !byFloor[f.id]?.some((x) => x.engine)) addEngine(byFloor, f, st, {});
   }
   return { byFloor, missing };
 }
@@ -152,7 +202,31 @@ export function stairsFit(project, level, plan) {
   if (!project || typeof level !== 'number') return true;
   return project.floors
     .filter((f) => f.plan && (f.level === level - 1 || f.level === level + 1))
-    .every((f) => (f.level < level ? place(f.plan, plan) : place(plan, f.plan)) !== null);
+    .every((f) => {
+      const [lower, upper] = f.level < level ? [f.plan, plan] : [plan, f.plan];
+      if (engineStair(lower) || engineStair(upper)) return !!engineLink({ plan: lower }, { plan: upper });
+      return place(lower, upper) !== null;
+    });
+}
+
+/* Piano accanto (sopra o sotto `level`) con il vano scala del motore: la sua scala va ripresa. */
+export function neighbourCore(project, level) {
+  if (!project || typeof level !== 'number') return null;
+  const near = project.floors
+    .filter((f) => typeof f.level === 'number' && Math.abs(f.level - level) === 1 && stairCore(f.plan))
+    .sort((a, b) => Math.abs(a.level) - Math.abs(b.level));
+  return near.length ? stairCore(near[0].plan) : null;
+}
+
+/* Descrizione per le note della pianta. */
+export function stairNote(st) {
+  const kind = { u: 'a U', l: 'a L', straight: 'a rampa unica' }[st.type] || '';
+  if (st.engine) {
+    const where = [st.upTo && `sale a «${st.upTo}»`, st.downTo && `scende a «${st.downTo}»`].filter(Boolean).join(' e ');
+    return where ? `Scala ${kind} nel vano accanto al disimpegno: ${where}, nella stessa posizione su tutti i piani.`
+      : `Vano scala ${kind}: genera il piano sopra o sotto per collegarlo.`;
+  }
+  return `Scala ${kind} che ${st.role === 'up' ? 'sale a' : 'scende a'} «${st.other}», nella stessa posizione sui due piani.`;
 }
 
 /* Arredi coperti dalla scala: non si disegnano (la scala ha la precedenza). */

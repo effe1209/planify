@@ -75,6 +75,7 @@ export const ROOM_KINDS = [
   { id: 'study', label: 'Studio', name: 'Studio' },
   { id: 'corridor', label: 'Disimpegno', name: 'Disimpegno' },
   { id: 'entry', label: 'Ingresso', name: 'Ingresso' },
+  { id: 'stairs', label: 'Vano scala', name: 'Scala' },
   { id: 'dining', label: 'Zona pranzo', name: 'Zona Pranzo' },
   { id: 'closet', label: 'Cabina armadio', name: 'Cabina armadio' },
   { id: 'storage', label: 'Ripostiglio', name: 'Ripostiglio' },
