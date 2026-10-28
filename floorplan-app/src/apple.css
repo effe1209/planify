@@ -314,3 +314,90 @@
   box-shadow: var(--shadow-float); transform-origin: top left;
 }
 .pf-floor-menu .pf-tool { min-height: 40px; border-radius: 12px; font-size: 13px; }
+
+/* ── Canvas e contenitori: bento ───────────────────────────────────────── */
+.pf-canvas { margin: 0 12px 12px; border-radius: 26px; background: color-mix(in srgb, var(--card) 45%, transparent); border: 1px solid var(--hairline); }
+.pf-sheet {
+  border-radius: 14px; overflow: hidden;
+  box-shadow: 0 0 0 1px var(--hairline), 0 2px 6px rgba(0, 0, 0, 0.05), 0 18px 48px rgba(0, 0, 0, 0.1);
+}
+.pf-app[data-theme="dark"] .pf-sheet { box-shadow: 0 0 0 1px var(--hairline), 0 18px 48px rgba(0, 0, 0, 0.45); }
+
+/* vista globale: una griglia di riquadri morbidi */
+.pf-overview { gap: 14px; padding: 16px; }
+.pf-overview-cell {
+  gap: 10px; padding: 14px; border-radius: 24px; border: 1px solid var(--hairline); background: var(--card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: transform 320ms var(--ease-out), box-shadow 320ms var(--ease-out), border-color 200ms;
+}
+.pf-overview-cell:hover { border-color: var(--hairline); transform: translateY(-2px); box-shadow: var(--shadow-float); }
+.pf-overview-cell .pf-sheet { border-radius: 12px; }
+.pf-overview-cell > span { font-size: 14px; letter-spacing: -0.01em; }
+
+/* stato vuoto, caricamento e messaggi */
+.pf-empty svg { color: var(--text-muted); opacity: 0.7; }
+.pf-loading { background: color-mix(in srgb, var(--bg-canvas) 40%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.pf-loader {
+  width: 300px; padding: 22px; gap: 10px; border-radius: 24px; border-color: var(--hairline); background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); box-shadow: var(--shadow-float);
+  animation: pf-materialize 420ms var(--ease-out) both;
+}
+.pf-loader strong { font-size: 15px; letter-spacing: -0.015em; }
+.pf-loader span { color: var(--text-muted); font-size: 12.5px; }
+.pf-loader-bar { height: 5px; border-radius: 999px; background: var(--fill); }
+.pf-loader-bar i { border-radius: 999px; }
+.pf-flash {
+  bottom: 22px; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  background: rgba(28, 28, 30, 0.82); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.pf-alert { border-radius: 14px; padding: 12px 14px; }
+
+/* card interne della sidebar */
+.pf-thumb { border-radius: 16px; border-color: var(--hairline); background: var(--fill); transition: transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out); }
+.pf-thumb:hover { border-color: var(--hairline); box-shadow: var(--shadow-float); }
+.pf-thumb.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pf-thumb svg { border-radius: 10px; }
+.pf-thumb-actions .pf-btn-icon { border-radius: 999px; background: var(--glass-strong); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.pf-thumb-actions { transition: opacity 240ms var(--ease-out); }
+.pf-design-score strong { font-size: 28px; font-weight: 700; }
+.pf-furn-row { border-radius: 10px; padding: 6px 8px; border-color: var(--hairline); background: var(--fill); }
+.pf-dev-legend i { border-radius: 999px; }
+.pf-bom table { border-radius: 12px; }
+
+/* barre dello schizzo e pannello di modifica */
+.pf-sketch-bar, .pf-sketch-kinds {
+  background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  border-bottom-color: var(--hairline);
+}
+.pf-sketch-tools { border-radius: 13px; background: var(--fill); border: none; padding: 3px; }
+.pf-sketch-tool { border-radius: 10px; min-height: 32px; }
+.pf-sketch-tool.is-on { background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.pf-sketch-action { border-radius: 12px; min-height: 40px; box-shadow: 0 4px 14px rgba(52, 199, 89, 0.3); }
+.pf-sketch-action:hover { transform: none; }
+.pf-kind-chip { border-radius: 999px; background: var(--fill); border-color: transparent; min-height: 30px; }
+.pf-sketch-panel {
+  border-radius: 20px; padding: 14px; border: none; background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-float); transform-origin: top right;
+}
+.pf-sketch-foot { background: var(--glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-top-color: var(--hairline); }
+
+/* ── Transizioni dei pannelli ──────────────────────────────────────────── */
+.pf-details[open] > *:not(summary), .pf-bom[open] > table { animation: pf-materialize 360ms var(--ease-out) both; }
+.pf-details summary svg { transition: transform 300ms var(--ease-out); }
+.pf-details[open] summary svg { transform: rotate(180deg); }
+.pf-room, .pf-chip, .pf-type-card, .pf-style-card, .pf-shape, .pf-seg button, .pf-floor-tab { transition-timing-function: var(--ease-out); }
+.pf-room-bar b { transition: width 500ms var(--ease-out); }
+.pf-toggle span, .pf-toggle span::after { transition-duration: 320ms; transition-timing-function: var(--ease-out); }
+.pf-dialog[open] { animation-name: pf-materialize; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-details[open] > *:not(summary), .pf-bom[open] > table, .pf-loader { animation-name: pf-fade !important; }
+  .pf-overview-cell:hover { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .pf-floor-menu, .pf-loader, .pf-sketch-panel, .pf-cookie-banner, .pf-group, .pf-sketch-bar, .pf-sketch-kinds {
+    background: var(--bg-panel); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}
