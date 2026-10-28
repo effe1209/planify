@@ -7,6 +7,15 @@
  * trattati come «in avvio» e si riprova, invece di dichiarare il motore irraggiungibile al primo colpo.
  */
 
+/*
+ * Il motore pubblico si chiama passando dal sito stesso: /engine viene inoltrato a Render da vercel.json
+ * (e da vite.config.js in sviluppo). I blocchi annunci come uBlock Origin fermano le chiamate dirette a
+ * *.onrender.com, mentre quelle verso lo stesso dominio del sito passano sempre.
+ */
+export const ENGINE_ORIGIN = 'https://provaplanimetria.onrender.com';
+export const ENGINE_PROXY = '/engine';
+export const requestBase = (base) => (base === ENGINE_ORIGIN ? ENGINE_PROXY : base);
+
 const PING_TIMEOUT_MS = 15000;
 const RETRY_EVERY_MS = 4000;
 export const WAKE_TIMEOUT_MS = 180000;   // dopo un deploy il piano gratuito può superare i 2 minuti
@@ -54,7 +63,8 @@ export async function waitForEngine(base, { signal, onWaiting, maxMs = WAKE_TIME
     if (r.ok) return r.data;
     const waited = Date.now() - start;
     if (waited >= maxMs) {
-      throw new Error(`il motore ${base} non risponde da ${Math.round(waited / 1000)} secondi (${r.reason}). Controlla l'URL e lo stato del servizio su Render.`);
+      const shown = base === ENGINE_PROXY ? `${ENGINE_ORIGIN} (tramite ${ENGINE_PROXY})` : base;
+      throw new Error(`il motore ${shown} non risponde da ${Math.round(waited / 1000)} secondi (${r.reason}). Controlla l'URL e lo stato del servizio su Render.`);
     }
     onWaiting?.(Math.round(waited / 1000));
     await sleep(RETRY_EVERY_MS, signal);
