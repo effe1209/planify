@@ -668,3 +668,22 @@
 .pf-overview-cell:hover { border-color: var(--accent); }
 .pf-overview-cell > span { font-size: 13px; font-weight: 600; }
 .pf-overview-cell > span em { font-style: normal; font-size: 11px; color: var(--text-muted); margin-right: 4px; }
+
+/* ── Allarme Ajax ── */
+.pf-security-actions { display: flex; gap: 6px; align-items: center; margin: 8px 0 10px; }
+.pf-security-actions .pf-btn-add { flex: 1; justify-content: center; }
+.pf-dev-legend { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.pf-dev-legend li { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text); min-width: 0; }
+.pf-dev-legend li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pf-dev-legend li b { color: var(--text-muted); font-weight: 600; }
+.pf-dev-legend i {
+  flex: none; min-width: 26px; height: 18px; padding: 0 4px; border-radius: 9px; color: #fff;
+  font: 700 9px/18px system-ui, sans-serif; font-style: normal; text-align: center;
+}
+.pf-bom { margin-top: 10px; font-size: 11.5px; }
+.pf-bom summary { cursor: pointer; font-weight: 600; font-size: 12px; color: var(--text); }
+.pf-bom table { width: 100%; border-collapse: collapse; margin-top: 6px; table-layout: fixed; }
+.pf-bom th { text-align: left; font-weight: 600; color: var(--text-muted); padding: 4px 4px 4px 0; }
+.pf-bom th:nth-child(2), .pf-bom td:nth-child(2) { width: 34px; text-align: center; }
+.pf-bom td { vertical-align: top; padding: 5px 4px 5px 0; border-top: 1px solid var(--border); color: var(--text); overflow-wrap: anywhere; }
+.pf-bom td small { display: block; color: var(--text-muted); margin-top: 2px; }

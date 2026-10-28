@@ -61,7 +61,10 @@ export function removeFloor(project, floorId) {
   const idx = project.floors.findIndex((f) => f.id === floorId);
   const floors = project.floors.filter((f) => f.id !== floorId);
   const active = project.activeFloor === floorId ? floors[Math.max(0, idx - 1)].id : project.activeFloor;
-  return { ...project, floors, activeFloor: active };
+  const security = project.security && {
+    ...project.security, devices: project.security.devices.filter((d) => d.floor !== floorId),
+  };
+  return { ...project, floors, activeFloor: active, ...(security && { security }) };
 }
 
 export function moveFloor(project, floorId, delta) {

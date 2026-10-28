@@ -4,6 +4,7 @@
  */
 import { useId } from 'react';
 import { SHAPE_NAME } from '../constants';
+import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { sheetBox } from '../lib/sheet';
 import { THEMES } from '../lib/themes';
@@ -581,7 +582,7 @@ function roomLabel(room, s) {
    ──────────────────────────────────────────────────────────────────────────── */
 export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
-  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern',
+  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null,
 }) {
   const uid = useId().replace(/:/g, '');
   const theme = THEMES[style] || THEMES.modern;
@@ -781,6 +782,22 @@ export default function PlanSvg({
             onMouseEnter={() => onHover?.(r.id)} onMouseLeave={() => onHover?.(null)}
             onClick={() => onSelect?.(r.id === selectedId ? null : r.id)} />
         ))}
+
+        {!thumb && layers.alarm !== false && devices?.length > 0 && (
+          <g pointerEvents="none" fontFamily={FONT} fontWeight="700" textAnchor="middle">
+            {devices.map((d) => {
+              const st = DEVICE_STYLE[d.model] || { tag: '?', color: INK };
+              const r = st.tag.length > 2 ? 9.5 : 7.5;
+              return (
+                <g key={d.id} transform={`translate(${d.x * s},${d.y * s})`}>
+                  <title>{`${AJAX_MODELS[d.model]?.name || d.model} — ${d.purpose}`}</title>
+                  <circle r={r} fill={st.color} stroke="#fff" strokeWidth="1.6" />
+                  <text y="2.4" fontSize={st.tag.length > 2 ? 6 : 6.8} fill="#fff">{st.tag}</text>
+                </g>
+              );
+            })}
+          </g>
+        )}
 
         {!thumb && layers.dims && (
           <g fontFamily={FONT}>

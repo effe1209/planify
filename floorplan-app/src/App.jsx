@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, Image as ImageIcon,
-  Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PenTool, Ruler, Scan, Shuffle, Sparkles, Star, Sun, Tag,
+  Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Unlock, Upload, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
@@ -18,6 +18,8 @@ import DesignReport from './components/DesignReport';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloorBar from './components/FloorBar';
 import FloorsOverview from './components/FloorsOverview';
+import SecurityPanel from './components/SecurityPanel';
+import { planSecurity } from './lib/ajax';
 import { activeFloor, addFloor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
@@ -93,7 +95,7 @@ export default function App() {
   const [globalView, setGlobalView] = useState(false);
   const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
 
-  const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false });
+  const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true });
   const [zoom, setZoom] = useState(null);
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -221,6 +223,21 @@ export default function App() {
     // eslint-disable-next-line no-alert
     if (f && window.confirm(`Eliminare il piano «${f.name}»?`)) editProject((p) => removeFloor(p, id));
   };
+
+  /* ── Allarme Ajax: dispositivi di tutto il progetto, ognuno legato al suo piano ── */
+  const devices = current?.security?.devices;
+  const floorDevices = devices?.filter((d) => d.floor === floor?.id);
+  const planAlarm = () => {
+    const security = planSecurity(current);
+    editProject((p) => ({ ...p, security }));
+    setLayers((l) => ({ ...l, alarm: true }));
+    say(`${security.devices.length} dispositivi Ajax posizionati`);
+  };
+  const clearAlarm = () => editProject((p) => {
+    const next = { ...p };
+    delete next.security;
+    return next;
+  });
 
   /* ── Personalizzazione: le modifiche finiscono nella voce di cronologia (e quindi vengono salvate) ── */
   const editPlan = (fn) => current && history.updatePlan(current.id, fn);   // agisce sul piano attivo
@@ -673,6 +690,10 @@ export default function App() {
                   <button key={k} type="button" className={`pf-tool ${layers[k] ? 'is-on' : ''}`} aria-pressed={layers[k]}
                     onClick={() => toggle(k)}><Icon size={15} /> {label}</button>
                 ))}
+              {devices?.length > 0 && (
+                <button type="button" className={`pf-tool ${layers.alarm ? 'is-on' : ''}`} aria-pressed={layers.alarm}
+                  onClick={() => toggle('alarm')}><ShieldCheck size={15} /> Allarme</button>
+              )}
             </div>
 
             <div className="pf-group" role="group" aria-label="Disegno e import">
@@ -730,7 +751,7 @@ export default function App() {
                 onGenerate={generateFromSketch} />
             ) : globalView && current?.floors.length > 1 ? (
               <ErrorBoundary key={`all-${current.id}`}>
-                <FloorsOverview project={current} stage={stage} onOpen={selectFloor} />
+                <FloorsOverview project={current} stage={stage} onOpen={selectFloor} devices={layers.alarm ? devices : null} />
               </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
@@ -739,7 +760,7 @@ export default function App() {
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
-                  style={floor.meta?.style}
+                  style={floor.meta?.style} devices={floorDevices}
                 />
               </div>
               </ErrorBoundary>
@@ -840,6 +861,8 @@ export default function App() {
                   </p>
                 )}
               </section>
+
+              <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm} />
 
               <DesignReport design={plan.design} />
 
