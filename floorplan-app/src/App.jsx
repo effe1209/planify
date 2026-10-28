@@ -21,7 +21,7 @@ import FloorBar from './components/FloorBar';
 import FloorsOverview from './components/FloorsOverview';
 import SecurityPanel from './components/SecurityPanel';
 import { planSecurity } from './lib/ajax';
-import { activeFloor, addFloor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
+import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -32,8 +32,11 @@ import { buildDxf, parseDxfClientSide } from './lib/dxf';
 import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
+import { projectStairs, stairsFit } from './lib/stairs';
 
 const REQUEST_TIMEOUT_MS = 90000;
+const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
+const STAIR_TRIES = 4;      // …da 4 richieste in parallelo
 const NEXT_FACING = { S: 'W', W: 'N', N: 'E', E: 'S' };
 
 async function postJson(base, path, body, signal) {
@@ -93,6 +96,15 @@ export default function App() {
   const current = history.current;              // progetto aperto
   const floor = activeFloor(current);            // piano su cui si lavora
   const plan = floor?.plan || null;
+  // scale tra piani consecutivi: stessa posizione su entrambe le piante (vedi lib/stairs.js)
+  const stairs = projectStairs(current);
+  const floorStairs = floor ? stairs.byFloor[floor.id] : undefined;
+  const notes = [
+    ...(plan?.notes || []),
+    ...(floorStairs || []).map((st) => `Scala ${st.type === 'u' ? 'a U' : 'a rampa unica'} che ${st.role === 'up' ? 'sale a' : 'scende a'} «${st.other}», nella stessa posizione sui due piani.`),
+    ...stairs.missing.filter((m) => m.lower === floor?.name || m.upper === floor?.name)
+      .map((m) => `Scale tra «${m.lower}» e «${m.upper}»: nessuno spazio libero nella stessa posizione sui due piani. Rigenera uno dei due piani o disegnalo a mano.`),
+  ];
   const [globalView, setGlobalView] = useState(false);
   const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
 
@@ -334,6 +346,19 @@ export default function App() {
         setSlow(true);
         await waitForEngine(base, { signal: controller.signal });
         data = await request();
+      }
+      // nuovo piano sopra o sotto uno esistente: si sceglie una variante in cui le scale si allineano
+      const level = pendingFloor && current ? pendingFloor.level : null;
+      if (typeof level === 'number' && !fixedSeed && !stairsFit(current, level, data)) {
+        for (let round = 0; round < STAIR_ROUNDS; round++) {
+          const tries = await Promise.all(Array.from({ length: STAIR_TRIES }, () =>
+            postJson(base, '/generate-plan', { ...body, seed: randomSeed() }, controller.signal).then(readJson).catch(() => null)));
+          const good = tries.find((d) => d && stairsFit(current, level, d));
+          if (good) {
+            data = good;
+            break;
+          }
+        }
       }
       clearTimeout(timeout);
       openNewPlan(data, { type: form.roomType });
@@ -768,7 +793,8 @@ export default function App() {
                 onGenerate={generateFromSketch} />
             ) : globalView && current?.floors.length > 1 ? (
               <ErrorBoundary key={`all-${current.id}`}>
-                <FloorsOverview project={current} stage={stage} onOpen={selectFloor} devices={layers.alarm ? devices : null} />
+                <FloorsOverview project={current} stage={stage} onOpen={selectFloor} devices={layers.alarm ? devices : null}
+                  stairs={stairs.byFloor} />
               </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
@@ -777,7 +803,7 @@ export default function App() {
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
-                  style={floor.meta?.style} devices={floorDevices}
+                  style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
                 />
               </div>
               </ErrorBoundary>
@@ -909,11 +935,11 @@ export default function App() {
                 </ul>
               </section>
 
-              {plan.notes?.length > 0 && (
+              {notes.length > 0 && (
                 <section className="pf-sec">
                   <h2>Note e conformità</h2>
                   <ul className="pf-notes">
-                    {plan.notes.map((n, i) => (
+                    {notes.map((n, i) => (
                       <li key={i}><Info size={14} /> <span>{n}</span></li>
                     ))}
                   </ul>

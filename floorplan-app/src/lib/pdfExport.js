@@ -10,7 +10,8 @@ import { jsPDF } from 'jspdf';
 import PlanSvg from '../components/PlanSvg';
 import { TYPE_NAME } from '../constants';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
-import { levelLabel } from './project';
+import { houseFor, levelLabel } from './project';
+import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
 import { fmt } from './utils';
 
@@ -27,11 +28,11 @@ const safe = (s) => String(s ?? '')
   .replace(/[^\n\x20-\x7e\xa0-\xff]/g, '');
 
 /* Disegna PlanSvg fuori schermo e lo rasterizza in PNG. */
-async function floorImage(floor, devices, k = 3) {
+async function floorImage(floor, devices, extra, k = 3) {
   const host = document.createElement('div');
   const root = createRoot(host);
   flushSync(() => root.render(createElement(PlanSvg, {
-    plan: floor.plan, layers: LAYERS, style: floor.meta?.style, devices,
+    plan: floor.plan, layers: LAYERS, style: floor.meta?.style, devices, ...extra,
     typeLabel: `${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`,
   })));
   const { xml, w, h } = serializeSvg(host.querySelector('svg'));
@@ -167,7 +168,7 @@ function table(doc, y, head, rows, fr, { onNewPage } = {}) {
   return y;
 }
 
-async function floorPage(doc, floor, devices) {
+async function floorPage(doc, floor, devices, extra) {
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   const mine = devices.filter((d) => d.floor === floor.id);
@@ -177,7 +178,7 @@ async function floorPage(doc, floor, devices) {
   doc.text(safe(`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${fmt(grossArea(floor.plan))} m² · ${floor.plan.rooms.length} locali`), M, 22);
 
   const legendW = mine.length ? 62 : 0;
-  const img = await floorImage(floor, mine);
+  const img = await floorImage(floor, mine, extra);
   const boxW = pw - 2 * M - (legendW ? legendW + 6 : 0);
   const boxH = ph - 28 - 16;
   const z = Math.min(boxW / img.w, boxH / img.h);
@@ -207,9 +208,11 @@ export async function exportProjectPdf(project) {
   doc.setProperties({ title: safe(project.name || 'Progetto Planify'), creator: 'Planify' });
 
   cover(doc, project, devices, bom);
+  const { byFloor } = projectStairs(project);
+  const house = houseFor(project);
   for (const f of project.floors.filter((x) => x.plan)) {
     doc.addPage('a4', 'landscape');
-    await floorPage(doc, f, devices);
+    await floorPage(doc, f, devices, { stairs: byFloor[f.id], house });
   }
 
   if (bom.length) {
