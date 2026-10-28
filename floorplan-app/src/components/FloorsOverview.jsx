@@ -5,7 +5,7 @@ import PlanSvg from './PlanSvg';
 const LAYERS = { furniture: true, labels: true, dims: true, grid: false };
 
 /* Vista globale: tutti i piani affiancati, ognuno adattato al suo riquadro. Clic = apri il piano. */
-export default function FloorsOverview({ project, stage, devices, stairs, electric = null, onOpen }) {
+export default function FloorsOverview({ project, stage, devices, stairs, electric = null, plumbing = null, generator, onOpen }) {
   const n = project.floors.length;
   const house = houseFor(project);
   const cols = n <= 2 ? n : n <= 4 ? 2 : 3;
@@ -24,7 +24,7 @@ export default function FloorsOverview({ project, stage, devices, stairs, electr
             <div className="pf-sheet">
               <PlanSvg plan={f.plan} layers={LAYERS} zoom={z} typeLabel={f.name} style={f.meta?.style}
                 devices={devices?.filter((d) => d.floor === f.id)} stairs={stairs?.[f.id]} house={house}
-                electric={electric?.[f.id] || null} />
+                electric={electric?.[f.id] || null} plumbing={plumbing?.[f.id] || null} generator={generator} />
             </div>
           </button>
         );
