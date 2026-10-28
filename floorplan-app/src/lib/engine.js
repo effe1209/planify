@@ -3,13 +3,13 @@
  *
  * Sul piano gratuito di Render il servizio si spegne dopo ~15 minuti di inattività: la prima richiesta
  * riceve una pagina HTML «Application loading» (spesso senza intestazioni CORS, quindi il browser la vede
- * come errore di rete) finché il server non è ripartito, in genere entro un minuto. Questi casi sono
+ * come errore di rete) finché il server non è ripartito, in genere entro un minuto (dopo un deploy anche di più). Questi casi sono
  * trattati come «in avvio» e si riprova, invece di dichiarare il motore irraggiungibile al primo colpo.
  */
 
 const PING_TIMEOUT_MS = 15000;
 const RETRY_EVERY_MS = 4000;
-export const WAKE_TIMEOUT_MS = 120000;
+export const WAKE_TIMEOUT_MS = 180000;   // dopo un deploy il piano gratuito può superare i 2 minuti
 
 /* Una lettura di /health: { ok: true, data } oppure { ok: false, reason }. Lancia solo se `signal` è annullato. */
 export async function pingEngine(base, signal) {

@@ -14,7 +14,7 @@ const KEEP_ALIVE_MS = 10 * 60 * 1000;   // sotto i ~15 minuti dopo cui Render sp
  *   waking   il server si sta avviando (avvio a freddo): si riprova da soli
  *   ok       motore aggiornato: tutti i filtri vengono applicati
  *   old      motore raggiungibile ma vecchio: ignora i filtri che non conosce
- *   error    nessuna risposta dopo ~2 minuti (`reason` dice perché); `retry()` riprova
+ *   error    nessuna risposta dopo ~3 minuti (`reason` dice perché); `retry()` riprova
  */
 export function useEngine(backendUrl) {
   const base = normalizeBaseUrl(backendUrl);
