@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, Image as ImageIcon,
+  AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Unlock, Upload, ZoomIn, ZoomOut,
 } from 'lucide-react';
@@ -453,6 +453,17 @@ export default function App() {
     saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'progetto-planify.json');
   };
 
+  const exportPdf = async () => {
+    if (!current) return;
+    say('Preparazione del PDF del progetto…');
+    try {
+      const { exportProjectPdf } = await import('./lib/pdfExport');
+      await exportProjectPdf(current);
+    } catch (e) {
+      setError(`Esportazione PDF non riuscita: ${e.message}`);
+    }
+  };
+
   const exportDxf = async () => {
     if (!plan) return;
     say('Generazione file CAD in corso…');
@@ -725,6 +736,10 @@ export default function App() {
                 <Briefcase size={15} /> DXF (CAD)
               </button>
               <button type="button" className="pf-tool" disabled={!plan} onClick={exportJson}><FileJson size={15} /> JSON</button>
+              <button type="button" className="pf-tool pf-tool-accent" disabled={!plan} onClick={exportPdf}
+                title="Esporta progetto PDF: copertina, tutti i piani con i sensori e distinta materiali">
+                <FileText size={15} /> PDF progetto
+              </button>
             </div>
           </div>
 
