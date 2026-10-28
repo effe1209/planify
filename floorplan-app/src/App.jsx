@@ -16,6 +16,9 @@ import HistoryPanel from './components/HistoryPanel';
 import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
 import ErrorBoundary from './components/ErrorBoundary';
+import FloorBar from './components/FloorBar';
+import FloorsOverview from './components/FloorsOverview';
+import { activeFloor, addFloor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -84,8 +87,11 @@ export default function App() {
   const consent = useConsent();
   const [cookieDialog, setCookieDialog] = useState(false);
   const history = usePlanHistory(consent.decided ? (consent.allowHistory ? 'on' : 'off') : 'pending');
-  const current = history.current;
-  const plan = current?.plan || null;
+  const current = history.current;              // progetto aperto
+  const floor = activeFloor(current);            // piano su cui si lavora
+  const plan = floor?.plan || null;
+  const [globalView, setGlobalView] = useState(false);
+  const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
 
   const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false });
   const [zoom, setZoom] = useState(null);
@@ -157,25 +163,67 @@ export default function App() {
     flashTimer.current = setTimeout(() => setFlash(''), 1800);
   };
 
-  /* Ogni nuova pianta (generata, disegnata o importata) entra in cronologia e diventa quella aperta. */
+  /*
+   * Ogni nuova pianta (generata, disegnata o importata) diventa un progetto nuovo in cronologia,
+   * oppure un piano in più del progetto aperto se l'utente ha chiesto «+ Piano».
+   */
   const openNewPlan = (newPlan, meta, extra = {}) => {
-    history.add({
+    const { name, sketch: shapes, params } = extra;
+    const data = {
       plan: newPlan,
       meta: { style: form.style, ...meta },
-      params: {
+      params: params || {
         roomType: form.roomType, rooms: Number(form.rooms), style: form.style, shape: form.shape,
         doubles: form.doubles, singles: form.singles, baths: form.baths, kitchen: form.kitchen, peninsula: form.peninsula,
         entry: form.entry, suite: form.suite, study: form.study, storage: form.storage, laundry: form.laundry,
       },
-      ...extra,
-    });
+      sketch: shapes,
+    };
+    if (pendingFloor && current) {
+      history.update(current.id, (p) => addFloor(p, makeFloor({ ...data, name: pendingFloor.name, level: pendingFloor.level })));
+      say(`Piano «${pendingFloor.name}» aggiunto al progetto`);
+      setPendingFloor(null);
+    } else {
+      const first = makeFloor(data);
+      history.add({ name: name || '', floors: [first], activeFloor: first.id });
+    }
+    setGlobalView(false);
     setSelectedId(null);
     setHoverId(null);
     setZoom(null);
   };
 
+  /* ── Piani del progetto ── */
+  const editProject = (fn) => current && history.update(current.id, fn);
+  const selectFloor = (id) => {
+    editProject((p) => ({ ...p, activeFloor: id }));
+    setGlobalView(false);
+    setSelectedId(null);
+    setZoom(null);
+  };
+  const startNewFloor = ({ name, level, type, mode }) => {
+    if (!current) return;
+    if (mode === 'duplicate') {
+      editProject((p) => addFloor(p, makeFloor({ ...floor, name, level, plan: structuredClone(floor.plan) })));
+      say(`Piano «${name}» creato come copia`);
+      return;
+    }
+    setPendingFloor({ name, level });
+    if (mode === 'sketch') {
+      setSketch({ shapes: [] });
+    } else {
+      if (type) setForm((f) => ({ ...f, roomType: type }));
+      say('Imposta i parametri a sinistra e premi «Genera»');
+    }
+  };
+  const deleteFloor = (id) => {
+    const f = current.floors.find((x) => x.id === id);
+    // eslint-disable-next-line no-alert
+    if (f && window.confirm(`Eliminare il piano «${f.name}»?`)) editProject((p) => removeFloor(p, id));
+  };
+
   /* ── Personalizzazione: le modifiche finiscono nella voce di cronologia (e quindi vengono salvate) ── */
-  const editPlan = (fn) => current && history.updatePlan(current.id, fn);
+  const editPlan = (fn) => current && history.updatePlan(current.id, fn);   // agisce sul piano attivo
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
   const editFurniture = (fn) => editPlan((p) => ({ ...p, furniture: fn(p.furniture) }));
@@ -293,7 +341,12 @@ export default function App() {
   const generateFromSketch = (shapes) => {
     try {
       const newPlan = sketchToPlan(shapes, { style: form.style, peninsula: form.peninsula });
-      openNewPlan(newPlan, { type: 'sketch' }, { sketch: shapes, params: { roomType: 'apartment', rooms: shapes.length, style: form.style, shape: 'auto' } });
+      if (sketch?.floorId && current) {
+        // «Modifica schizzo»: si aggiorna lo stesso piano invece di crearne uno nuovo
+        editProject((p) => updateFloor(p, sketch.floorId, (f) => ({ ...f, plan: newPlan, sketch: shapes })));
+      } else {
+        openNewPlan(newPlan, { type: 'sketch' }, { sketch: shapes, params: { roomType: 'apartment', rooms: shapes.length, style: form.style, shape: 'auto' } });
+      }
       setSketch(null);
       say('Planimetria creata dallo schizzo');
     } catch (err) {
@@ -327,15 +380,18 @@ export default function App() {
   };
 
   const restore = (entry) => {
+    const f0 = activeFloor(entry);
     history.setCurrentId(entry.id);
+    setGlobalView(false);
+    setPendingFloor(null);
     setSelectedId(null);
     setZoom(null);
     setForm((f) => ({
       ...f,
-      ...entry.params,
-      width: entry.plan.dimensions.width,
-      length: entry.plan.dimensions.length,
-      seed: entry.plan.seed || '',
+      ...f0.params,
+      width: f0.plan.dimensions.width,
+      length: f0.plan.dimensions.length,
+      seed: f0.plan.seed || '',
     }));
   };
 
@@ -369,8 +425,15 @@ export default function App() {
     img.src = url;
   };
 
+  /* JSON dell'intero progetto: tutti i piani con le loro piante. */
   const exportJson = () => {
-    if (plan) saveBlob(new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' }), 'planimetria.json');
+    if (!current) return;
+    const data = {
+      name: current.name || 'Progetto Planify',
+      floors: current.floors.map((f) => ({ name: f.name, level: f.level, plan: f.plan })),
+      ...(current.security && { security: current.security }),
+    };
+    saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'progetto-planify.json');
   };
 
   const exportDxf = async () => {
@@ -591,7 +654,7 @@ export default function App() {
             <div className="pf-action-row">
               <button type="button" className="pf-primary" disabled={isLoading} onClick={() => run()}>
                 {isLoading ? <Loader2 size={17} className="pf-spin" /> : <Sparkles size={17} />}
-                {isLoading ? 'Sto disegnando…' : 'Genera planimetria'}
+                {isLoading ? 'Sto disegnando…' : pendingFloor ? `Genera «${pendingFloor.name}»` : 'Genera planimetria'}
               </button>
               <button type="button" className="pf-secondary" disabled={isLoading} onClick={() => run({ variant: true })}
                 title="Nuovo seed e nuova disposizione" aria-label="Nuova variante">
@@ -644,17 +707,39 @@ export default function App() {
             </div>
           </div>
 
+          {current && !sketch && (
+            <FloorBar
+              project={current}
+              activeId={floor?.id}
+              globalView={globalView}
+              pending={pendingFloor}
+              onSelect={selectFloor}
+              onRename={(id, name) => editProject((p) => updateFloor(p, id, (f) => ({ ...f, name })))}
+              onMove={(id, d) => editProject((p) => moveFloor(p, id, d))}
+              onRemove={deleteFloor}
+              onAdd={startNewFloor}
+              onCancelAdd={() => setPendingFloor(null)}
+              onToggleGlobal={() => setGlobalView(!globalView)}
+            />
+          )}
+
           <div className="pf-canvas" ref={stageRef}>
             {sketch ? (
-              <SketchBoard initialShapes={sketch.shapes} onClose={() => setSketch(null)} onGenerate={generateFromSketch} />
+              <SketchBoard initialShapes={sketch.shapes}
+                onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
+                onGenerate={generateFromSketch} />
+            ) : globalView && current?.floors.length > 1 ? (
+              <ErrorBoundary key={`all-${current.id}`}>
+                <FloorsOverview project={current} stage={stage} onOpen={selectFloor} />
+              </ErrorBoundary>
             ) : plan ? (
-              <ErrorBoundary key={current.id}>
-              <div className="pf-sheet" key={current.id}>
+              <ErrorBoundary key={`${current.id}-${floor.id}`}>
+              <div className="pf-sheet" key={`${current.id}-${floor.id}`}>
                 <PlanSvg
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
-                  typeLabel={TYPE_NAME[current.meta?.type] || 'Planimetria'}
-                  style={current.meta?.style}
+                  typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
+                  style={floor.meta?.style}
                 />
               </div>
               </ErrorBoundary>
@@ -725,8 +810,8 @@ export default function App() {
                     title="Le planimetrie salvate non vengono mai cancellate dalla cronologia">
                     <Star size={13} fill={current.saved ? 'currentColor' : 'none'} /> {current.saved ? 'Salvata' : 'Salva'}
                   </button>
-                  {current.sketch ? (
-                    <button type="button" className="pf-mini" onClick={() => setSketch({ shapes: current.sketch })}
+                  {floor.sketch ? (
+                    <button type="button" className="pf-mini" onClick={() => setSketch({ shapes: floor.sketch, floorId: floor.id })}
                       title="Riapri lo schizzo per modificarlo">
                       <PencilLine size={13} /> Modifica schizzo
                     </button>
@@ -758,8 +843,8 @@ export default function App() {
 
               <DesignReport design={plan.design} />
 
-              {current.meta?.type === 'apartment' && current.params?.doubles != null && (
-                <FilterCheck plan={plan} params={current.params} />
+              {floor.meta?.type === 'apartment' && floor.params?.doubles != null && (
+                <FilterCheck plan={plan} params={floor.params} />
               )}
 
               <section className="pf-sec">

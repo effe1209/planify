@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { newId, storage } from '../lib/utils';
+import { activeFloor, normalizeProject, updateFloor } from '../lib/project';
 
 /*
- * Cronologia delle planimetrie. Ogni voce: { id, plan, meta, params, sketch?, saved, name, createdAt }.
+ * Cronologia dei progetti. Ogni voce è un progetto multi-piano (vedi lib/project.js):
+ * { id, name, saved, createdAt, activeFloor, floors: [{ id, name, level, plan, meta, params, sketch? }] }.
  *   - le modifiche fatte alla pianta aperta aggiornano la sua voce (niente lavoro perso)
  *   - le voci "salvate" (stella) non vengono mai scartate né cancellate da «Svuota»
  *   - con il consenso, tutto resta su questo dispositivo (localStorage) tra una visita e l'altra
@@ -37,7 +39,7 @@ export function usePlanHistory(storageMode) {
   // se l'utente riaccetta, la cronologia non va persa
   const [entries, setEntries] = useState(() => {
     const stored = storageMode !== 'off' ? storage.getJson(KEY, []) : [];
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored) ? stored.map(normalizeProject) : [];
   });
   const [currentId, setCurrentId] = useState(() => entries[0]?.id ?? null);
 
@@ -48,7 +50,7 @@ export function usePlanHistory(storageMode) {
   }, [entries, enabled, storageMode]);
 
   const add = useCallback((entry) => {
-    const full = { id: newId(), createdAt: new Date().toISOString(), saved: false, name: '', ...entry };
+    const full = normalizeProject({ id: newId(), createdAt: new Date().toISOString(), saved: false, name: '', ...entry });
     setEntries((list) => trim([full, ...list]));
     setCurrentId(full.id);
     return full;
@@ -58,7 +60,11 @@ export function usePlanHistory(storageMode) {
     setEntries((list) => list.map((e) => (e.id === id ? fn(e) : e)));
   }, []);
 
-  const updatePlan = useCallback((id, fn) => update(id, (e) => ({ ...e, plan: fn(e.plan) })), [update]);
+  /* Modifica la pianta del piano attivo del progetto. */
+  const updatePlan = useCallback((id, fn) => update(id, (e) => {
+    const floor = activeFloor(e);
+    return floor ? updateFloor(e, floor.id, (f) => ({ ...f, plan: fn(f.plan) })) : e;
+  }), [update]);
   const toggleSaved = useCallback((id) => update(id, (e) => ({ ...e, saved: !e.saved })), [update]);
   const rename = useCallback((id, name) => update(id, (e) => ({ ...e, name })), [update]);
 
@@ -74,5 +80,5 @@ export function usePlanHistory(storageMode) {
 
   const current = entries.find((e) => e.id === currentId) || null;
 
-  return { entries, current, currentId, setCurrentId, add, updatePlan, toggleSaved, rename, remove, clear };
+  return { entries, current, currentId, setCurrentId, add, update, updatePlan, toggleSaved, rename, remove, clear };
 }
