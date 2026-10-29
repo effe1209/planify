@@ -9,6 +9,8 @@
  *   ripostiglio  FireProtect 2 (+ MotionProtect se dà sull'esterno)
  *   cucina       FireProtect 2
  *   giorno       MotionProtect, CombiProtect se ci sono vetrate ampie
+ *   passaggi     MotionProtect «trappola» nel disimpegno (e nell'ingresso se ampio o senza disimpegno)
+ *   cucina, camere  MotionProtect se hanno aperture verso l'esterno (le camere si escludono di notte)
  *   giardino     MotionCam Outdoor PhOD sugli angoli scoperti + DualCurtain Outdoor lungo la facciata
  *   varchi       porte esterne DoorProtect Plus, finestre DoorProtect Plus, vetrate MotionProtect Curtain
  *   ingresso     KeyPad TouchScreen all'interno, Hub 2 Plus in un locale centrale e protetto, StreetSiren in facciata
@@ -42,7 +44,8 @@ export const DEVICE_STYLE = {
 };
 
 const WIDE_WINDOW = 1.8;            // da qui una finestra è una «vetrata»
-const DAY = new Set(['living', 'living_kitchen', 'dining', 'study', 'hotel_room']);
+const DAY = new Set(['living', 'living_kitchen', 'dining', 'study', 'hotel_room', 'office_open', 'meeting', 'director']);
+const NIGHT = new Set(['bed']);
 const HUB_ROOMS = ['storage', 'closet', 'corridor', 'study'];
 const TALL_GARDEN = new Set(['gazebo', 'tree']);
 
@@ -147,7 +150,16 @@ function planFloor(floor, emit) {
         break;
       case 'kitchen':
         add('fireprotect2_co', r, mid, 'Fumo, calore e CO in cucina');
+        if (ext.length) add('motionprotect', r, watchCorner(r, ext), 'Volumetrico: la cucina ha aperture verso l’esterno');
         break;
+      case 'corridor':
+        add('motionprotect', r, watchCorner(r, ext), 'Volumetrico «trappola» sul passaggio tra zona giorno e notte');
+        break;
+      case 'entry': {
+        const hall = plan.rooms.some((x) => x.kind === 'corridor');
+        if (!hall || r.w * r.h >= 4) add('motionprotect', r, watchCorner(r, ext), 'Volumetrico «trappola» all’ingresso');
+        break;
+      }
       case 'garden':
         planGarden(r, items, add);
         break;
@@ -157,6 +169,8 @@ function planFloor(floor, emit) {
           add(wide ? 'combiprotect' : 'motionprotect', r, watchCorner(r, ext),
             wide ? 'Volumetrico + rottura vetro (vetrate ampie)' : 'Volumetrico della zona giorno');
           if (r.kind === 'living_kitchen') add('fireprotect2_co', r, kitchenSpot(r, items), 'Fumo, calore e CO in zona cottura');
+        } else if (NIGHT.has(r.kind) && ext.length) {
+          add('motionprotect', r, watchCorner(r, ext), 'Volumetrico della camera (escluso con l’inserimento notturno)');
         }
     }
   }
