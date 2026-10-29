@@ -108,7 +108,8 @@ function defaultPlan(style) {
     { kind: 'bed', name: ROOM_KIND_NAME.bed, poly: G.rectPoly(5.5, 0, 4.5, 5) },
     { kind: 'bath', name: ROOM_KIND_NAME.bath, poly: G.rectPoly(5.5, 5, 4.5, 3) },
   ], { style });
-  plan.notes.unshift('Nel file DXF non ci sono polilinee chiuse riconoscibili: ho creato una pianta di esempio.');
+  plan.notes.unshift('Nel file DXF non ci sono contorni dei locali (layer AREE o polilinee chiuse): ho creato una pianta di esempio. '
+    + 'I disegni di studio, con muri a doppia linea, porte e finestre, si ricostruiscono con il motore collegato.');
   return plan;
 }
 
