@@ -66,6 +66,19 @@ def test_side_garage_and_narrow_lot():
     _no_overlaps(plan)
 
 
+def test_street_level_garage_has_the_front_door_on_the_stair():
+    """Garage al piano strada: la casa parte dal primo piano, si entra dal vano scala del garage."""
+    h = planner.generate_house(10, 8, [{"level": 0, "program": "garage"}, {"level": 1, "program": "day"},
+                                       {"level": 2, "program": "night"}], seed=3)
+    assert not h["notes"]
+    garage, first = h["floors"][0]["plan"], h["floors"][1]["plan"]
+    door = [d for d in garage["doors"] if d.get("entrance") and not d.get("kind")]
+    assert len(door) == 1 and door[0]["y"] > 4                     # sulla facciata della basculante
+    assert any(d.get("kind") == "garage" for d in garage["doors"])
+    assert not any(d.get("entrance") for d in first["doors"])      # al primo piano si arriva dalla scala
+    assert garage["stairs"][0]["core"] == first["stairs"][0]["core"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

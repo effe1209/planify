@@ -2251,6 +2251,13 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
         boxes.sort(key=lambda r: (not (front(r) and span(r) >= 1.2), -span(r)))
         if boxes:
             lay.add_door(st.id, boxes[0].id, DOOR_W, 0.5, into=st.id)
+        if needs.get("street"):
+            # garage al piano strada: il vano scala è anche l'ingresso della casa, con la porta verso fuori
+            ext = [x for x in ("S", "E", "W", "N") if x in lay.ext_sides(st)]
+            if ext:
+                lay.add_entrance(st.id, ext[0], DOOR_W, 0.5)
+            else:
+                lay.notes.append("Il vano scala non tocca la facciata: si entra in casa passando dal garage.")
     cars = int(clamp((garage.rect.w - 0.4) // 2.8, 1, 3))
     if rooms and L - strip < 6.4 and cars > 1:
         # box poco profondo: il passaggio verso i servizi sul fondo occupa lo spazio di un posto auto
@@ -3209,13 +3216,20 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         raise ValueError("nessun piano richiesto")
     levels = [f.get("level", 0) for f in floors]
     entry = levels.index(0) if 0 in levels else 0
+    # garage al piano strada: la scala la decide il primo piano abitato, il garage la riceve e ha la porta
+    # pedonale verso la strada; la casa si apre dal vano scala
+    street_garage = floors[entry].get("program") == "garage" and any(f.get("program") != "garage" for f in floors)
+    lead = entry
+    if street_garage:
+        lead = min((i for i, f in enumerate(floors) if f.get("program") != "garage"), key=lambda i: abs(i - entry))
     base = int(seed) if seed is not None else random.randrange(1, 1_000_000)
     many = len(floors) > 1
 
     def one(f: dict, s: int, access: str, core: Optional[dict] = None, wet: Optional[list] = None) -> dict:
         prog = f.get("program") if f.get("program") in HOUSE_PROGRAMS else "full"
         if prog == "garage":
-            return generate(width, length, "garage", style=style, seed=s, needs=f.get("needs"), core=core)
+            needs = {**(f.get("needs") or {}), "street": f.get("level", 0) == 0}
+            return generate(width, length, "garage", style=style, seed=s, needs=needs, core=core)
         return generate(width, length, "apartment", style=style, shape="rect", seed=s,
                         double_bedrooms=f.get("double_bedrooms"), single_bedrooms=f.get("single_bedrooms"),
                         bathrooms=f.get("bathrooms"), kitchen=f.get("kitchen") or "auto",
@@ -3223,28 +3237,32 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
                         program=prog, access=access, stair_type=stair_type, core=core, wet=wet)
 
     # dal piano d'ingresso verso l'esterno: ogni piano ha già generato quello accanto, verso l'ingresso
-    order = sorted((i for i in range(len(floors)) if i != entry), key=lambda i: (abs(i - entry), i))
+    order = sorted((i for i in range(len(floors)) if i != lead), key=lambda i: (abs(i - lead), i))
 
     best = None
     for attempt in range(4):
         s = base + attempt * 7919
-        ground = one(floors[entry], s, "both" if many else "street")
-        plans = {entry: ground}
+        ground = one(floors[lead], s, "stairs" if street_garage else "both" if many else "street")
+        plans = {lead: ground}
         aligned = not many or bool(ground.get("stairs"))
         if aligned and many:
             core = ground["stairs"][0]["core"]
             for i in order:
-                near = plans[i - 1 if i > entry else i + 1]
+                near = plans[i - 1 if i > lead else i + 1]
                 p = one(floors[i], s + 101 * (i + 1), "stairs", core, wet_areas(near))
                 plans[i] = p
                 st = p.get("stairs") or []
                 aligned = aligned and bool(st) and all(abs(st[0]["core"][k] - core[k]) < 1e-3 for k in "xywh")
         score = sum(p["design"]["score"] for p in plans.values()) / len(plans)
-        if best is None or (aligned, score) > (best[0], best[1]):
-            best = (aligned, score, plans, s)
-        if aligned:
+        # garage al piano strada: meglio se la porta di casa è sulla stessa facciata della basculante
+        front = not street_garage or (entry in plans and any(
+            d.get("entrance") and not d.get("kind") and d["rot"] == 0 and d["y"] > length / 2
+            for d in plans[entry]["doors"]))
+        if best is None or (aligned, front, score) > best[:3]:
+            best = (aligned, front, score, plans, s)
+        if aligned and front:
             break
-    aligned, _, plans, s = best
+    aligned, _, _, plans, s = best
     notes = [] if aligned else ["La scala non si allinea su tutti i piani: prova misure più ampie o meno locali."]
     out = []
     for i, f in enumerate(floors):
