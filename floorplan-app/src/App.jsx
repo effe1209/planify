@@ -27,7 +27,9 @@ import SecurityPanel from './components/SecurityPanel';
 import ElectricPanel from './components/ElectricPanel';
 import PlumbingPanel from './components/PlumbingPanel';
 import EstimatePanel from './components/EstimatePanel';
+import SchedulePanel from './components/SchedulePanel';
 import { buildEstimate } from './lib/estimate';
+import { scheduleFor } from './lib/schedule';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
@@ -351,6 +353,7 @@ export default function App() {
 
   /* ── Preventivo indicativo: impostazioni (prezzi, IVA, imprevisti) nel progetto, quantità ricalcolate ── */
   const estimateCfg = current?.estimate || null;
+  const schedule = useMemo(() => (current ? scheduleFor(current) : null), [current]);
   const estimate = useMemo(() => (current && estimateCfg ? buildEstimate(current, estimateCfg) : null), [current, estimateCfg]);
   const startEstimate = () => {
     editProject((p) => ({ ...p, estimate: { prices: {}, vat: 10, contingency: 10 } }));
@@ -1106,7 +1109,7 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
-                  editable={!showElectric && !showPlumbing} selectedItem={selectedItem}
+                  editable={!showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
@@ -1222,6 +1225,8 @@ export default function App() {
 
               <PlumbingPanel config={plumbingCfg} data={plumbingPlan} floorId={floor.id} sheet={showPlumbing ? 'plumbing' : 'arch'}
                 onStart={startPlumbing} onSheet={setSheet} onChange={changePlumbing} onClear={clearPlumbing} />
+
+              <SchedulePanel schedule={schedule} />
 
               <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
                 onClear={clearEstimate} />

@@ -4,7 +4,7 @@
  */
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
-import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
+import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
 import ElectricLayer from './ElectricLayer';
 import { FURNITURE_ART } from '../lib/furnitureArt';
@@ -565,6 +565,67 @@ function Stair({ st, s }) {
   );
 }
 
+/* Quote interne (luce netta tra i muri) di ogni locale rettangolare: larghezza in alto, profondità a sinistra. */
+function InnerDims({ plan, s }) {
+  const t = plan.wallThickness / plan.scale;
+  const { width: W, length: L } = plan.dimensions;
+  const edge = (v, max) => v < 1e-3 || Math.abs(v - max) < 1e-3;
+  return (
+    <g pointerEvents="none" fontFamily={FONT} fontSize="8" fill="#334155">
+      {plan.rooms.filter((r) => !r.poly && r.kind !== 'garden' && r.name).map((r) => {
+        const x0 = r.x + (edge(r.x, W) ? t : t / 2);
+        const y0 = r.y + (edge(r.y, L) ? t : t / 2);
+        const x1 = r.x + r.w - (edge(r.x + r.w, W) ? t : t / 2);
+        const y1 = r.y + r.h - (edge(r.y + r.h, L) ? t : t / 2);
+        const yh = (y0 + 0.22) * s;
+        const xv = (x0 + 0.22) * s;
+        const tick = (x, y, v) => (v ? <line x1={x} y1={y - 3} x2={x} y2={y + 3} /> : <line x1={x - 3} y1={y} x2={x + 3} y2={y} />);
+        return (
+          <g key={r.id}>
+            {x1 - x0 > 1.0 && (
+              <g stroke="#64748b" strokeWidth="0.6">
+                <line x1={x0 * s} y1={yh} x2={x1 * s} y2={yh} />
+                {tick(x0 * s, yh, true)}{tick(x1 * s, yh, true)}
+                <text x={((x0 + x1) / 2) * s} y={yh - 2.5} textAnchor="middle" stroke="#fff" strokeWidth="2.4" paintOrder="stroke">{fmtM(x1 - x0)}</text>
+              </g>
+            )}
+            {y1 - y0 > 1.0 && (
+              <g stroke="#64748b" strokeWidth="0.6">
+                <line x1={xv} y1={y0 * s} x2={xv} y2={y1 * s} />
+                {tick(xv, y0 * s, false)}{tick(xv, y1 * s, false)}
+                <text x={xv - 2.5} y={((y0 + y1) / 2) * s} textAnchor="middle" stroke="#fff" strokeWidth="2.4" paintOrder="stroke"
+                  transform={`rotate(-90 ${xv - 2.5} ${((y0 + y1) / 2) * s})`}>{fmtM(y1 - y0)}</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/* Codici dell'abaco dei serramenti accanto a ogni porta e finestra, dal lato del locale. */
+function OpeningCodes({ plan, s, codes }) {
+  const tag = (key, code, op, depth) => {
+    if (!code) return null;
+    const x = (op.cx + op.nx * (op.t / 2 + depth)) * s;
+    const y = (op.cy + op.ny * (op.t / 2 + depth)) * s;
+    const w = code.length * 5.4 + 6;
+    return (
+      <g key={key} transform={`translate(${x},${y})`}>
+        <rect x={-w / 2} y={-5.5} width={w} height={11} rx={5.5} fill="#fff" stroke="#14181f" strokeWidth="0.8" />
+        <text y="3.3" textAnchor="middle" fontSize="7.4" fontWeight="700" fill="#14181f" fontFamily={FONT}>{code}</text>
+      </g>
+    );
+  };
+  return (
+    <g pointerEvents="none">
+      {plan.doors.map((d, i) => tag(`d${i}`, codes.doors?.[i], opening(plan, d), 0.28))}
+      {plan.windows.map((w, i) => tag(`w${i}`, codes.windows?.[i], opening(plan, w), 0.22))}
+    </g>
+  );
+}
+
 /*
  * Vano scala del motore: si disegna in un riferimento locale con X = profondità dal lato d'ingresso
  * (verso il disimpegno) e Y = distanza dal muro della prima rampa (`hand`), così U, L e rampa unica
@@ -785,7 +846,7 @@ export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
-  editable = false, selectedItem = null, onItemSelect, onItemMove,
+  editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
 }) {
   const uid = useId().replace(/:/g, '');
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
@@ -996,6 +1057,10 @@ export default function PlanSvg({
             </g>
           );
         })}
+
+        {/* vista tecnica: quote interne dei locali e codici dell'abaco su porte e finestre */}
+        {tech && !thumb && layers.dims && <InnerDims plan={plan} s={s} />}
+        {tech && !thumb && codes && <OpeningCodes plan={plan} s={s} codes={codes} />}
 
         {!thumb && layers.labels && plan.rooms.map((r) => {
           const lb = roomLabel(r, s);
