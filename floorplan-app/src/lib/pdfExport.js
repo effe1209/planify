@@ -14,6 +14,7 @@ import { TYPE_NAME } from '../constants';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
 import { APPLIANCES, KIND_ORDER, KINDS, LEVELS, planElectric } from './electric';
 import { GENERATORS, PIPES, PKIND_ORDER, PKINDS, planPlumbing } from './plumbing';
+import { buildEstimate } from './estimate';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
@@ -355,6 +356,30 @@ function plumbingSummary(doc, project, data) {
     { onNewPage: () => doc.addPage('a4', 'portrait') });
 }
 
+/* Preventivo indicativo: voci per categoria, imprevisti, IVA e totale. */
+function estimatePage(doc, data) {
+  doc.addPage('a4', 'portrait');
+  const eur = (v) => `${Math.round(v).toLocaleString('it-IT')} EUR`;
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Preventivo indicativo', M, 18);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe(`Totale ${eur(data.total)} IVA compresa · ${eur(data.perSqm)}/m² su ${fmt(data.area)} m²`), M, 24);
+  const rows = data.byCat.flatMap((c) => [
+    [[c.cat], '', '', eur(c.total)],
+    ...c.rows.map((r) => [r.label, `${fmtM(r.qty)} ${r.unit}`, eur(r.price), eur(r.total)]),
+  ]);
+  let y = table(doc, 30, ['Voce', 'Quantità', 'Prezzo unitario', 'Totale'], rows, [0.55, 0.15, 0.15, 0.15],
+    { onNewPage: () => doc.addPage('a4', 'portrait') }) + 4;
+  y = table(doc, y, ['Riepilogo', '', '', 'Importo'], [
+    ['Lavori', '', '', eur(data.subtotal)],
+    [`Imprevisti ${data.contingency}%`, '', '', eur(data.extra)],
+    [`IVA ${data.vat}%`, '', '', eur(data.tax)],
+    [['Totale'], '', '', eur(data.total)],
+  ], [0.55, 0.15, 0.15, 0.15], { onNewPage: () => doc.addPage('a4', 'portrait') }) + 6;
+  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(MUTED);
+  doc.text(doc.splitTextToSize(safe('Prezzi medi indicativi (fornitura e posa, IVA esclusa) che variano per zona, finiture e impresa. '
+    + 'Esclusi arredi, progettazione, pratiche edilizie e oneri. Ordine di grandezza, non offerta.'), doc.internal.pageSize.getWidth() - 2 * M), M, y);
+}
+
 export async function exportProjectPdf(project) {
   const devices = project.security?.devices || [];
   const bom = billOfMaterials(project, devices);
@@ -382,6 +407,7 @@ export async function exportProjectPdf(project) {
   }
   if (electric?.bom.length) electricSummary(doc, project, electric);
   if (plumbing?.bom.length) plumbingSummary(doc, project, plumbing);
+  if (project.estimate) estimatePage(doc, buildEstimate(project, project.estimate));
 
   if (bom.length) {
     doc.addPage('a4', 'portrait');
