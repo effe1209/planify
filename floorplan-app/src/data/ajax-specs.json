@@ -1,0 +1,234 @@
+{
+  "_meta": {
+    "description": "Specifiche di rilevamento dei dispositivi Ajax per il calcolo della copertura (portata, angoli, montaggio, immunità agli animali). Ogni valore ha la sua fonte ufficiale in 'sources'.",
+    "retrieved": "2026-10-29",
+    "units": "metri, gradi, m/s, kg",
+    "conventions": {
+      "range_m": "portata massima in asse, all'altezza di montaggio consigliata",
+      "h_angle_deg": "apertura orizzontale totale (simmetrica rispetto all'asse)",
+      "h_reach_profile": "[angolo dall'asse in gradi, portata in metri]: la portata cala verso i bordi del ventaglio. Valori letti dal diagramma ufficiale (precisione circa ±0,3 m)",
+      "v_beams_deg": "fasce dei fasci PIR nel piano verticale, in gradi sotto l'orizzontale con il rilevatore montato all'altezza consigliata. Valori letti dal diagramma ufficiale (precisione circa ±0,5°): media di tre diagrammi identici (MotionProtect, MotionCam, CombiProtect) con scarto massimo di 0,4°",
+      "v_angle_deg": "apertura verticale totale dichiarata (rilevatori a tenda)",
+      "seesThroughGlass": "false: il PIR non rileva il movimento dietro il vetro, per cui una vetrata va trattata come ostacolo opaco",
+      "derived": "valori calcolati da noi a partire da quelli ufficiali, non dichiarati da Ajax"
+    }
+  },
+  "families": {
+    "indoor_pir_885": {
+      "note": "Lente da 88,5° comune ai volumetrici interni Ajax: MotionProtect, MotionProtect Plus, MotionCam, MotionCam PhOD e CombiProtect (stesso diagramma verticale nei manuali)",
+      "range_m": 12,
+      "mount_h_m": 2.4,
+      "h_angle_deg": 88.5,
+      "h_reach_profile": [[0, 12.0], [10, 11.9], [16, 11.75], [22, 11.5], [28, 11.15], [34, 10.7], [40, 10.0], [44.25, 9.4]],
+      "v_beams_deg": [[0, 4.1], [7.1, 12.2], [14.9, 20.7], [24.2, 31.8], [36.0, 47.4]],
+      "derived": {
+        "v_angle_deg": 47.4,
+        "blind_under_detector_m": {
+          "floor": 2.2,
+          "body_1_0m": 1.29,
+          "head_1_7m": 0.64,
+          "note": "Distanza orizzontale dal muro sotto la quale il fascio più basso (47,4°) passa sopra il punto indicato: zona cieca sotto il rilevatore montato a 2,4 m"
+        }
+      },
+      "intrusionPath": "perpendicolare all'asse della lente",
+      "notInstall": [
+        "lente colpita dal sole diretto",
+        "di fronte a oggetti con temperatura che cambia rapidamente (stufe, termoconvettori)",
+        "di fronte a oggetti in movimento a temperatura simile al corpo umano",
+        "in zone con forte circolazione d'aria (ventilatori, finestre o porte aperte)",
+        "dove oggetti o strutture ostruiscono la visuale (es. dietro un fiore o una colonna)",
+        "dove strutture in vetro ostruiscono la visuale"
+      ],
+      "seesThroughGlass": false,
+      "sources": {
+        "v_beams_deg": "https://ajax.systems/support/manuals/motionprotect/ (immagine MP_S_View_angles_12), https://ajax.systems/support/manuals/motioncam/ (motioncam_detection_zone_vert), https://ajax.systems/support/manuals/combiprotect/ (combiprotect_8_1_1_en)",
+        "h_reach_profile": "https://ajax.systems/support/manuals/motionprotect/ (immagine MP_S_View_angles_885)",
+        "notInstall": "https://ajax.systems/support/manuals/motionprotect/, https://ajax.systems/support/manuals/motioncam/",
+        "seesThroughGlass": "https://ajax.systems/support/manuals/motionprotect/ («MotionProtect does not register motion behind glass»)"
+      }
+    }
+  },
+  "models": {
+    "motionprotect": {
+      "name": "MotionProtect Jeweller",
+      "family": "indoor_pir_885",
+      "kind": "volumetric",
+      "tech": "PIR",
+      "indoor": true,
+      "range_m": 12,
+      "mount_h_m": 2.4,
+      "h_angle_deg": 88.5,
+      "pet": { "kg": 20, "h_m": 0.5, "bySensitivity": { "high": 0.25, "medium": 0.35, "low": 0.5 } },
+      "speed_mps": [0.3, 2.0],
+      "grade": 2,
+      "envClass": null,
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motionprotect-jeweller/",
+        "pet.bySensitivity": "https://ajax.systems/support/manuals/motionprotect/"
+      }
+    },
+    "motionprotect_plus": {
+      "name": "MotionProtect Plus Jeweller",
+      "family": "indoor_pir_885",
+      "kind": "volumetric",
+      "tech": "PIR + microonde banda K 24 GHz",
+      "indoor": true,
+      "range_m": 12,
+      "mount_h_m": 2.4,
+      "h_angle_deg": 88.5,
+      "pet": { "kg": 20, "h_m": 0.5 },
+      "grade": 2,
+      "envClass": null,
+      "note": "La microonda conferma l'allarme del PIR; la copertura si calcola sul PIR. Il diagramma verticale nel manuale è lo stesso di MotionProtect.",
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motionprotect-plus-jeweller/",
+        "v_beams_deg": "https://ajax.systems/support/manuals/motionprotect-plus/ (immagine MP_S_View_angles_12, identica a MotionProtect)"
+      }
+    },
+    "motioncam": {
+      "name": "MotionCam Jeweller",
+      "family": "indoor_pir_885",
+      "kind": "volumetric",
+      "tech": "PIR + fotocamera",
+      "indoor": true,
+      "range_m": 12,
+      "mount_h_m": 2.4,
+      "h_angle_deg": 88.5,
+      "pet": { "kg": 20, "h_m": 0.5, "bySensitivity": { "high": 0.25, "medium": 0.35, "low": 0.5 } },
+      "speed_mps": [0.3, 2.0],
+      "grade": 2,
+      "envClass": "II",
+      "camera": { "h_angle_deg": null, "v_angle_deg": null, "photo_px": ["640×480", "320×240", "160×120"] },
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motioncam/",
+        "pet.bySensitivity": "https://ajax.systems/support/manuals/motioncam/"
+      }
+    },
+    "motioncam_phod": {
+      "name": "MotionCam (PhOD) Jeweller",
+      "family": "indoor_pir_885",
+      "kind": "volumetric",
+      "tech": "PIR + fotocamera (foto su richiesta)",
+      "indoor": true,
+      "range_m": 12,
+      "mount_h_m": 2.4,
+      "h_angle_deg": 88.5,
+      "pet": { "kg": 20, "h_m": 0.5 },
+      "grade": 2,
+      "envClass": null,
+      "ip": "IP50",
+      "camera": { "h_angle_deg": null, "v_angle_deg": null },
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motioncam-phod/",
+        "v_beams_deg": "https://ajax.systems/support/manuals/motioncam-phod/ (stesse immagini di MotionCam)"
+      }
+    },
+    "combiprotect": {
+      "name": "CombiProtect Jeweller",
+      "family": "indoor_pir_885",
+      "kind": "volumetric",
+      "tech": "PIR + microfono a elettrete (rottura vetri)",
+      "indoor": true,
+      "range_m": 12,
+      "mount_h_m": 2.4,
+      "h_angle_deg": 88.5,
+      "pet": { "kg": 20, "h_m": 0.5 },
+      "grade": 2,
+      "envClass": "II",
+      "glassBreak": { "range_m": [0.3, 9], "h_angle_deg": 180 },
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/combiprotect-jeweller/"
+      }
+    },
+    "glassprotect": {
+      "name": "GlassProtect Jeweller",
+      "kind": "glassbreak",
+      "tech": "microfono a elettrete",
+      "indoor": true,
+      "glassBreak": { "range_m": [0.3, 9], "h_angle_deg": 180 },
+      "grade": 2,
+      "envClass": null,
+      "note": "Non rileva la rottura se il vetro è coperto da pellicola. Copertura acustica: non è bloccata dagli arredi come il PIR.",
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/glassprotect-jeweller/"
+      }
+    },
+    "motionprotect_curtain": {
+      "name": "MotionProtect Curtain Jeweller",
+      "kind": "curtain",
+      "tech": "2 × PIR",
+      "indoor": true,
+      "range_m": 15,
+      "range_correlation_on_m": 8,
+      "rangeNote": "Ajax indica «fino a 6–15 m» (elaborazione di correlazione disattivata) e «fino a 6–8 m» (attivata); il valore dipende dalla sensibilità impostata",
+      "mount_h_m": 2.4,
+      "h_angle_deg": 6,
+      "v_angle_deg": 90,
+      "pet": { "note": "installare a testa in giù per non reagire agli animali" },
+      "speed_mps": [0.3, 2.0],
+      "grade": 2,
+      "envClass": "IV",
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motionprotect-curtain-jeweller/"
+      }
+    },
+    "dualcurtain_outdoor": {
+      "name": "DualCurtain Outdoor Jeweller",
+      "kind": "curtain_dual",
+      "tech": "4 × PIR (due direzioni opposte)",
+      "indoor": false,
+      "range_m": 15,
+      "range_adjust_m": [4, 15],
+      "rangeNote": "4–15 m per ciascun lato, regolabile con i cursori sul retro",
+      "mount_h_m": [0.8, 1.3],
+      "mountNote": "porte, archi e passaggi: 0,8–1,3 m da terra; finestre: 0,5–0,6 m sopra il davanzale",
+      "h_angle_deg": 4.5,
+      "v_angle_deg": 90,
+      "pet": { "h_m": 0.8, "kg": null },
+      "grade": 2,
+      "envClass": "IV",
+      "ip": "IP54",
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/dualcurtain-outdoor/"
+      }
+    },
+    "motioncam_outdoor": {
+      "name": "MotionCam Outdoor Jeweller",
+      "kind": "volumetric_outdoor",
+      "tech": "2 × PIR + fotocamera",
+      "indoor": false,
+      "range_m": 15,
+      "range_adjust_m": [3, 15],
+      "mount_h_m": [0.8, 1.3],
+      "h_angle_deg": 90,
+      "v_angle_deg": null,
+      "pet": { "h_m": 0.8, "kg": null },
+      "grade": 2,
+      "envClass": "IV",
+      "ip": "IP55",
+      "camera": { "h_angle_deg": 105, "v_angle_deg": 50 },
+      "note": "Il catalogo usa la variante PhOD: da verificare che abbia gli stessi dati di rilevamento della Jeweller",
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motioncam-outdoor-jeweller/"
+      }
+    },
+    "motionprotect_outdoor": {
+      "name": "MotionProtect Outdoor Jeweller",
+      "kind": "volumetric_outdoor",
+      "tech": "2 × PIR",
+      "indoor": false,
+      "range_m": 15,
+      "range_adjust_m": [3, 15],
+      "mount_h_m": [0.8, 1.3],
+      "h_angle_deg": 90,
+      "v_angle_deg": null,
+      "pet": { "h_m": 0.8, "kg": null },
+      "grade": 2,
+      "envClass": "IV",
+      "ip": "IP55",
+      "sources": {
+        "specs": "https://ajax.systems/it/products/specs/motionprotect-outdoor-jeweller/"
+      }
+    }
+  }
+}
