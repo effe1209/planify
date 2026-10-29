@@ -343,9 +343,10 @@ function planFloor(project, floor, level, stairRole, main) {
           const fridge = len >= 3 && !points.some((p) => p.tag === 'FR');
           const f0 = fridge ? 0.62 : 0;
           const usable = len - f0;
-          const hob = f0 + usable * (fridge ? 0.3 : 0.18) + 0.3;
-          const sink = f0 + usable * 0.58;
           const sinkW = Math.min(usable * 0.3, 0.8);
+          // posizioni scelte dal motore (f.parts, centri in metri) o quelle standard del disegno
+          const hob = f.parts?.hob ?? f0 + usable * (fridge ? 0.3 : 0.18) + 0.3;
+          const sink = f.parts?.sink != null ? f.parts.sink - sinkW / 2 : f0 + usable * 0.58;
           const at = (lx, kind, extra) => {
             const q = itemPoint(f, lx, 0);
             const p = nearestWall(r, q, 0.6) || { ...q, nx: 0, ny: 0 };

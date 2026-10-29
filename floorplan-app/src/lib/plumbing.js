@@ -116,7 +116,7 @@ function fixturesOf(plan) {
         // come nel disegno del piano di lavoro (PlanSvg): frigo a sinistra se lungo, lavello al 58%
         const f0 = len >= 3 ? 0.62 : 0;
         const usable = len - f0;
-        const sinkX = f0 + usable * 0.58 + Math.min(usable * 0.3, 0.8) / 2;
+        const sinkX = f.parts?.sink ?? f0 + usable * 0.58 + Math.min(usable * 0.3, 0.8) / 2;
         push('kitchen_sink', sinkX, back(f, sinkX, 0.08));
         const dw = Math.min(len - 0.3, sinkX + Math.min(usable * 0.3, 0.8) / 2 + 0.3);
         push('dishwasher', dw, back(f, dw, 0.08));
