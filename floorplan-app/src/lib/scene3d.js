@@ -22,6 +22,12 @@ const SHAPES = {
   hedge: [1.2, 'plant'], fence: [1.0, 'wood'], tree: [3.5, 'plant'], gazebo: [2.5, 'wood'], path: [0.02, 'stone'],
 };
 
+/* Quote da terra (m) del volume di un arredo: [base, sommità]. */
+export function furnitureZ(type) {
+  const [h, , lift = 0] = SHAPES[type] || [0.6];
+  return [lift, lift + h];
+}
+
 const WOOD_FLOORS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study', 'entry', 'corridor', 'closet', 'hotel_room', 'stairs']);
 const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 
