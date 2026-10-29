@@ -428,3 +428,13 @@
 .pf-3d { position: relative; width: 100%; height: min(72vh, 760px); min-height: 360px; border-radius: 14px; overflow: hidden; background: #eef1f5; }
 .pf-3d canvas { display: block; width: 100% !important; height: 100% !important; }
 .pf-3d-hint { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #4b5563; background: rgba(255,255,255,0.8); padding: 3px 8px; border-radius: 8px; pointer-events: none; }
+
+/* Preventivo */
+.pf-total { margin: 4px 0 10px; font-size: 13px; }
+.pf-total b { font-size: 18px; }
+.pf-cat-total { float: right; font-variant-numeric: tabular-nums; }
+.pf-est-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.pf-est-table th { text-align: left; font-weight: 600; padding: 3px 3px; color: var(--text-muted, #6b7482); }
+.pf-est-table td { padding: 3px; border-top: 1px solid var(--border, #e5e7eb); vertical-align: middle; font-variant-numeric: tabular-nums; }
+.pf-est-table td:nth-child(2), .pf-est-table td:nth-child(4) { white-space: nowrap; }
+.pf-price { width: 58px; padding: 2px 4px; font: inherit; border: 1px solid var(--border, #d5dae1); border-radius: 6px; background: transparent; color: inherit; }

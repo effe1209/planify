@@ -26,6 +26,8 @@ import FloorsOverview from './components/FloorsOverview';
 import SecurityPanel from './components/SecurityPanel';
 import ElectricPanel from './components/ElectricPanel';
 import PlumbingPanel from './components/PlumbingPanel';
+import EstimatePanel from './components/EstimatePanel';
+import { buildEstimate } from './lib/estimate';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
@@ -346,6 +348,20 @@ export default function App() {
       return next;
     });
   };
+
+  /* ── Preventivo indicativo: impostazioni (prezzi, IVA, imprevisti) nel progetto, quantità ricalcolate ── */
+  const estimateCfg = current?.estimate || null;
+  const estimate = useMemo(() => (current && estimateCfg ? buildEstimate(current, estimateCfg) : null), [current, estimateCfg]);
+  const startEstimate = () => {
+    editProject((p) => ({ ...p, estimate: { prices: {}, vat: 10, contingency: 10 } }));
+    say('Preventivo calcolato su tutto il progetto');
+  };
+  const changeEstimate = (patch) => editProject((p) => ({ ...p, estimate: { ...p.estimate, ...patch } }));
+  const clearEstimate = () => editProject((p) => {
+    const next = { ...p };
+    delete next.estimate;
+    return next;
+  });
 
   /* ── Personalizzazione: le modifiche finiscono nella voce di cronologia (e quindi vengono salvate) ── */
   // annulla / ripeti: le piante precedenti del piano aperto (si azzera cambiando progetto o piano)
@@ -721,6 +737,7 @@ export default function App() {
       ...(current.security && { security: current.security }),
       ...(current.electric && { electric: current.electric }),
       ...(current.plumbing && { plumbing: current.plumbing }),
+      ...(current.estimate && { estimate: current.estimate }),
     };
     saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'progetto-planify.json');
   };
@@ -1205,6 +1222,9 @@ export default function App() {
 
               <PlumbingPanel config={plumbingCfg} data={plumbingPlan} floorId={floor.id} sheet={showPlumbing ? 'plumbing' : 'arch'}
                 onStart={startPlumbing} onSheet={setSheet} onChange={changePlumbing} onClear={clearPlumbing} />
+
+              <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
+                onClear={clearEstimate} />
 
               <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm} />
 
