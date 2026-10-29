@@ -869,6 +869,18 @@ export default function App() {
     }
   };
 
+  const exportCoverage = async () => {
+    if (!current?.security?.devices?.length) return;
+    say('Preparazione della relazione di copertura…');
+    try {
+      const { exportCoverageReport } = await import('./lib/coverageReport');
+      await exportCoverageReport(current);
+      say('Relazione di copertura esportata');
+    } catch (e) {
+      setError(`Relazione di copertura non riuscita: ${e.message}`);
+    }
+  };
+
   const exportDxf = async () => {
     if (!plan) return;
     say('Generazione file CAD in corso…');
@@ -1377,7 +1389,7 @@ export default function App() {
               {floorDevices?.length > 0 && !showElectric && !showPlumbing && (
                 <CoveragePanel coverage={coverage} shown={!!layers.coverage}
                   onToggle={() => { setLayers((l) => ({ ...l, coverage: !l.coverage, alarm: true })); setCoverHighlight(null); }}
-                  highlight={coverHighlight} onHighlight={setCoverHighlight} />
+                  highlight={coverHighlight} onHighlight={setCoverHighlight} onReport={exportCoverage} />
               )}
 
               <DesignReport design={plan.design} />

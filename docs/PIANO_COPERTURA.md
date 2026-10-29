@@ -112,3 +112,11 @@ Importazione di DXF reali del cliente con muri e aperture, non solo le aree dei 
     - varchi verso l'esterno protetti e non protetti;
     - ipotesi di calcolo.
   - Ogni porta si apre e si chiude nel calcolo con un clic in pianta (`security.doorStates` per piano).
+- **Punto 4 — fatto.** Pulsante «Relazione di copertura (PDF)» nel pannello della copertura (`lib/coverageReport.js`, caricato solo al clic). Contenuto:
+  - copertina con riepilogo per piano, sintesi e metodo;
+  - una tavola di copertura per piano, con zone colorate, codici dei rilevatori (R1, R2…), stato delle porte, legenda e copertura per locale;
+  - tabella dei rilevatori (modello, locale, posizione, direzione, altezza, scopo e avvisi);
+  - copertura per locale con le cause delle zone cieche;
+  - varchi verso l'esterno;
+  - distinta materiali;
+  - ipotesi, fonti ufficiali dei dati e limiti.

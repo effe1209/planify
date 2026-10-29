@@ -845,7 +845,7 @@ function roomLabel(room, s) {
  * Dispositivi Ajax: simbolo con sigla; i sensori hanno anche il ventaglio (apertura reale, 1,2 m) e l'asse.
  * Modificabili: trascinamento del simbolo per spostare, della maniglia sull'asse per ruotare (passi di 5°).
  */
-function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onMove, onRotate, onDrag }) {
+function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onMove, onRotate, onDrag, codes }) {
   const [drag, setDrag] = useState(null);   // { id, mode: 'move' | 'rotate', start, orig, x, y, dir, moved }
   const shown = (d) => (drag?.id === d.id ? { ...d, x: drag.x, y: drag.y, dir: drag.dir } : d);
   const start = (e, d, mode) => {
@@ -922,6 +922,9 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
               onPointerDown={(e) => start(e, d, 'move')} onPointerMove={(e) => move(e, d)} onPointerUp={end}
               onClick={(e) => e.stopPropagation()} />
             <text y="2.4" fontSize={st.tag.length > 2 ? 6 : 6.8} fill="#fff" pointerEvents="none">{st.tag}</text>
+            {codes?.[d.id] && (
+              <text y={r + 9} fontSize="8" fill={INK} stroke="#fff" strokeWidth="2.6" paintOrder="stroke" pointerEvents="none">{codes[d.id]}</text>
+            )}
             {sel && editable && aimed && (
               <circle cx={hx} cy={hy} r="5" fill="#fff" stroke="#1f4fd8" strokeWidth="1.8" style={{ cursor: 'crosshair' }}
                 onPointerDown={(e) => start(e, d, 'rotate')} onPointerMove={(e) => move(e, d)} onPointerUp={end}
@@ -945,7 +948,7 @@ export default function PlanSvg({
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
-  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle,
+  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null,
 }) {
   const uid = useId().replace(/:/g, '');
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
@@ -1243,7 +1246,7 @@ export default function PlanSvg({
         {!electric && !plumbing && !thumb && layers.alarm !== false && devices?.length > 0 && (
           <Devices devices={devices} plan={plan} s={s} selected={selectedDevice} toMeters={toMeters}
             editable={editable && !!onDeviceMove} onSelect={onDeviceSelect} onMove={onDeviceMove} onRotate={onDeviceRotate}
-            onDrag={onDeviceDrag} />
+            onDrag={onDeviceDrag} codes={deviceCodes} />
         )}
 
         {!thumb && layers.dims && (
