@@ -25,6 +25,7 @@ import io
 import math
 import re
 import unicodedata
+from array import array
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
@@ -39,10 +40,13 @@ except ImportError:  # pragma: no cover - ezdxf è nei requisiti
 WALL_RE = re.compile(r"mur|wall|paret|pared|tramez|tampon|struttur|pilastr|sett[io]|a-wal|cls|calcestr|lateriz|tabique", re.I)
 DOOR_RE = re.compile(r"port[ae]|door|a-door|anta|uscio|puert", re.I)
 WINDOW_RE = re.compile(r"finestr|window|serram|infiss|glaz|vetr|a-win|^fin[_ -]|^f\d|ventan|cristal", re.I)
+# fuori pianta in ogni caso (prospetti, sezioni, tetto, cartiglio): prevalgono anche su «porta» e «finestra»
+HARD_IGNORE_RE = re.compile(r"elev|prospett|seccion|section|sezion|detail|detall|dettagl|tetto|techo|roof|cubiert|"
+                            r"cartigl|title|sheet|marco|tarjeta|cajet|viewport|defpoints", re.I)
+# da ignorare, ma una porta o una finestra con questi nomi resta tale (es. «VENTANA DE ESCALERA»)
 IGNORE_RE = re.compile(r"quot|dim|arred|furn|mobil|muebl|campit|hatch|hacth|tratteg|text|test[io]|scritt|assi|axis|grid|griglia|"
-                       r"sanit|eletti?r|electr|idraul|impiant|cartigl|title|viewport|defpoints|esterno|giardin|vegetaz|ombr|"
-                       r"tetto|techo|roof|cubiert|trav[ei]|viga|beam|npt|sheet|marco|tarjeta|cajet|meset|bancon|"
-                       r"elev|prospett|seccion|section|sezion|detail|detall|dettagl|textur|tierra|terreno|matas|plant|"
+                       r"sanit|eletti?r|electr|idraul|impiant|esterno|giardin|vegetaz|ombr|"
+                       r"trav[ei]|viga|beam|npt|meset|bancon|textur|tierra|terreno|matas|plant|"
                        r"agua|varill|baj[oa]|parapet|vuelo|cascaron|perrill|piso\b|pisos|escaler|scal[ae]\b|stair|ringhier|"
                        r"barand|varanda|column|pilar|tuber|pipe|duct|hvac", re.I)
 
@@ -51,6 +55,7 @@ AXIS_TOL = 0.08                 # tratti con assi più vicini di così sono lo s
 PIECE_MIN = 0.2                 # tratti più corti: spallette e incroci, non muri
 OPEN_MIN, OPEN_MAX = 0.45, 4.0  # larghezze plausibili delle aperture (m)
 DEBUG_GRID: list = []          # test: se non vuota riceve la griglia del calcolo
+DOOR_LIKE = 1.05                # varco senza simbolo più largo di così: passaggio, non porta
 END_OPEN_MAX = 2.0              # apertura tra la fine di un muro e il muro perpendicolare
 ANG = math.radians(1.5)         # tolleranza per considerare una linea orizzontale / verticale
 
@@ -84,8 +89,8 @@ def _plain(s: str) -> str:
 # 1-2. lettura e ruoli
 # ----------------------------------------------------------------------------
 def _role(layer: str, block: str) -> str:
-    # prima ciò che non è pianta (prospetti, tetto, impianti, arredi…), poi porte, finestre, muri
-    if IGNORE_RE.search(layer or ""):
+    # prima ciò che non è pianta (prospetti, sezioni, tetto…), poi porte e finestre, poi il resto da ignorare, poi i muri
+    if HARD_IGNORE_RE.search(layer or ""):
         return "ignore"
     for name in (block or "", layer or ""):
         if not name:
@@ -94,7 +99,7 @@ def _role(layer: str, block: str) -> str:
             return "door"
         if WINDOW_RE.search(name):
             return "window"
-    if IGNORE_RE.search(block or ""):
+    if IGNORE_RE.search(layer or "") or IGNORE_RE.search(block or "") or HARD_IGNORE_RE.search(block or ""):
         return "ignore"
     if WALL_RE.search(layer or ""):
         return "wall"
@@ -303,6 +308,39 @@ def _split_infill(pieces):
     return walls, hints
 
 
+def _cut_windows(walls: Dict[float, list], glass):
+    """Finestre disegnate dentro un muro continuo (il vano chiuso da linee sul layer dei muri, il vetro su un
+    layer di finestre): dove le linee del vetro corrono dentro lo spessore del muro, il muro si apre."""
+    for c, ivs in walls.items():
+        spans = []
+        for gc, a, b in glass:
+            for lo, hi, t in ivs:
+                if abs(gc - c) <= t / 2 + 0.03 and min(b, hi) - max(a, lo) >= 0.3:
+                    spans.append([max(a, lo), min(b, hi)])
+        if not spans:
+            continue
+        spans.sort()
+        merged = [spans[0]]
+        for a, b in spans[1:]:
+            if a <= merged[-1][1] + 0.05:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        out = []
+        for lo, hi, t in ivs:
+            cur = lo
+            for a, b in merged:
+                if b <= cur or a >= hi or b - a < OPEN_MIN:
+                    continue
+                if a - cur > 0.02:
+                    out.append([cur, a, t])
+                cur = max(cur, b)
+            if hi - cur > 0.02:
+                out.append([cur, hi, t])
+        walls[c] = out
+    return walls
+
+
 def _merge(pieces):
     """Tratti sullo stesso asse uniti: {asse: [(inizio, fine, spessore)]} ordinati."""
     by: Dict[float, list] = {}
@@ -333,7 +371,8 @@ def _gaps(lines: Dict[float, list], cross: Dict[float, list]):
         t = sum(iv[2] for iv in ivs) / len(ivs)
         for (lo1, hi1, _), (lo2, hi2, _) in zip(ivs, ivs[1:]):
             g0, g1 = hi1, lo2
-            if OPEN_MIN <= g1 - g0 <= OPEN_MAX and not _crossed(cross, c, t, g0, g1):
+            if OPEN_MIN <= g1 - g0 <= OPEN_MAX and not _crossed(cross, c, t, g0, g1) \
+                    and not (_passes(cross, c, g0) and _passes(cross, c, g1)):
                 out.append((c, g0, g1, t))
         # estremi: un muro perpendicolare che taglia l'asse oltre la fine del primo / ultimo tratto
         # (porta vicino a un angolo); si tengono solo se il disegno mostra una porta o una finestra
@@ -344,6 +383,16 @@ def _gaps(lines: Dict[float, list], cross: Dict[float, list]):
                 if OPEN_MIN <= g1 - g0 <= END_OPEN_MAX:
                     out.append((c, g0, g1, t, True))
     return [g if len(g) == 5 else (*g, False) for g in out]
+
+
+def _passes(cross, c, end) -> bool:
+    """All'estremo di un varco passa un muro perpendicolare che prosegue da entrambe le parti dell'asse?
+    Se succede ai due estremi, il «varco» è un corridoio che attraversa la linea dei muri, non un'apertura."""
+    for cc, ivs in cross.items():
+        for lo, hi, tt in ivs:
+            if abs(cc - end) <= tt / 2 + 0.12 and lo <= c - 0.3 and hi >= c + 0.3:
+                return True
+    return False
 
 
 def _crossed(cross, c, t, g0, g1) -> bool:
@@ -419,7 +468,7 @@ class Grid:
     def __init__(self, x0, y0, x1, y1, step):
         self.x0, self.y0, self.step = x0, y0, step
         self.nx, self.ny = int(math.ceil((x1 - x0) / step)) + 1, int(math.ceil((y1 - y0) / step)) + 1
-        self.v = bytearray(self.nx * self.ny)   # 0 libero, 1 muro, 2 esterno, >=3 locale
+        self.v = array("i", bytes(4 * self.nx * self.ny))   # 0 libero, 1 muro, 2 esterno, >=3 locale
 
     def ij(self, x, y):
         return int((x - self.x0) / self.step), int((y - self.y0) / self.step)
@@ -606,6 +655,8 @@ def import_real_dxf(text: str, Layout, Opening, snap):
         segs = [sg for sg in segs if inside(sg[0], sg[1]) or inside(sg[2], sg[3])]
         others = [g for g in groups[1:] if g["names"] >= 2 or g["pieces"] >= groups[0]["pieces"] * 0.4]
     hwalls, vwalls = _merge(hp), _merge(vp)     # asse → tratti [inizio, fine, spessore]
+    whs, wvs, _ = _axis_segments([sg for sg in segs if sg[4] == "window"], k, {"window"})
+    hwalls, vwalls = _cut_windows(hwalls, whs), _cut_windows(vwalls, wvs)
 
     # linee lunghe sul layer dei muri rimaste senza coppia (muri a linea singola, recinzioni, l'altra faccia
     # su un layer di travi…): non diventano muri della pianta, ma separano i locali dall'esterno
@@ -657,8 +708,12 @@ def import_real_dxf(text: str, Layout, Opening, snap):
     for orient, g in [("h", g) for g in _gaps(hwalls, vcross)] + [("v", g) for g in _gaps(vwalls, hcross)]:
         c, g0, g1, t, at_end = g
         all_gaps.append((orient, (c, g0, g1, t)))
-        if at_end and _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, False)[0] == "passage":
-            continue   # fine di un muro dentro un locale, non un vano
+        # senza un indizio (arco, blocco, vetro) chiude i locali solo un varco tra due tratti largo come una porta
+        # (spesso il simbolo c'è ma non si aggancia); la fine di un muro dentro un locale o un passaggio più largo
+        # (un corridoio che attraversa) restano aperti. Se poi l'esterno entra da lì, li chiude la seconda passata.
+        if (at_end or g1 - g0 > DOOR_LIKE) and \
+                _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, False)[0] == "passage":
+            continue
         gaps.append((orient, (c, g0, g1, t)))
 
     # griglia: muri e aperture chiusi, esterno dal bordo, zone libere rimaste = locali
@@ -690,7 +745,7 @@ def import_real_dxf(text: str, Layout, Opening, snap):
         for j in range(grid.ny):
             for i in range(grid.nx):
                 if grid.v[j * grid.nx + i] == 0:
-                    cells = grid.flood([(i, j)], label if label < 255 else 254)
+                    cells = grid.flood([(i, j)], label)
                     if len(cells) * step * step >= 1.0:
                         comps.append(cells)
                     label += 1
@@ -705,20 +760,42 @@ def import_real_dxf(text: str, Layout, Opening, snap):
     leaked = [p for p in named if grid.v[grid.ij(*p)[1] * grid.nx + grid.ij(*p)[0]] == 2]
     if leaked and len(all_gaps) > len(gaps):
         before = grid
+
+        def keep_indoor(grid, comps2):
+            """Zone da tenere: con un nome, già interne nella prima passata, o dentro l'ingombro dei locali con
+            un nome; le altre sono giardino (tra casa e recinzione). Restituisce anche le etichette scartate."""
+            name_cells = {grid.ij(*p) for p in named}
+            with_name = [c for c in comps2 if any(cell in name_cells for cell in c)]
+            ci = [i for c in with_name for i, _ in c]
+            cj = [j for c in with_name for _, j in c]
+            pad = int(0.3 / step)
+            box = (min(ci) - pad, min(cj) - pad, max(ci) + pad, max(cj) + pad) if ci else None
+
+            def indoor(c):
+                if c in with_name or not any(before.v[j * before.nx + i] == 2 for i, j in c[:: max(1, len(c) // 200)]):
+                    return True
+                return box is not None and all(box[0] <= i <= box[2] and box[1] <= j <= box[3] for i, j in c)
+            kept = [c for c in comps2 if indoor(c)]
+            dropped = {grid.v[c[0][1] * grid.nx + c[0][0]] for c in comps2 if not indoor(c)}
+            return kept, dropped
+
         grid, comps2 = partition(all_gaps)
-        name_cells = {grid.ij(*p) for p in named}
-        with_name = [c for c in comps2 if any(cell in name_cells for cell in c)]
-        # ingombro dei locali con un nome: le zone senza nome che ne escono sono giardino (tra casa e recinzione)
-        ci = [i for c in with_name for i, _ in c]
-        cj = [j for c in with_name for _, j in c]
-        pad = int(0.3 / step)
-        box = (min(ci) - pad, min(cj) - pad, max(ci) + pad, max(cj) + pad) if ci else None
-        def indoor(c):
-            if c in with_name or not any(before.v[j * before.nx + i] == 2 for i, j in c[:: max(1, len(c) // 200)]):
-                return True
-            return box is not None and all(box[0] <= i <= box[2] and box[1] <= j <= box[3] for i, j in c)
-        comps = [c for c in comps2 if indoor(c)]
-        gaps = all_gaps
+        comps, dropped = keep_indoor(grid, comps2)
+        # le chiusure in più servono solo dove separano un locale dall'esterno o dal giardino: le altre (es. un
+        # muretto che finisce a metà corridoio) spezzerebbero un locale in pezzi troppo piccoli, e si riaprono
+        extra = [g for g in all_gaps if g not in gaps]
+
+        def needed(o, c, g0, g1, t):
+            m, off = (g0 + g1) / 2, t / 2 + 2 * step
+            pts = [(m, c - off), (m, c + off)] if o == "h" else [(c - off, m), (c + off, m)]
+            vals = [grid.v[j * grid.nx + i] for i, j in (grid.ij(*q) for q in pts)
+                    if 0 <= i < grid.nx and 0 <= j < grid.ny]
+            return any(v == 2 or v in dropped for v in vals)
+        keep_extra = [(o, g) for o, g in extra if needed(o, *g)]
+        if len(keep_extra) < len(extra):
+            grid, comps2 = partition(gaps + keep_extra)
+            comps, _ = keep_indoor(grid, comps2)
+        gaps = gaps + keep_extra
     if DEBUG_GRID:
         DEBUG_GRID.append(grid)
     if not comps:

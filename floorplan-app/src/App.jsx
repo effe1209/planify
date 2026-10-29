@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Box, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Droplets, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
+  Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -182,6 +182,15 @@ export default function App() {
   const [stage, setStage] = useState({ w: 0, h: 0 });
 
   useEffect(() => { storage.set('planify.theme', theme); }, [theme]);
+  // pannelli laterali compattabili (la pianta prende tutto lo spazio); la scelta resta tra una visita e l'altra
+  const [panels, setPanels] = useState(() => ({
+    left: storage.get('planify.panel.left', '1') !== '0', right: storage.get('planify.panel.right', '1') !== '0',
+  }));
+  useEffect(() => {
+    storage.set('planify.panel.left', panels.left ? '1' : '0');
+    storage.set('planify.panel.right', panels.right ? '1' : '0');
+  }, [panels]);
+  const togglePanel = (side) => setPanels((p) => ({ ...p, [side]: !p[side] }));
   useEffect(() => { storage.set('planify.backend', backendUrl); }, [backendUrl]);
   useEffect(() => () => clearTimeout(flashTimer.current), []);
 
@@ -512,6 +521,11 @@ export default function App() {
     const onKey = (e) => {
       if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
       const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.altKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+        e.preventDefault();
+        togglePanel(e.code === 'BracketLeft' ? 'left' : 'right');
+        return;
+      }
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) redo(); else undo();
@@ -918,6 +932,11 @@ export default function App() {
 
       <header className="pf-top">
         <div className="pf-brand">
+          <button type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('left')}
+            aria-label={panels.left ? 'Nascondi il pannello dei comandi' : 'Mostra il pannello dei comandi'} aria-pressed={panels.left}
+            title={panels.left ? 'Nascondi il pannello dei comandi (⌥⌘[)' : 'Mostra il pannello dei comandi (⌥⌘[)'}>
+            {panels.left ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+          </button>
           <Logo />
           <span className="pf-name">Planify</span>
         </div>
@@ -940,6 +959,11 @@ export default function App() {
           <button type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
             <Cookie size={14} /> Cookie
           </button>
+          <button type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('right')}
+            aria-label={panels.right ? 'Nascondi il pannello dei dettagli' : 'Mostra il pannello dei dettagli'} aria-pressed={panels.right}
+            title={panels.right ? 'Nascondi il pannello dei dettagli (⌥⌘])' : 'Mostra il pannello dei dettagli (⌥⌘])'}>
+            {panels.right ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+          </button>
           <button type="button" className="pf-icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             aria-label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} title={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
@@ -947,9 +971,9 @@ export default function App() {
         </div>
       </header>
 
-      <div className="pf-body">
+      <div className={`pf-body${panels.left ? '' : ' is-left-closed'}${panels.right ? '' : ' is-right-closed'}`}>
         {/* ───────── Pannello comandi sinistro ───────── */}
-        <aside className="pf-rail">
+        <aside className="pf-rail" aria-hidden={!panels.left} inert={!panels.left}>
           <form className="pf-form" onSubmit={(e) => { e.preventDefault(); run(); }}>
             <section className="pf-sec">
               <h2>Misure riquadro</h2>
@@ -1287,7 +1311,7 @@ export default function App() {
         </main>
 
         {/* ───────── Dettagli, personalizzazione e cronologia ───────── */}
-        <aside className="pf-inspector">
+        <aside className="pf-inspector" aria-hidden={!panels.right} inert={!panels.right}>
           {plan && stats ? (
             <>
               {selectedItem != null && (
@@ -1334,10 +1358,10 @@ export default function App() {
                   <div><dt>Porte / finestre</dt><dd>{stats.doors} / {stats.windows}</dd></div>
                 </dl>
                 <div className="pf-seedrow">
-                  <button type="button" className={`pf-mini ${current.saved ? 'is-accent' : ''}`}
+                  <button type="button" className={`pf-save-btn ${current.saved ? 'is-on' : ''}`} aria-pressed={!!current.saved}
                     onClick={() => { history.toggleSaved(current.id); say(current.saved ? 'Tolta dalle salvate' : 'Planimetria salvata'); }}
                     title="Le planimetrie salvate non vengono mai cancellate dalla cronologia">
-                    <Star size={13} fill={current.saved ? 'currentColor' : 'none'} /> {current.saved ? 'Salvata' : 'Salva'}
+                    <Star size={13} strokeWidth={2.2} fill={current.saved ? 'currentColor' : 'none'} /> {current.saved ? 'Salvata' : 'Salva'}
                   </button>
                   {floor.sketch ? (
                     <button type="button" className="pf-mini" onClick={() => setSketch({ shapes: floor.sketch, floorId: floor.id })}

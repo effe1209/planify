@@ -166,12 +166,35 @@
   scrollbar-width: thin;
   scrollbar-color: var(--fill-strong) transparent;
 }
-.pf-rail { width: 320px; flex: none; }
+/* larghezze che seguono la finestra: abbastanza per prezzi e cronologia senza andare a capo */
+.pf-body { --rail-w: clamp(300px, 23vw, 360px); --insp-w: clamp(330px, 26vw, 400px); }
+.pf-rail { width: var(--rail-w); flex: none; }
 .pf-inspector {
-  width: 316px;
+  width: var(--insp-w);
   flex: none;
   padding: 12px 12px 24px;
   gap: 12px;
+}
+/* pannelli compattati: si chiudono di lato e la planimetria prende tutto lo spazio */
+.pf-rail, .pf-inspector {
+  transition: width 320ms var(--ease-out), opacity 220ms var(--ease-out), margin 320ms var(--ease-out),
+    border-width 320ms var(--ease-out);
+}
+.pf-body.is-left-closed .pf-rail, .pf-body.is-right-closed .pf-inspector {
+  width: 0;
+  opacity: 0;
+  border-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pf-body.is-left-closed .pf-rail { margin-right: -12px; }
+.pf-body.is-right-closed .pf-inspector { margin-left: -12px; padding-left: 0; padding-right: 0; }
+.pf-body.is-left-closed .pf-rail > * { min-width: calc(var(--rail-w) - 2px); }
+.pf-body.is-right-closed .pf-inspector > * { min-width: calc(var(--insp-w) - 26px); }
+.pf-panel-toggle { color: var(--text-muted); }
+.pf-panel-toggle:hover { color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .pf-rail, .pf-inspector { transition: none; }
 }
 
 /* card: superficie piena sul materiale (mai vetro su vetro) */
@@ -443,3 +466,92 @@
 .pf-shared-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; padding: 8px 12px;
   border-radius: 12px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 12.5px; }
 .pf-shared-bar span { flex: 1; min-width: 180px; }
+
+/* ── Cronologia: griglia che si adatta e pulsanti a pastiglia in vetro (stile Foto / Finder) ── */
+.pf-history-list { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.pf-thumb { min-width: 0; overflow: hidden; }
+.pf-thumb-open span { font-size: 11px; font-weight: 600; color: var(--text); }
+.pf-thumb-actions { top: 8px; right: 8px; gap: 6px; }
+.pf-thumb-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 0 0 0.5px var(--hairline), 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+.pf-thumb-btn:hover { transform: scale(1.06); }
+.pf-thumb-btn:active { transform: scale(0.94); }
+/* salvata: stella piena gialla (systemYellow) */
+.pf-thumb-btn.is-star.is-on { color: #fff; background: #ffcc00; box-shadow: 0 2px 8px rgba(255, 204, 0, 0.45); }
+.pf-thumb-btn.is-star:not(.is-on):hover { color: #c99a00; }
+/* elimina: cestino che diventa rosso (systemRed) */
+.pf-thumb-btn.is-delete:hover { color: #fff; background: #ff3b30; box-shadow: 0 2px 8px rgba(255, 59, 48, 0.4); }
+.pf-app[data-theme="dark"] .pf-thumb-btn.is-star.is-on { color: #1c1c1e; background: #ffd60a; }
+.pf-app[data-theme="dark"] .pf-thumb-btn.is-delete:hover { background: #ff453a; }
+.pf-thumb-actions:has(.is-on) { opacity: 1; }
+.pf-thumb-actions:has(.is-on) .is-delete { opacity: 0; transition: opacity 200ms var(--ease-out); }
+.pf-thumb:hover .pf-thumb-actions .is-delete, .pf-thumb:focus-within .pf-thumb-actions .is-delete { opacity: 1; }
+@media (hover: none) {
+  .pf-thumb-actions, .pf-thumb-actions .is-delete { opacity: 1; }
+}
+.pf-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff3b30;
+  background: rgba(255, 59, 48, 0.12);
+}
+.pf-clear-btn:hover { background: rgba(255, 59, 48, 0.2); }
+.pf-app[data-theme="dark"] .pf-clear-btn { color: #ff453a; background: rgba(255, 69, 58, 0.16); }
+.pf-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--fill);
+}
+.pf-save-btn:hover { background: var(--fill-strong); }
+.pf-save-btn.is-on { color: #8a6d00; background: rgba(255, 204, 0, 0.22); }
+.pf-save-btn.is-on svg { color: #ffcc00; }
+.pf-app[data-theme="dark"] .pf-save-btn.is-on { color: #ffd60a; background: rgba(255, 214, 10, 0.16); }
+.pf-app[data-theme="dark"] .pf-save-btn.is-on svg { color: #ffd60a; }
+
+/* tendine dei pannelli (quadro, distinte, preventivo, abaco): freccetta che ruota come nelle liste di macOS */
+.pf-bom > summary { list-style: none; justify-content: space-between; gap: 10px; }
+.pf-bom > summary::-webkit-details-marker { display: none; }
+.pf-bom > summary::after {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform 240ms var(--ease-out);
+}
+.pf-bom[open] > summary::after { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .pf-bom > summary::after { transition: none; } }
