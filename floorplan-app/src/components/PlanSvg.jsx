@@ -2,11 +2,16 @@
  * Il foglio della planimetria in SVG: stanze (rettangoli o poligoni liberi), muri, porte,
  * finestre, arredi, quote e cartiglio. Usato per la vista principale, le miniature e l'export.
  */
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
-import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
+import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
 import ElectricLayer from './ElectricLayer';
+import { FURNITURE_ART } from '../lib/furnitureArt';
+import Rug from './Rug';
+import Decor from './Decor';
+import { decorFor } from '../lib/decor';
+import { itemProblems, snapItem } from '../lib/furnitureEdit';
 import PlumbingLayer from './PlumbingLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
@@ -46,7 +51,7 @@ const GREEN = '#7fae7a';
 const GREEN_DARK = '#4f7a4b';
 const METAL = '#c9ced6';
 
-const FURNITURE = {
+const BASE_FURNITURE = {
   /* ── garage ── */
   car: (w, h) => (
     <>
@@ -477,6 +482,9 @@ const FURNITURE = {
   },
 };
 
+// i pezzi principali hanno disegni dettagliati e dipendenti dallo stile (lib/furnitureArt.jsx)
+const FURNITURE = { ...BASE_FURNITURE, ...FURNITURE_ART };
+
 function Furn({ item, scale, theme }) {
   const draw = FURNITURE[item.type];
   if (!draw) {
@@ -553,6 +561,67 @@ function Stair({ st, s }) {
         <path d={`M ${cutX - z} 0 L ${cutX} ${(u ? half : wid) * 0.45} L ${cutX - z * 0.6} ${(u ? half : wid) * 0.55} L ${cutX + z * 0.4} ${u ? half : wid}`}
           fill="none" stroke={INK} strokeWidth="1.3" />
       )}
+    </g>
+  );
+}
+
+/* Quote interne (luce netta tra i muri) di ogni locale rettangolare: larghezza in alto, profondità a sinistra. */
+function InnerDims({ plan, s }) {
+  const t = plan.wallThickness / plan.scale;
+  const { width: W, length: L } = plan.dimensions;
+  const edge = (v, max) => v < 1e-3 || Math.abs(v - max) < 1e-3;
+  return (
+    <g pointerEvents="none" fontFamily={FONT} fontSize="8" fill="#334155">
+      {plan.rooms.filter((r) => !r.poly && r.kind !== 'garden' && r.name).map((r) => {
+        const x0 = r.x + (edge(r.x, W) ? t : t / 2);
+        const y0 = r.y + (edge(r.y, L) ? t : t / 2);
+        const x1 = r.x + r.w - (edge(r.x + r.w, W) ? t : t / 2);
+        const y1 = r.y + r.h - (edge(r.y + r.h, L) ? t : t / 2);
+        const yh = (y0 + 0.22) * s;
+        const xv = (x0 + 0.22) * s;
+        const tick = (x, y, v) => (v ? <line x1={x} y1={y - 3} x2={x} y2={y + 3} /> : <line x1={x - 3} y1={y} x2={x + 3} y2={y} />);
+        return (
+          <g key={r.id}>
+            {x1 - x0 > 1.0 && (
+              <g stroke="#64748b" strokeWidth="0.6">
+                <line x1={x0 * s} y1={yh} x2={x1 * s} y2={yh} />
+                {tick(x0 * s, yh, true)}{tick(x1 * s, yh, true)}
+                <text x={((x0 + x1) / 2) * s} y={yh - 2.5} textAnchor="middle" stroke="#fff" strokeWidth="2.4" paintOrder="stroke">{fmtM(x1 - x0)}</text>
+              </g>
+            )}
+            {y1 - y0 > 1.0 && (
+              <g stroke="#64748b" strokeWidth="0.6">
+                <line x1={xv} y1={y0 * s} x2={xv} y2={y1 * s} />
+                {tick(xv, y0 * s, false)}{tick(xv, y1 * s, false)}
+                <text x={xv - 2.5} y={((y0 + y1) / 2) * s} textAnchor="middle" stroke="#fff" strokeWidth="2.4" paintOrder="stroke"
+                  transform={`rotate(-90 ${xv - 2.5} ${((y0 + y1) / 2) * s})`}>{fmtM(y1 - y0)}</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/* Codici dell'abaco dei serramenti accanto a ogni porta e finestra, dal lato del locale. */
+function OpeningCodes({ plan, s, codes }) {
+  const tag = (key, code, op, depth) => {
+    if (!code) return null;
+    const x = (op.cx + op.nx * (op.t / 2 + depth)) * s;
+    const y = (op.cy + op.ny * (op.t / 2 + depth)) * s;
+    const w = code.length * 5.4 + 6;
+    return (
+      <g key={key} transform={`translate(${x},${y})`}>
+        <rect x={-w / 2} y={-5.5} width={w} height={11} rx={5.5} fill="#fff" stroke="#14181f" strokeWidth="0.8" />
+        <text y="3.3" textAnchor="middle" fontSize="7.4" fontWeight="700" fill="#14181f" fontFamily={FONT}>{code}</text>
+      </g>
+    );
+  };
+  return (
+    <g pointerEvents="none">
+      {plan.doors.map((d, i) => tag(`d${i}`, codes.doors?.[i], opening(plan, d), 0.28))}
+      {plan.windows.map((w, i) => tag(`w${i}`, codes.windows?.[i], opening(plan, w), 0.22))}
     </g>
   );
 }
@@ -777,8 +846,21 @@ export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
+  editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
 }) {
   const uid = useId().replace(/:/g, '');
+  // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
+  const gRef = useRef(null);
+  const [drag, setDrag] = useState(null);   // { index, start, orig, x, y }
+  const toMeters = (e) => {
+    const g = gRef.current;
+    const pt = g.ownerSVGElement.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const p = pt.matrixTransform(g.getScreenCTM().inverse());
+    return { x: p.x / plan.scale, y: p.y / plan.scale };
+  };
+  const placed = (it, i) => (drag?.index === i ? { ...it, x: drag.x, y: drag.y } : it);
   const theme = THEMES[style] || THEMES.modern;
   const s = plan.scale;
   const W = plan.svgWidth;
@@ -788,6 +870,7 @@ export default function PlanSvg({
   const notches = plan.notches || [];
   const ref = (n) => `url(#${n}-${uid})`;
   const showFurn = layers.furniture && !thumb;
+  const tech = !!layers.technical;   // vista tecnica: bianco e nero, niente pavimenti, ombre, tappeti e decorazioni
   // tavole degli impianti: arredi attenuati (meno nell'idraulica, dove i sanitari fanno da riferimento)
   const furnOpacity = electric ? 0.22 : plumbing ? 0.5 : 1;
   const garden = !thumb && isGardenPlan(plan);
@@ -837,6 +920,12 @@ export default function PlanSvg({
         <filter id={`fshadow-${uid}`} x="-10%" y="-10%" width="120%" height="120%">
           <feDropShadow dx="0" dy="0.8" stdDeviation="0.9" floodColor="#000" floodOpacity="0.22" />
         </filter>
+        {/* vista tecnica: arredi in scala di grigi, come una tavola da cantiere */}
+        <filter id={`mono-${uid}`}>
+          <feColorMatrix type="saturate" values="0" />
+          <feComponentTransfer><feFuncR type="linear" slope="0.6" intercept="0.4" /><feFuncG type="linear" slope="0.6" intercept="0.4" />
+            <feFuncB type="linear" slope="0.6" intercept="0.4" /></feComponentTransfer>
+        </filter>
         <filter id={`pshadow-${uid}`} x="-10%" y="-10%" width="120%" height="125%">
           <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#1d2a44" floodOpacity="0.16" />
         </filter>
@@ -845,11 +934,11 @@ export default function PlanSvg({
       <rect width={box.w} height={box.h} fill="#fff" />
       {!thumb && <rect x="10" y="10" width={box.w - 20} height={box.h - 20} fill="none" stroke={INK} strokeWidth="1.2" />}
 
-      <g transform={`translate(${box.ox},${box.oy})`}>
+      <g ref={gRef} transform={`translate(${box.ox},${box.oy})`}>
         {garden && <HouseMark plan={plan} s={s} house={house} />}
         {notches.map((n, i) => (
           <g key={`n-${i}`}>
-            <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill="#f3f6f1" />
+            <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill={tech ? '#fff' : '#f3f6f1'} />
             <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill={ref('hatch')} />
             {!thumb && layers.labels && n.w * s > 74 && n.h * s > 34 && (
               <text x={(n.x + n.w / 2) * s} y={(n.y + n.h / 2) * s + 4} textAnchor="middle" fontSize="10.5"
@@ -860,13 +949,13 @@ export default function PlanSvg({
           </g>
         ))}
 
-        <g filter={thumb ? undefined : ref('pshadow')}>
+        <g filter={thumb || tech ? undefined : ref('pshadow')}>
           {plan.rooms.map((r) => (
-            <RoomShape key={`bg-${r.id}`} room={r} s={s} fill={r.color} />
+            <RoomShape key={`bg-${r.id}`} room={r} s={s} fill={tech ? '#fff' : r.color} />
           ))}
         </g>
         {plan.rooms.map((r) => {
-          const kind = FLOOR_BY_KIND[r.kind];
+          const kind = tech ? null : FLOOR_BY_KIND[r.kind];
           const fl = kind === 'wood' ? theme.floor : kind;   // 'concrete' e 'lawn' sono fissi
           return fl ? (
             <RoomShape key={`fl-${r.id}`} room={r} s={s} fill={ref(fl)} />
@@ -884,21 +973,23 @@ export default function PlanSvg({
           ) : null;
         })}
 
-        {showFurn && (
+        {showFurn && !tech && (
           <g pointerEvents="none" opacity={furnOpacity}>
             {rugsFor(plan).filter((r) => !coveredByStairs(r, stairs)).map((r, i) => (
-              <rect key={`rug-${i}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} rx={3}
-                fill={theme.rug} stroke={theme.rugLine} strokeWidth="0.8" strokeDasharray="1.5 2" />
+              <Rug key={`rug-${i}`} x={r.x * s} y={r.y * s} w={r.w * s} h={r.h * s} t={theme} />
             ))}
           </g>
         )}
         {showFurn && (
-          <g filter={ref('fshadow')} opacity={furnOpacity}>
+          <g filter={ref(tech ? 'mono' : 'fshadow')} opacity={furnOpacity}>
             {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
-            {plan.furniture.filter((it) => !coveredByStairs(it, stairs))
-              .sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
-              .map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
+            {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => !coveredByStairs(it, stairs))
+              .sort(([a], [b]) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
+              .map(([it, i]) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
+        )}
+        {showFurn && !garden && !tech && (
+          <g opacity={furnOpacity}><Decor items={decorFor(plan)} s={s} t={theme} /></g>
         )}
         {stairs?.length > 0 && (
           <g pointerEvents="none" opacity={electric || plumbing ? 0.45 : 1}>
@@ -967,6 +1058,10 @@ export default function PlanSvg({
           );
         })}
 
+        {/* vista tecnica: quote interne dei locali e codici dell'abaco su porte e finestre */}
+        {tech && !thumb && layers.dims && <InnerDims plan={plan} s={s} />}
+        {tech && !thumb && codes && <OpeningCodes plan={plan} s={s} codes={codes} />}
+
         {!thumb && layers.labels && plan.rooms.map((r) => {
           const lb = roomLabel(r, s);
           if (!lb) return null;
@@ -994,6 +1089,36 @@ export default function PlanSvg({
             onMouseEnter={() => onHover?.(r.id)} onMouseLeave={() => onHover?.(null)}
             onClick={() => onSelect?.(r.id === selectedId ? null : r.id)} />
         ))}
+
+        {/* arredi: clic per selezionare, trascinamento per spostare (aggancio a griglia e muri) */}
+        {editable && showFurn && plan.furniture.map((raw, i) => {
+          const it = placed(raw, i);
+          if (GROUND.has(it.type)) return null;
+          const sel = i === selectedItem;
+          const bad = sel && itemProblems(plan, i, it).length > 0;
+          return (
+            <rect key={`ih-${i}`} x={it.x * s} y={it.y * s} width={it.w * s} height={it.h * s} rx={2}
+              fill="transparent" stroke={sel ? (bad ? '#d92d20' : '#1f4fd8') : 'none'} strokeWidth="1.6"
+              strokeDasharray={sel ? '4 3' : undefined} style={{ cursor: drag?.index === i ? 'grabbing' : 'grab' }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                onItemSelect?.(i);
+                setDrag({ index: i, start: toMeters(e), orig: { x: raw.x, y: raw.y }, x: raw.x, y: raw.y, moved: false });
+              }}
+              onPointerMove={(e) => {
+                if (drag?.index !== i) return;
+                const m = toMeters(e);
+                const p = snapItem(plan, raw, drag.orig.x + m.x - drag.start.x, drag.orig.y + m.y - drag.start.y);
+                setDrag({ ...drag, x: p.x, y: p.y, moved: drag.moved || p.x !== raw.x || p.y !== raw.y });
+              }}
+              onPointerUp={() => {
+                if (drag?.index === i && drag.moved) onItemMove?.(i, drag.x, drag.y);
+                setDrag(null);
+              }}
+              onClick={(e) => e.stopPropagation()} />
+          );
+        })}
 
         {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
         {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}
