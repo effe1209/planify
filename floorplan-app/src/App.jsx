@@ -34,7 +34,9 @@ import { readSharedProject, shareUrl } from './lib/share';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
-import { aimDevice, optimizeDevices, placeDevice } from './lib/coverage';
+import { aimDevice, doorsFor, optimizeDevices, placeDevice } from './lib/coverage';
+import { useCoverage } from './hooks/useCoverage';
+import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
 import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
@@ -333,7 +335,7 @@ export default function App() {
     const base = planSecurity(current);
     const security = { ...base, doors: doorState, devices: optimizeDevices(current, base.devices, { doors: doorState }) };
     editProject((p) => ({ ...p, security }));
-    setLayers((l) => ({ ...l, alarm: true }));
+    setLayers((l) => ({ ...l, alarm: true, coverage: true }));
     say(`${security.devices.length} dispositivi Ajax posizionati`);
   };
   const clearAlarm = () => editProject((p) => {
@@ -455,7 +457,26 @@ export default function App() {
     setSelectedDevice(null);
     say('Dispositivo rimosso');
   };
-  const setDoors = (doors) => editSecurity((sec) => ({ ...sec, doors }));
+  // stato generale delle porte (azzera quelle cambiate una per una) e porta singola con un clic in pianta
+  const setDoors = (doors) => editSecurity((sec) => ({ ...sec, doors, doorStates: {} }));
+  const toggleDoor = (i) => editSecurity((sec) => {
+    const cur = doorsFor(sec, floor.id);
+    const next = (cur[i] || cur.default) === 'open' ? 'closed' : 'open';
+    return { ...sec, doorStates: { ...sec.doorStates, [floor.id]: { ...(sec.doorStates?.[floor.id] || {}), [i]: next } } };
+  });
+  /* ── Copertura dei sensori: calcolata nel Web Worker, anche durante il trascinamento di un sensore ── */
+  const [devicePreview, setDevicePreview] = useState(null);
+  const floorDoors = useMemo(() => doorsFor(current?.security, floor?.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current?.security?.doors, current?.security?.doorStates, floor?.id]);
+  const coverageDevices = useMemo(
+    () => (devicePreview ? floorDevices?.map((d) => (d.id === devicePreview.id ? devicePreview : d)) : floorDevices),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current?.security?.devices, floor?.id, devicePreview],
+  );
+  const coverageOn = !!layers.coverage && layers.alarm !== false && !!floorDevices?.length && !showElectric && !showPlumbing;
+  const coverage = useCoverage(plan, coverageDevices, floorDoors, coverageOn);
+  const [coverHighlight, setCoverHighlight] = useState(null);
   /* Nuovo volumetrico nel locale selezionato (o nel più grande), già nel montaggio migliore. */
   const addSensor = () => {
     const room = plan.rooms.find((r) => r.id === selectedId)
@@ -1217,6 +1238,8 @@ export default function App() {
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
                   onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
+                  onDeviceDrag={setDevicePreview} coverage={coverage} coverageHighlight={coverHighlight}
+                  doorStates={coverage && !readOnly ? (i) => floorDoors[i] || floorDoors.default : null} onDoorToggle={toggleDoor}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
                   plumbingLines={plumbingCfg?.lines !== false} generator={plumbingCfg?.generator}
@@ -1269,7 +1292,7 @@ export default function App() {
                   onClose={() => setSelectedItem(null)} />
               )}
               {selectedDevice && (
-                <DevicePanel plan={plan} device={selectedDevice} devices={devices} doors={doorState}
+                <DevicePanel plan={plan} device={selectedDevice} devices={devices} doors={floorDoors}
                   onChange={(patch) => changeDevice(selectedDevice.id, patch)} onRemove={() => removeDevice(selectedDevice.id)}
                   onClose={() => setSelectedDevice(null)} />
               )}
@@ -1351,6 +1374,11 @@ export default function App() {
               <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm}
                 doors={doorState} onDoors={setDoors} onAddSensor={readOnly ? null : addSensor}
                 roomName={plan.rooms.find((r) => r.id === selectedId)?.name} />
+              {floorDevices?.length > 0 && !showElectric && !showPlumbing && (
+                <CoveragePanel coverage={coverage} shown={!!layers.coverage}
+                  onToggle={() => { setLayers((l) => ({ ...l, coverage: !l.coverage, alarm: true })); setCoverHighlight(null); }}
+                  highlight={coverHighlight} onHighlight={setCoverHighlight} />
+              )}
 
               <DesignReport design={plan.design} />
 

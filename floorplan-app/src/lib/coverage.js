@@ -20,6 +20,11 @@ import { FURNITURE_LABEL } from '../constants';
 export const BODY = [0.5, 1.0, 1.5];
 export const CELL = { inside: 0.1, garden: 0.25 };
 export const CELL_STATE = { none: 0, blind: 1, partial: 2, covered: 3, occupied: 4 };
+/* Colori delle celle (RGBA): coperta (più intensa dove si sovrappongono più sensori), parziale, cieca. */
+export const COVER_COLORS = {
+  covered: [22, 163, 74, 70], overlap: [21, 128, 61, 110], partial: [234, 179, 8, 90], blind: [220, 38, 38, 95],
+  highlight: [220, 38, 38, 210], unwatched: [100, 116, 139, 55],
+};
 const DOOR_H = 2.1;
 const SILL = 0.9;
 const deg = Math.PI / 180;
@@ -88,7 +93,16 @@ function openingRect(o, t) {
 }
 
 /*
- * Ostacoli del piano come volumi. `doors`: 'closed' (default), 'open', oppure { [indice porta]: 'open' | 'closed' }.
+ * Stato delle porte di un piano per il calcolo: quello generale del progetto più le porte cambiate una per una
+ * (security.doorStates = { [floorId]: { [indice porta]: 'open' | 'closed' } }).
+ */
+export function doorsFor(security, floorId) {
+  return { default: security?.doors || 'closed', ...(security?.doorStates?.[floorId] || {}) };
+}
+
+/*
+ * Ostacoli del piano come volumi. `doors`: 'closed' (default), 'open', oppure
+ * { default, [indice porta]: 'open' | 'closed' } (vedi doorsFor).
  * Ogni muro si divide dove ci sono vani: sopra la porta resta l'architrave; la finestra è muro sotto il davanzale
  * e vetro sopra (opaco per il PIR).
  */
@@ -98,7 +112,7 @@ export function obstacles(plan, { doors = 'closed' } = {}) {
   const add = (x0, y0, x1, y1, z0, z1, kind, label) => {
     if (x1 - x0 > 1e-3 && y1 - y0 > 1e-3 && z1 - z0 > 1e-3) boxes.push({ x0, y0, x1, y1, z0, z1, kind, label });
   };
-  const doorState = (i) => (typeof doors === 'string' ? doors : doors[i] || 'closed');
+  const doorState = (i) => (typeof doors === 'string' ? doors : doors[i] || doors.default || 'closed');
   const vani = [
     ...plan.doors.map((d, i) => (d.kind === 'gate' ? null : { ...openingRect(d, t), door: true, open: doorState(i) === 'open' })),
     ...plan.windows.map((w) => ({ ...openingRect(w, t), door: false })),
@@ -237,7 +251,9 @@ export function coverFloor(plan, devices, { doors = 'closed', only = null, boxes
     const nx = Math.max(1, Math.round(bw / step)), ny = Math.max(1, Math.round(bh / step));
     const cells = new Uint8Array(nx * ny);
     const count = new Uint8Array(nx * ny);
+    const cause = new Uint8Array(nx * ny);   // celle cieche: 1 + indice della causa in `keys`
     const causes = new Map();
+    const keys = [];
     const seenBy = new Set();
     const tally = { floor: 0, covered: 0, partial: 0, blind: 0, occupied: 0 };
     const mine = sensors.filter((s) => r.kind === 'garden' || Math.hypot(s.x - center(r).x, s.y - center(r).y) < 20);
@@ -286,7 +302,9 @@ export function coverFloor(plan, devices, { doors = 'closed', only = null, boxes
           if (v === 0) {
             const c = why || { kind: 'out', label: mine.length ? 'Fuori dal campo dei sensori' : 'Nessun sensore' };
             const key = `${c.kind}|${c.label}`;
-            causes.set(key, { ...c, cells: (causes.get(key)?.cells || 0) + 1 });
+            if (!causes.has(key)) keys.push(key);
+            causes.set(key, { ...c, key, cells: (causes.get(key)?.cells || 0) + 1 });
+            cause[k] = keys.indexOf(key) + 1;
           }
         }
       }
@@ -296,17 +314,23 @@ export function coverFloor(plan, devices, { doors = 'closed', only = null, boxes
     if (!seenBy.size) {
       // nessun sensore vede il locale: una sola causa, non «fuori campo» di sensori in altre stanze
       causes.clear();
-      if (tally.blind) causes.set('none', { kind: 'none', label: 'Nessun sensore nel locale', cells: tally.blind });
+      keys.length = 0;
+      if (tally.blind) {
+        causes.set('none', { kind: 'none', label: 'Nessun sensore nel locale', key: 'none', cells: tally.blind });
+        keys.push('none');
+        for (let k = 0; k < cells.length; k++) cause[k] = cells[k] === CELL_STATE.blind ? 1 : 0;
+      }
     }
     rooms.push({
-      id: r.id, name: r.name, kind: r.kind, x0: bx, y0: by, cw: bw / nx, ch: bh / ny, nx, ny, cells, count,
+      id: r.id, name: r.name, kind: r.kind, x0: bx, y0: by, cw: bw / nx, ch: bh / ny, nx, ny, cells, count, cause,
       area: +(free * a).toFixed(2),
       covered: +(tally.covered * a).toFixed(2), partial: +(tally.partial * a).toFixed(2), blind: +(tally.blind * a).toFixed(2),
       pct: free ? Math.round((100 * tally.covered) / free) : 0,
       pctAny: free ? Math.round((100 * (tally.covered + tally.partial)) / free) : 0,
-      blindCauses: [...causes.values()].map((c) => ({ kind: c.kind, label: c.label, area: +(c.cells * a).toFixed(2) }))
+      blindCauses: [...causes.values()].map((c) => ({ kind: c.kind, label: c.label, area: +(c.cells * a).toFixed(2), idx: keys.indexOf(c.key) + 1 }))
         .sort((p, q) => q.area - p.area),
       sensors: seenBy.size,
+      own: sensors.filter((x) => x.dev.room === r.id).length,   // sensori montati nel locale
     });
   }
 

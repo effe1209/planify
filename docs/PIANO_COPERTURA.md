@@ -101,4 +101,14 @@ Importazione di DXF reali del cliente con muri e aperture, non solo le aree dei 
   - I sensori si trascinano e si ruotano (maniglia, R, frecce) con annulla e ripeti.
   - Il pannello del sensore permette di cambiare modello, altezza e direzione, e mostra la copertura del locale, le cause delle zone cieche e gli avvisi.
   - Si può impostare lo stato delle porte interne (tutte chiuse o tutte aperte) e l'altezza di ogni arredo.
-  - Resta da fare lo stato delle porte una per una, che arriva con il layer del punto 3.
+- **Punto 3 — fatto.**
+  - Copertura disegnata in pianta: verde coperto, più intenso dove si sovrappongono più sensori; giallo parziale; rosso cieco; grigio per i locali senza un sensore proprio.
+  - Il calcolo gira in un Web Worker (`lib/coverage.worker.js`, `hooks/useCoverage.js`) e si aggiorna anche mentre si trascina un sensore.
+  - Pannello «Copertura sensori» con:
+    - totale dei locali sorvegliati;
+    - barra per locale;
+    - zone cieche con la causa (un clic le evidenzia in pianta);
+    - locali senza sensore proprio, con la quota vista dai sensori vicini;
+    - varchi verso l'esterno protetti e non protetti;
+    - ipotesi di calcolo.
+  - Ogni porta si apre e si chiude nel calcolo con un clic in pianta (`security.doorStates` per piano).

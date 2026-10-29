@@ -14,6 +14,7 @@ import Decor from './Decor';
 import { decorFor } from '../lib/decor';
 import { itemProblems, snapItem } from '../lib/furnitureEdit';
 import PlumbingLayer from './PlumbingLayer';
+import CoverageLayer from './CoverageLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
 import { THEMES } from '../lib/themes';
@@ -844,7 +845,7 @@ function roomLabel(room, s) {
  * Dispositivi Ajax: simbolo con sigla; i sensori hanno anche il ventaglio (apertura reale, 1,2 m) e l'asse.
  * Modificabili: trascinamento del simbolo per spostare, della maniglia sull'asse per ruotare (passi di 5°).
  */
-function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onMove, onRotate }) {
+function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onMove, onRotate, onDrag }) {
   const [drag, setDrag] = useState(null);   // { id, mode: 'move' | 'rotate', start, orig, x, y, dir, moved }
   const shown = (d) => (drag?.id === d.id ? { ...d, x: drag.x, y: drag.y, dir: drag.dir } : d);
   const start = (e, d, mode) => {
@@ -860,10 +861,14 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
     const m = toMeters(e);
     if (drag.mode === 'move') {
       const p = placeDevice(plan, d, drag.orig.x + m.x - drag.start.x, drag.orig.y + m.y - drag.start.y);
+      if (p.x === drag.x && p.y === drag.y) return;
       setDrag({ ...drag, x: p.x, y: p.y, moved: drag.moved || p.x !== d.x || p.y !== d.y });
+      onDrag?.({ ...p, dir: drag.dir });   // anteprima: la copertura si ricalcola mentre si trascina
     } else {
       const dir = Math.round(Math.atan2(m.y - drag.y, m.x - drag.x) / (Math.PI / 180) / 5) * 5;
+      if (dir === drag.dir) return;
       setDrag({ ...drag, dir, moved: true });
+      onDrag?.({ ...d, x: drag.x, y: drag.y, dir });
     }
   };
   const end = () => {
@@ -871,6 +876,7 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
       if (drag.mode === 'move') onMove?.(drag.id, drag.x, drag.y);
       else onRotate?.(drag.id, drag.dir);
     }
+    if (drag) onDrag?.(null);
     setDrag(null);
   };
   return (
@@ -938,7 +944,8 @@ export default function PlanSvg({
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
-  selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate,
+  selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
+  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle,
 }) {
   const uid = useId().replace(/:/g, '');
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
@@ -1096,6 +1103,8 @@ export default function PlanSvg({
           </g>
         )}
 
+        {coverage && <CoverageLayer coverage={coverage} s={s} highlight={coverageHighlight} />}
+
         <g fill={INK}>
           {plan.walls.map((w, i) => (
             <rect key={`w-${i}`} x={w.x * s} y={w.y * s} width={w.w * s} height={w.h * s} />
@@ -1146,6 +1155,22 @@ export default function PlanSvg({
               <rect width={sw} height={wt} fill="#fff" stroke={INK} strokeWidth="1" />
               <line x1={1} y1={wt * 0.34} x2={sw - 1} y2={wt * 0.34} stroke="#2f6fe4" strokeWidth="0.9" />
               <line x1={1} y1={wt * 0.66} x2={sw - 1} y2={wt * 0.66} stroke="#2f6fe4" strokeWidth="0.9" />
+            </g>
+          );
+        })}
+
+        {/* copertura: le porte si aprono e chiudono con un clic (il calcolo le considera così) */}
+        {doorStates && onDoorToggle && plan.doors.map((d, i) => {
+          if (d.kind === 'gate') return null;
+          const open = doorStates(i) === 'open';
+          const col = open ? '#16a34a' : '#b42318';
+          return (
+            <g key={`ds-${i}`} transform={`translate(${d.x * s},${d.y * s}) rotate(${d.rot})`} style={{ cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); onDoorToggle(i); }}>
+              <title>{open ? 'Porta aperta nel calcolo: clic per chiuderla' : 'Porta chiusa nel calcolo: clic per aprirla'}</title>
+              <rect x={-2} y={-6} width={d.w * s + 4} height={wt + 12} fill="transparent" />
+              <rect x={1} y={wt / 2 - 2} width={d.w * s - 2} height={4} rx={2} fill={col} fillOpacity="0.85"
+                strokeDasharray={open ? '4 3' : undefined} />
             </g>
           );
         })}
@@ -1217,7 +1242,8 @@ export default function PlanSvg({
 
         {!electric && !plumbing && !thumb && layers.alarm !== false && devices?.length > 0 && (
           <Devices devices={devices} plan={plan} s={s} selected={selectedDevice} toMeters={toMeters}
-            editable={editable && !!onDeviceMove} onSelect={onDeviceSelect} onMove={onDeviceMove} onRotate={onDeviceRotate} />
+            editable={editable && !!onDeviceMove} onSelect={onDeviceSelect} onMove={onDeviceMove} onRotate={onDeviceRotate}
+            onDrag={onDeviceDrag} />
         )}
 
         {!thumb && layers.dims && (
