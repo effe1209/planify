@@ -15,6 +15,7 @@ import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
 import { APPLIANCES, KIND_ORDER, KINDS, LEVELS, planElectric } from './electric';
 import { GENERATORS, PIPES, PKIND_ORDER, PKINDS, planPlumbing } from './plumbing';
 import { buildEstimate } from './estimate';
+import { scheduleFor } from './schedule';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
@@ -356,6 +357,30 @@ function plumbingSummary(doc, project, data) {
     { onNewPage: () => doc.addPage('a4', 'portrait') });
 }
 
+/* Tavola quotata del piano: vista tecnica con le quote interne e i codici dei serramenti. */
+async function technicalPage(doc, floor, codes, extra) {
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK);
+  doc.text(safe(`${levelLabel(floor.level)}  ${floor.name} · pianta quotata`), M, 16);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe('Quote interne in metri (luce netta tra i muri) · codici dei serramenti come nell\'abaco'), M, 22);
+  const img = await floorImage(floor, [], { ...extra, codes, layers: { ...LAYERS, technical: true, alarm: false } });
+  const z = Math.min((pw - 2 * M) / img.w, (ph - 44) / img.h);
+  doc.addImage(img.data, 'PNG', M, 27, img.w * z, img.h * z, undefined, 'FAST');
+}
+
+/* Abaco dei serramenti di tutto il progetto. */
+function schedulePage(doc, data) {
+  doc.addPage('a4', 'portrait');
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Abaco dei serramenti', M, 18);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe('Misure della luce netta del vano; altezze tipiche (porte 2,10 m, finestre 1,40 m con davanzale a 0,90 m)'), M, 24);
+  table(doc, 30, ['Codice', 'Tipo', 'L x H (m)', 'Q.tà', 'Apertura', 'Locali'],
+    data.rows.map((r) => [[r.code], r.type, `${fmtM(r.w)} x ${fmtM(r.h)}`, String(r.qty), r.open || '-', r.places.join(', ')]),
+    [0.08, 0.2, 0.12, 0.06, 0.14, 0.4], { onNewPage: () => doc.addPage('a4', 'portrait') });
+}
+
 /* Preventivo indicativo: voci per categoria, imprevisti, IVA e totale. */
 function estimatePage(doc, data) {
   doc.addPage('a4', 'portrait');
@@ -391,6 +416,7 @@ export async function exportProjectPdf(project) {
   const house = houseFor(project);
   const electric = project.electric ? planElectric(project, { level: project.electric.level }) : null;
   const plumbing = project.plumbing ? planPlumbing(project, { generator: project.plumbing.generator }) : null;
+  const schedule = scheduleFor(project);
   for (const f of project.floors.filter((x) => x.plan)) {
     doc.addPage('a4', 'landscape');
     await floorPage(doc, f, devices, { stairs: byFloor[f.id], house });
@@ -398,6 +424,10 @@ export async function exportProjectPdf(project) {
     if (fl?.points.length) {
       doc.addPage('a4', 'landscape');
       await electricPage(doc, f, fl, electric.level, { stairs: byFloor[f.id], house, electricLinks: project.electric.links !== false });
+    }
+    if (schedule.codes[f.id] && f.plan.rooms.some((r) => r.kind !== 'garden')) {
+      doc.addPage('a4', 'landscape');
+      await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house });
     }
     const pl = plumbing?.floors[f.id];
     if (pl?.points.length) {
@@ -407,6 +437,7 @@ export async function exportProjectPdf(project) {
   }
   if (electric?.bom.length) electricSummary(doc, project, electric);
   if (plumbing?.bom.length) plumbingSummary(doc, project, plumbing);
+  if (schedule.rows.length) schedulePage(doc, schedule);
   if (project.estimate) estimatePage(doc, buildEstimate(project, project.estimate));
 
   if (bom.length) {

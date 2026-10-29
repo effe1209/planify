@@ -289,6 +289,9 @@ class Layout:
         room = self.room(room_id)
         orient, line, lo, hi = self._side_geom(room, side)
         margin = 0.35 if kind != "garage" else 0.25
+        if hi - lo - 2 * margin < width:
+            # lato corto (es. l'atrio largo 1,30 m): si stringono i margini prima di stringere la porta
+            margin = max(0.1, (hi - lo - width) / 2)
         avail = hi - lo - 2 * margin
         w = min(width, avail)
         start = snap(lo + margin + (avail - w) * at)
