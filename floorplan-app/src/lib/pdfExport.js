@@ -1,5 +1,5 @@
 /*
- * «Esporta progetto PDF»: copertina con riepilogo, una pagina per piano (pianta ad alta
+ * «Esporta progetto PDF»: copertina con riepilogo, la casa in 3D, una pagina per piano (pianta ad alta
  * risoluzione con i dispositivi e la loro legenda), la tavola elettrica di ogni piano se il progetto
  * ha l'impianto elettrico, quella idraulica se ha l'impianto idraulico e, in fondo, circuiti, colonne e
  * distinte (elettrico, idraulico, allarme Ajax).
@@ -412,6 +412,24 @@ export async function exportProjectPdf(project) {
   doc.setProperties({ title: safe(project.name || 'Progetto Planify'), creator: 'Planify' });
 
   cover(doc, project, devices, bom);
+  // la casa in 3D: tutti i piani impilati con i solai (se la scheda grafica non è disponibile si salta)
+  try {
+    const { houseImage } = await import('./render3d');
+    const img = await houseImage(project);
+    if (img) {
+      doc.addPage('a4', 'landscape');
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const built = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).length;
+      doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text(safe(built > 1 ? 'La casa in 3D' : 'Vista 3D'), M, 16);
+      doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED)
+        .text(safe(built > 1 ? `${built} piani impilati alla loro quota, con i solai e il vano scala` : 'Pianta arredata in 3D'), M, 22);
+      const z = Math.min((pw - 2 * M) / img.w, (ph - 28 - 16) / img.h);
+      doc.addImage(img.data, 'PNG', (pw - img.w * z) / 2, 27, img.w * z, img.h * z, undefined, 'FAST');
+    }
+  } catch {
+    /* WebGL non disponibile: il PDF esce senza la vista 3D */
+  }
   const { byFloor } = projectStairs(project);
   const house = houseFor(project);
   const electric = project.electric ? planElectric(project, { level: project.electric.level }) : null;

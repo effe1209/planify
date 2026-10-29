@@ -6,6 +6,7 @@
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
 const SILL = 0.9;
+const SLAB_T = 0.3;   // solaio tra un piano e l'altro
 
 /* Altezza (m) e materiale di ogni arredo; `lift` = quota da terra (TV appesa, pensili…). */
 const SHAPES = {
@@ -65,6 +66,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.002;
     floor.receiveShadow = true;
+    floor.userData.layer = 'PAVIMENTI';
     root.add(floor);
   }
 
@@ -158,5 +160,50 @@ export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
       box(it.x, it.y, it.w, it.h, lift, h, material);
     }
   }
+  // layer di ogni volume (per il DXF 3D): muri, vetri, pavimenti, il resto sono arredi
+  root.traverse((o) => {
+    if (!o.isMesh || o.userData.layer) return;
+    o.userData.layer = o.material === M.wall ? 'MURI' : o.material === M.glass ? 'VETRI' : 'ARREDI';
+  });
   return root;
+}
+
+/* Quota di un piano rispetto al piano terra: muri alti WALL_H più il solaio. */
+export const FLOOR_H = WALL_H + SLAB_T;
+
+/*
+ * Tutta la casa in 3D: i piani del progetto (livelli numerici; l'esterno resta fuori) impilati alla loro quota, con
+ * un solaio sotto ogni piano più alto del più basso, aperto sopra la scala. `spread` stacca i piani (vista esplosa).
+ * themeFor(floor) dà lo stile di ogni piano. Ogni gruppo di piano porta userData.floor = { id, name, level }.
+ */
+export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0 } = {}) {
+  const house = new THREE.Group();
+  const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
+    .sort((a, b) => a.level - b.level);
+  if (!floors.length) return house;
+  const lowest = floors[0].level;
+  const slabMat = new THREE.MeshStandardMaterial({ color: '#d9d6cf', roughness: 0.9 });
+  for (const f of floors) {
+    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls });
+    const y = (f.level - lowest) * (FLOOR_H + spread);
+    g.position.y = y;
+    g.userData.floor = { id: f.id, name: f.name, level: f.level };
+    house.add(g);
+    if (f.level === lowest) continue;
+    // solaio sotto il piano: un volume per locale, nessuno sopra la scala (il vano resta aperto)
+    for (const r of f.plan.rooms) {
+      if (r.kind === 'stairs' || r.kind === 'garden') continue;
+      const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
+      const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
+      const slab = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: SLAB_T, bevelEnabled: false }), slabMat);
+      slab.rotation.x = -Math.PI / 2;
+      slab.position.y = y - SLAB_T;
+      slab.receiveShadow = true;
+      slab.castShadow = true;
+      slab.userData.layer = 'SOLAI';
+      slab.userData.floor = { id: f.id, name: f.name, level: f.level };
+      house.add(slab);
+    }
+  }
+  return house;
 }
