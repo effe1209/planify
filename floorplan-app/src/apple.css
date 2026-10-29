@@ -417,3 +417,9 @@
 .pf-el-legend li { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 6px; }
 .pf-el-legend b { font-variant-numeric: tabular-nums; }
 .pf-el-disclaimer { margin-top: 10px; font-size: 10.5px; }
+
+/* Arredo selezionato */
+.pf-item-head { display: flex; align-items: center; justify-content: space-between; }
+.pf-item-ok { color: #16a34a; }
+.pf-mini.is-danger { color: #d92d20; }
+.pf-tool:disabled { opacity: 0.4; cursor: default; }
