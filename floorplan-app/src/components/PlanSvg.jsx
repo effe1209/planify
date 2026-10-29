@@ -2,7 +2,7 @@
  * Il foglio della planimetria in SVG: stanze (rettangoli o poligoni liberi), muri, porte,
  * finestre, arredi, quote e cartiglio. Usato per la vista principale, le miniature e l'export.
  */
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
@@ -11,6 +11,7 @@ import { FURNITURE_ART } from '../lib/furnitureArt';
 import Rug from './Rug';
 import Decor from './Decor';
 import { decorFor } from '../lib/decor';
+import { itemProblems, snapItem } from '../lib/furnitureEdit';
 import PlumbingLayer from './PlumbingLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
@@ -784,8 +785,21 @@ export default function PlanSvg({
   plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
+  editable = false, selectedItem = null, onItemSelect, onItemMove,
 }) {
   const uid = useId().replace(/:/g, '');
+  // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
+  const gRef = useRef(null);
+  const [drag, setDrag] = useState(null);   // { index, start, orig, x, y }
+  const toMeters = (e) => {
+    const g = gRef.current;
+    const pt = g.ownerSVGElement.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const p = pt.matrixTransform(g.getScreenCTM().inverse());
+    return { x: p.x / plan.scale, y: p.y / plan.scale };
+  };
+  const placed = (it, i) => (drag?.index === i ? { ...it, x: drag.x, y: drag.y } : it);
   const theme = THEMES[style] || THEMES.modern;
   const s = plan.scale;
   const W = plan.svgWidth;
@@ -859,7 +873,7 @@ export default function PlanSvg({
       <rect width={box.w} height={box.h} fill="#fff" />
       {!thumb && <rect x="10" y="10" width={box.w - 20} height={box.h - 20} fill="none" stroke={INK} strokeWidth="1.2" />}
 
-      <g transform={`translate(${box.ox},${box.oy})`}>
+      <g ref={gRef} transform={`translate(${box.ox},${box.oy})`}>
         {garden && <HouseMark plan={plan} s={s} house={house} />}
         {notches.map((n, i) => (
           <g key={`n-${i}`}>
@@ -908,9 +922,9 @@ export default function PlanSvg({
         {showFurn && (
           <g filter={ref(tech ? 'mono' : 'fshadow')} opacity={furnOpacity}>
             {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
-            {plan.furniture.filter((it) => !coveredByStairs(it, stairs))
-              .sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
-              .map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
+            {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => !coveredByStairs(it, stairs))
+              .sort(([a], [b]) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
+              .map(([it, i]) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
         )}
         {showFurn && !garden && !tech && (
@@ -1010,6 +1024,36 @@ export default function PlanSvg({
             onMouseEnter={() => onHover?.(r.id)} onMouseLeave={() => onHover?.(null)}
             onClick={() => onSelect?.(r.id === selectedId ? null : r.id)} />
         ))}
+
+        {/* arredi: clic per selezionare, trascinamento per spostare (aggancio a griglia e muri) */}
+        {editable && showFurn && plan.furniture.map((raw, i) => {
+          const it = placed(raw, i);
+          if (GROUND.has(it.type)) return null;
+          const sel = i === selectedItem;
+          const bad = sel && itemProblems(plan, i, it).length > 0;
+          return (
+            <rect key={`ih-${i}`} x={it.x * s} y={it.y * s} width={it.w * s} height={it.h * s} rx={2}
+              fill="transparent" stroke={sel ? (bad ? '#d92d20' : '#1f4fd8') : 'none'} strokeWidth="1.6"
+              strokeDasharray={sel ? '4 3' : undefined} style={{ cursor: drag?.index === i ? 'grabbing' : 'grab' }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                onItemSelect?.(i);
+                setDrag({ index: i, start: toMeters(e), orig: { x: raw.x, y: raw.y }, x: raw.x, y: raw.y, moved: false });
+              }}
+              onPointerMove={(e) => {
+                if (drag?.index !== i) return;
+                const m = toMeters(e);
+                const p = snapItem(plan, raw, drag.orig.x + m.x - drag.start.x, drag.orig.y + m.y - drag.start.y);
+                setDrag({ ...drag, x: p.x, y: p.y, moved: drag.moved || p.x !== raw.x || p.y !== raw.y });
+              }}
+              onPointerUp={() => {
+                if (drag?.index === i && drag.moved) onItemMove?.(i, drag.x, drag.y);
+                setDrag(null);
+              }}
+              onClick={(e) => e.stopPropagation()} />
+          );
+        })}
 
         {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
         {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}

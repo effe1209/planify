@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Droplets, Unlock, Upload, Zap, ZoomIn, ZoomOut,
+  Droplets, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -12,6 +12,8 @@ import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME,
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import RoomEditor from './components/RoomEditor';
+import ItemPanel from './components/ItemPanel';
+import { rotateItem, snapItem } from './lib/furnitureEdit';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
 import HistoryPanel from './components/HistoryPanel';
@@ -43,7 +45,6 @@ import { HOUSE_PRESETS, floorName, houseFloorsRequest, suggestProgram } from './
 const REQUEST_TIMEOUT_MS = 90000;
 const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
 const STAIR_TRIES = 4;      // …da 4 richieste in parallelo
-const NEXT_FACING = { S: 'W', W: 'N', N: 'E', E: 'S' };
 
 async function postJson(base, path, body, signal) {
   const res = await fetch(`${base}${path}`, {
@@ -346,18 +347,81 @@ export default function App() {
   };
 
   /* ── Personalizzazione: le modifiche finiscono nella voce di cronologia (e quindi vengono salvate) ── */
-  const editPlan = (fn) => current && history.updatePlan(current.id, fn);   // agisce sul piano attivo
+  // annulla / ripeti: le piante precedenti del piano aperto (si azzera cambiando progetto o piano)
+  const undoKey = current && floor ? `${current.id}:${floor.id}` : null;
+  const [undoState, setUndoState] = useState({ key: null, undo: [], redo: [] });
+  const stacks = undoState.key === undoKey ? undoState : { key: undoKey, undo: [], redo: [] };
+  const editPlan = (fn) => {   // agisce sul piano attivo
+    if (!current || !plan) return;
+    setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), plan], redo: [] });
+    history.updatePlan(current.id, fn);
+  };
+  const undo = () => {
+    if (!current || !stacks.undo.length) return;
+    const prev = stacks.undo[stacks.undo.length - 1];
+    setUndoState({ key: undoKey, undo: stacks.undo.slice(0, -1), redo: [...stacks.redo, plan] });
+    history.updatePlan(current.id, () => prev);
+  };
+  const redo = () => {
+    if (!current || !stacks.redo.length) return;
+    const next = stacks.redo[stacks.redo.length - 1];
+    setUndoState({ key: undoKey, undo: [...stacks.undo, plan], redo: stacks.redo.slice(0, -1) });
+    history.updatePlan(current.id, () => next);
+  };
+  // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
+  const [selection, setSelection] = useState(null);
+  const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
+  const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
+  const moveFurniture = (index, x, y) => editFurniture((list) => list.map((f, i) => {
+    if (i !== index) return f;
+    const p = snapItem(plan, f, x, y);
+    return { ...f, x: p.x, y: p.y, room: p.room };
+  }));
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
   const editFurniture = (fn) => editPlan((p) => ({ ...p, furniture: fn(p.furniture) }));
   const removeFurniture = (index) => {
     editFurniture((list) => list.filter((_, i) => i !== index));
+    setSelectedItem(null);
     say('Arredo rimosso');
   };
-  const rotateFurniture = (index) =>
-    editFurniture((list) => list.map((f, i) => (i === index ? { ...f, facing: NEXT_FACING[f.facing || 'S'] || 'S' } : f)));
+  // ruotare scambia larghezza e profondità attorno al centro (prima cambiava solo il verso)
+  const rotateFurniture = (index) => editFurniture((list) => list.map((f, i) => (i === index ? rotateItem(f) : f)));
   const flipFurniture = (index) =>
     editFurniture((list) => list.map((f, i) => (i === index ? { ...f, flip: !f.flip } : f)));
+  // tastiera: annulla/ripeti ovunque; con un arredo selezionato frecce, R, F, Canc, Esc
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (selectedItem == null || mod) return;
+      const it = plan?.furniture[selectedItem];
+      if (!it) return;
+      const step = e.shiftKey ? 0.25 : 0.05;
+      const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (arrows[e.key]) {
+        e.preventDefault();
+        moveFurniture(selectedItem, it.x + arrows[e.key][0], it.y + arrows[e.key][1]);
+      } else if (e.key === 'r' || e.key === 'R') rotateFurniture(selectedItem);
+      else if (e.key === 'f' || e.key === 'F') flipFurniture(selectedItem);
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        removeFurniture(selectedItem);
+      } else if (e.key === 'Escape') setSelectedItem(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const addFurniture = (roomId, catalogId) => {
     const room = plan.rooms.find((r) => r.id === roomId);
     const entry = FURNITURE.find((f) => f.id === catalogId);
@@ -932,6 +996,13 @@ export default function App() {
               )}
             </div>
 
+            <div className="pf-group" role="group" aria-label="Annulla e ripeti">
+              <button type="button" className="pf-tool" disabled={!stacks.undo.length} onClick={undo}
+                title="Annulla (⌘Z)" aria-label="Annulla"><Undo2 size={15} /></button>
+              <button type="button" className="pf-tool" disabled={!stacks.redo.length} onClick={redo}
+                title="Ripeti (⇧⌘Z)" aria-label="Ripeti"><Redo2 size={15} /></button>
+            </div>
+
             <div className="pf-group" role="group" aria-label="Disegno e import">
               <button type="button" className={`pf-tool pf-tool-accent ${sketch ? 'is-on' : ''}`}
                 onClick={() => setSketch(sketch ? null : { shapes: [] })}>
@@ -1003,6 +1074,8 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
+                  editable={!showElectric && !showPlumbing} selectedItem={selectedItem}
+                  onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
                   plumbingLines={plumbingCfg?.lines !== false} generator={plumbingCfg?.generator}
@@ -1043,6 +1116,11 @@ export default function App() {
         <aside className="pf-inspector">
           {plan && stats ? (
             <>
+              {selectedItem != null && (
+                <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
+                  onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onClose={() => setSelectedItem(null)} />
+              )}
               {selectedRoom && (
                 <RoomEditor
                   key={selectedRoom.id}
