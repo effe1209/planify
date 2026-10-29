@@ -2,7 +2,7 @@
 
 const MARGIN = 78;
 /* giardino: sopra il lotto si disegna la casa, che sta sul lato nord */
-export const HOUSE_BAND = 66;
+export const HOUSE_BAND = 150;
 export const isGardenPlan = (plan) => plan.rooms.length > 0 && plan.rooms.every((r) => r.kind === 'garden');
 
 export function sheetBox(plan, thumb) {

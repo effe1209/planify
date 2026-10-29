@@ -31,7 +31,8 @@ app = FastAPI(
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
-            "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align"]
+            "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
+            "garden_house"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +65,7 @@ class PlanRequest(BaseModel):
     stair_type: Literal["auto", "u", "l", "straight"] = Field("auto", description="Scala a U, a L o a rampa unica")
     core: Optional["StairCore"] = Field(None, description="Scala di un altro piano (plan.stairs[i].core): va nello stesso punto")
     wet: Optional[List[Dict[str, float]]] = Field(None, description="Bagni del piano accanto ({x, y, w, h}): si cerca di sovrapporli")
+    house: Optional[Dict[str, Any]] = Field(None, description="Solo giardino: facciata della casa {w, door: {x, w}, garage: {x, w, side, ramp}}")
 
 
 class StairCore(BaseModel):
@@ -191,6 +193,7 @@ class PlanResponse(BaseModel):
     notes: List[str] = []
     design: Optional[Dict[str, Any]] = None   # valutazione progettuale: punteggio, punti di forza, criticità
     stairs: List[Dict[str, Any]] = []          # vani scala: ingombro (core) da passare agli altri piani e rampe
+    house: Optional[Dict[str, Any]] = None     # giardino: dove sta la casa sul lato nord ({x, w} in metri)
 
 
 class HouseFloorPlan(BaseModel):
@@ -233,6 +236,7 @@ def generate_floor_plan(request: PlanRequest):
             stair_type=request.stair_type,
             core=request.core.model_dump() if request.core else None,
             wet=request.wet,
+            house=request.house,
         )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")

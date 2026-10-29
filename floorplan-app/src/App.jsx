@@ -38,7 +38,7 @@ import { aimDevice, coverFloor, doorsFor, optimizeDevices, placeDevice, sensorCo
 import { useCoverage } from './hooks/useCoverage';
 import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
-import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
+import { activeFloor, addFloor, houseFor, houseFront, houseRequest, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -451,7 +451,9 @@ export default function App() {
   };
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
-  const [view3d, setView3d] = useState(null);   // null = pianta; { low } = vista 3D (muri bassi o interi)
+  const [view3d, setView3d] = useState(null);   // null = pianta; { low, whole, spread } = vista 3D
+  const three = useRef(null);                    // esportazioni della vista 3D aperta (Plan3D onReady)
+  const builtFloors = current?.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).length || 0;
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
   const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
   // dispositivo d'allarme selezionato (per id, sul piano aperto); esclude l'arredo selezionato e viceversa
@@ -653,6 +655,27 @@ export default function App() {
     }
   };
 
+  /* Giardino: rigenerato davanti alla casa del progetto (portoncino, garage), con le stesse misure. */
+  const gardenFront = floor?.meta?.type === 'garden' && plan && engineHas('garden_house') ? houseFront(current) : null;
+  const gardenAligned = gardenFront && plan.house && Math.abs(plan.house.w - gardenFront.w) < 0.01;
+  const realignGarden = async () => {
+    if (!gardenFront || !base) return;
+    const params = { ...form, ...floor.params, roomType: 'garden' };
+    const body = { ...planBody(params, plan.dimensions.width, plan.dimensions.length, randomSeed()), house: houseRequest(gardenFront) };
+    setError(null);
+    setIsLoading(true);
+    try {
+      const data = await readJson(await postJson(base, '/generate-plan', body));
+      editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, plan: data })));
+      setSelectedId(null);
+      say(`«${floor.name}» allineato alla casa`);
+    } catch (err) {
+      setError(`Impossibile rigenerare il giardino: ${err.message}.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const run = async ({ variant = false } = {}) => {
     setError(null);
     if (!base) {
@@ -726,6 +749,9 @@ export default function App() {
         });
       }
       if (garageCore) body.core = garageCore;
+      // giardino di una casa già disegnata: cancelli e vialetti davanti al portoncino e al garage
+      const front = form.roomType === 'garden' && pendingFloor && engineHas('garden_house') ? houseFront(current) : null;
+      if (front) body.house = houseRequest(front);
       const request = async () => readJson(await postJson(base, '/generate-plan', body, controller.signal));
       let data;
       try {
@@ -895,6 +921,24 @@ export default function App() {
     }
   };
 
+  /* Vista 3D: immagine così come la si vede e modello per il CAD (piano aperto o tutta la casa). */
+  const threeName = () => {
+    const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return `${slug(current?.name) || 'planimetria'}-3d${view3d?.whole ? '-casa' : current?.floors.length > 1 ? `-${slug(floor?.name)}` : ''}`;
+  };
+  const export3dPng = () => {
+    const url = three.current?.png();
+    if (!url) return;
+    fetch(url).then((r) => r.blob()).then((b) => saveBlob(b, `${threeName()}.png`));
+    say('Immagine 3D esportata');
+  };
+  const export3dDxf = () => {
+    const res = three.current?.dxf();
+    if (!res) return;
+    saveBlob(new Blob([res.text], { type: 'application/dxf' }), `${threeName()}.dxf`);
+    say(`Modello 3D esportato: ${res.faces.toLocaleString('it-IT')} facce su ${res.layers.length} layer`);
+  };
+
   /* DXF R12 a layer del piano aperto, con i dispositivi Ajax come blocchi e la copertura calcolata (lib/dxf.js). */
   const exportDxf = () => {
     if (!plan) return;
@@ -1035,7 +1079,10 @@ export default function App() {
                 </div>
               )}
               {form.roomType === 'garden' && (
-                <p className="pf-hint">Giardino con la casa sul lato nord e la strada a sud: recinzione, cancello pedonale e carrabile, siepi, camminamento, gazebo e alberi.</p>
+                <p className="pf-hint">
+                  Giardino davanti alla facciata d'ingresso, con la strada a sud: recinzione, cancello pedonale e carrabile, siepi, camminamento, gazebo e alberi.
+                  {pendingFloor && houseFront(current) ? ' Il cancello va davanti al portoncino e il vialetto davanti al garage (con la rampa, se è interrato).' : ' Aggiunto a un progetto con la casa, si allinea al portoncino e al garage.'}
+                </p>
               )}
               {form.roomType === 'apartment' && engineHas('stairs') && (pendingFloor ? hasNeighbour(pendingFloor.level) : engineHas('house')) && (
                 <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')}
@@ -1175,10 +1222,32 @@ export default function App() {
 
             <div className="pf-group" role="group" aria-label="Vista 3D">
               <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
-                onClick={() => setView3d(view3d ? null : { low: false })} title="Vista 3D navigabile"><Box size={15} /> 3D</button>
+                onClick={() => setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false })}
+                title="Vista 3D navigabile"><Box size={15} /> 3D</button>
+              {view3d && builtFloors > 1 && (
+                <button type="button" className={`pf-tool ${view3d.whole ? 'is-on' : ''}`} aria-pressed={!!view3d.whole}
+                  onClick={() => setView3d({ ...view3d, whole: !view3d.whole })} title="Tutti i piani impilati con i solai">
+                  Tutta la casa
+                </button>
+              )}
+              {view3d?.whole && (
+                <button type="button" className={`pf-tool ${view3d.spread ? 'is-on' : ''}`} aria-pressed={!!view3d.spread}
+                  onClick={() => setView3d({ ...view3d, spread: !view3d.spread })} title="Piani staccati per vedere dentro">Esploso</button>
+              )}
               {view3d && (
                 <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
-                  onClick={() => setView3d({ low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
+                  onClick={() => setView3d({ ...view3d, low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
+              )}
+              {view3d && (
+                <>
+                  <button type="button" className="pf-tool" onClick={export3dPng} title="Immagine della vista 3D così come la vedi">
+                    <ImageIcon size={15} /> PNG 3D
+                  </button>
+                  <button type="button" className="pf-tool" onClick={export3dDxf}
+                    title="Modello 3D per il CAD (facce 3D, layer per piano e tipo: muri, vetri, pavimenti, arredi, solai)">
+                    <Download size={15} /> DXF 3D
+                  </button>
+                </>
               )}
             </div>
 
@@ -1190,13 +1259,13 @@ export default function App() {
             </div>
 
             <div className="pf-group" role="group" aria-label="Disegno e import">
-              <button type="button" className={`pf-tool pf-tool-accent ${sketch ? 'is-on' : ''}`}
+              <button type="button" className="pf-tool pf-tool-accent" onClick={() => dxfInputRef.current?.click()}
+                title="Carica una pianta dal CAD: muri, porte, finestre e locali vengono ricostruiti dal disegno">
+                <Upload size={15} /> Importa DXF
+              </button>
+              <button type="button" className={`pf-tool ${sketch ? 'is-on' : ''}`}
                 onClick={() => setSketch(sketch ? null : { shapes: [] })}>
                 <PenTool size={15} /> Disegna schizzo
-              </button>
-              <button type="button" className="pf-tool" onClick={() => dxfInputRef.current?.click()}
-                title="Carica una planimetria da file CAD DXF">
-                <Upload size={15} /> Importa DXF
               </button>
             </div>
 
@@ -1250,15 +1319,16 @@ export default function App() {
               <SketchBoard initialShapes={sketch.shapes}
                 onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
                 onGenerate={generateFromSketch} />
+            ) : plan && view3d ? (
+              <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
+                <Plan3D plan={plan} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                  spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
+              </ErrorBoundary>
             ) : globalView && current?.floors.length > 1 ? (
               <ErrorBoundary key={`all-${current.id}`}>
                 <FloorsOverview project={current} stage={stage} onOpen={selectFloor} devices={layers.alarm ? devices : null}
                   stairs={stairs.byFloor} electric={showElectric ? electricPlan.floors : null}
                   plumbing={showPlumbing ? plumbingPlan.floors : null} generator={plumbingCfg?.generator} />
-              </ErrorBoundary>
-            ) : plan && view3d ? (
-              <ErrorBoundary key={`3d-${current.id}-${floor.id}`}>
-                <Plan3D plan={plan} style={floor.meta?.style} lowWalls={view3d.low} />
               </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
@@ -1289,7 +1359,7 @@ export default function App() {
                     <path d="M92 130a14 14 0 0 1 14-14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 3" />
                   </svg>
                   <h3>Inizia a progettare</h3>
-                  <p>Scegli le misure e clicca <b>«Genera planimetria»</b>, oppure usa <b>«Disegna schizzo»</b> o <b>«Importa DXF»</b>.</p>
+                  <p>Scegli le misure e clicca <b>«Genera planimetria»</b>, oppure <b>«Importa DXF»</b> da un disegno CAD o <b>«Disegna schizzo»</b>.</p>
                   {!backendUrl && (
                     <button type="button" className="pf-link" onClick={() => setConnOpen(true)}>Configura backend</button>
                   )}
@@ -1453,6 +1523,11 @@ export default function App() {
                   {alignCore && (
                     <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignFloor}>
                       <Shuffle size={15} /> Rigenera questo piano con la scala allineata
+                    </button>
+                  )}
+                  {gardenFront && (
+                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignGarden}>
+                      <Shuffle size={15} /> {gardenAligned ? 'Rigenera il giardino davanti alla casa' : 'Allinea il giardino alla casa'}
                     </button>
                   )}
                 </section>

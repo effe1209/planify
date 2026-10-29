@@ -7,7 +7,7 @@ import { opening } from './ajax';
 
 export const GRID = 0.05;        // passo di spostamento e aggancio
 const WALL_SNAP = 0.15;          // entro 15 cm dal muro l'arredo si appoggia al muro
-const GROUND = new Set(['path', 'hedge', 'fence']);   // elementi del giardino a terra: non contano come ostacoli
+const GROUND = new Set(['path', 'ramp', 'hedge', 'fence']);   // elementi del giardino a terra: non contano come ostacoli
 
 const round = (v) => Math.round(v / GRID) * GRID;
 const contains = (r, x, y) =>

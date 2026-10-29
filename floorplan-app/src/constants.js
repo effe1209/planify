@@ -145,7 +145,7 @@ export const FURNITURE_LABEL = {
   washer: 'Lavatrice', dryer: 'Asciugatrice', utility_sink: 'Lavatoio', laundry_basket: 'Cesto biancheria',
   shelving: 'Scaffali', vacuum: 'Aspirapolvere', car: 'Auto', motorbike: 'Moto', workbench: 'Banco da lavoro',
   shelving_heavy: 'Scaffalatura pesante', hedge: 'Siepe', fence: 'Recinzione', gate_pedestrian: 'Cancello pedonale',
-  gate_driveway: 'Cancello carrabile', gazebo: 'Gazebo', path: 'Camminamento', tree: 'Albero',
+  gate_driveway: 'Cancello carrabile', gazebo: 'Gazebo', path: 'Camminamento', ramp: 'Rampa garage', tree: 'Albero',
   sideboard: 'Madia', bookcase: 'Libreria', dresser: 'Cassettiera', shoe_cabinet: 'Scarpiera', floor_lamp: 'Lampada da terra',
 };
 
