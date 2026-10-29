@@ -2274,43 +2274,136 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
     return lay
 
 
-def layout_garden(W: float, L: float, rng: Optional[random.Random] = None) -> Layout:
+def layout_garden(W: float, L: float, rng: Optional[random.Random] = None,
+                  house: Optional[dict] = None) -> Layout:
     """Giardino / area esterna: nessun muro. La casa è sul lato nord, l'accesso dalla strada a sud
-    con cancello pedonale e carrabile; recinzione su strada, siepi sui confini laterali."""
+    con cancello pedonale e carrabile; recinzione su strada, siepi sui confini laterali.
+
+    house = la facciata della casa vista dal giardino (in metri, da sinistra guardando la casa):
+    {w, door: {x, w}, garage: {x, w, side: front|left|right|back, ramp}}. La casa si centra sul lotto,
+    il cancello pedonale va davanti al portoncino e il vialetto davanti alla basculante."""
     lay = Layout(W, L)
     lay.room_type = "garden"
     lay.shape = "rect"
     garden = lay.add_room("Giardino", "garden", 0, 0, W, L)
-    lay.add_entrance(garden.id, "S", 1.0, 0.18, kind="gate")
-    lay.notes.append("Giardino: casa sul lato nord, strada sul lato sud.")
+    plan = _garden_plan(W, L, house, lay.notes)
+    lay.options["garden"] = plan
+    gate_w = 1.0
+    lay.add_entrance(garden.id, "S", gate_w, (plan["gate_x"] - 0.35) / max(0.01, W - 0.7 - gate_w), kind="gate")
+    if house:
+        lay.options["house"] = {"x": plan["house_x"], "w": round(float(house.get("w") or 0), 3)}
+        lay.notes.append("Giardino davanti alla facciata d'ingresso della casa: cancello pedonale davanti al "
+                         "portoncino" + ("" if not plan.get("garage") else ", vialetto davanti al garage."
+                                         if plan.get("garage_side") == "front" else ", vialetto verso il garage."))
+    else:
+        lay.notes.append("Giardino: casa sul lato nord, strada sul lato sud.")
     return lay
+
+
+def _m(v: float) -> str:
+    return f"{v:.1f} m".replace(".", ",")
+
+
+def _garden_plan(W: float, L: float, house: Optional[dict], notes: List[str]) -> dict:
+    """Dove vanno cancello pedonale, vialetto carrabile e (con la casa) la casa stessa sul lotto."""
+    EDGE = 0.6                      # siepe laterale (0,5 m) e un po' di margine
+    gate_w = 1.0
+    out = {"gate_x": snap(0.35 + (W - 0.7 - gate_w) * 0.18), "walk": True, "drive": None, "garage": False,
+           "ramp": False, "house_x": 0.0}
+    drive_w = 3.0 if W >= 7 else 0.0
+    if drive_w:
+        out["drive"] = (snap(W - EDGE - drive_w), drive_w)
+    if not house:
+        return out
+    hw = float(house.get("w") or 0)
+    hx = snap((W - hw) / 2)
+    out["house_x"] = hx
+    if hw > W + 0.01:
+        notes.append(f"La casa ({_m(hw)}) è più larga del giardino ({_m(W)}): la facciata esce dal lotto.")
+    lo, hi = EDGE, W - EDGE
+    g = house.get("garage")
+    if g and W >= 4.2:
+        side = g.get("side") or "front"
+        gw = clamp(max(3.0, float(g.get("w") or 0) + 0.4), 3.0, hi - lo)
+        if side == "front":
+            cx = hx + float(g.get("x") or 0)
+            x0 = snap(clamp(cx - gw / 2, lo, hi - gw))
+            if abs(x0 + gw / 2 - cx) > 0.3:
+                notes.append("La basculante del garage cade fuori dal giardino: vialetto spostato sul bordo del lotto.")
+        else:
+            left = side == "left" or (side == "back" and hx > W - hx - hw)
+            x0 = snap(lo if left else hi - gw)
+            notes.append("Basculante del garage " + ("sul retro" if side == "back" else "sul fianco") +
+                         " della casa: il vialetto passa di lato" +
+                         ("." if (hx >= gw + EDGE if left else W - hx - hw >= gw + EDGE) else
+                          ", ma tra casa e confine non c'è posto: allargare il lotto o spostare il garage."))
+        out["drive"] = (x0, round(gw, 3))
+        out["garage"] = True
+        out["ramp"] = bool(g.get("ramp")) and side == "front"   # di lato o sul retro la rampa non è qui davanti
+        out["garage_side"] = side
+    door = house.get("door")
+    if door:
+        cx = hx + float(door.get("x") or 0)
+        gx = snap(clamp(cx - gate_w / 2, EDGE, W - EDGE - gate_w))
+        if out["drive"]:
+            dx, dw = out["drive"]
+            if gx < dx + dw + 0.3 and gx + gate_w > dx - 0.3:
+                # il portoncino è davanti al vialetto: il cancello pedonale gli sta accanto
+                left_x, right_x = snap(dx - 0.3 - gate_w), snap(dx + dw + 0.3)
+                fits_l, fits_r = left_x >= EDGE, right_x + gate_w <= W - EDGE
+                gx = left_x if fits_l and (not fits_r or abs(left_x - cx) <= abs(right_x - cx)) else right_x
+                if not (fits_l or fits_r):
+                    gx = dx
+                    out["walk"] = False
+                    notes.append("Lotto stretto: si entra a piedi dal cancello carrabile.")
+        out["gate_x"] = gx
+    return out
 
 
 def furnish_garden(P: Placer, room: Room) -> None:
     """Recinzione e cancelli su strada, siepi laterali, camminamento dal cancello alla casa,
-    gazebo in un angolo e qualche albero dove resta spazio."""
+    vialetto (fino al garage se c'è), gazebo in un angolo e qualche albero dove resta spazio."""
     lay, r = P.lay, room.rect
+    plan = lay.options.get("garden") or {}
     gate = next(d for d in lay.doors if d.kind == "gate")
-    drive_w = 3.0 if r.w >= 7 else 0.0
-    drive_x = snap(r.x2 - 0.6 - drive_w)
+    drive_x, drive_w = plan.get("drive") or (0.0, 0.0)
+    walk = plan.get("walk", True) or not drive_w     # c'è un cancello pedonale a sé
     # su strada (sud): recinzione con i varchi dei due cancelli
-    cuts = sorted([(gate.start, gate.start + gate.w)] + ([(drive_x, drive_x + drive_w)] if drive_w else []))
+    cuts = sorted(([(gate.start, gate.start + gate.w)] if walk else []) +
+                  ([(drive_x, drive_x + drive_w)] if drive_w else []))
     x = r.x
     for a, b in cuts + [(r.x2, r.x2)]:
         if a - x > 0.3:
             P._put(room, "fence", Rect(x, r.y2 - 0.15, a - x, 0.15), 0.0, None, "N")
-        x = b
+        x = max(x, b)
     if drive_w:
         P._put(room, "gate_driveway", Rect(drive_x, r.y2 - 0.15, drive_w, 0.15), 0.0, None, "N")
-    P._put(room, "gate_pedestrian", Rect(gate.start, r.y2 - 0.15, gate.w, 0.15), 0.0, None, "N")
+    if walk:
+        P._put(room, "gate_pedestrian", Rect(gate.start, r.y2 - 0.15, gate.w, 0.15), 0.0, None, "N")
     # siepi sui confini laterali
     for xx in (r.x, r.x2 - 0.5):
         P._put(room, "hedge", Rect(xx, r.y, 0.5, r.h - 0.2), 0.0, None, "E" if xx == r.x else "W")
-    # camminamento dal cancello pedonale verso la casa, vialetto carrabile
-    P._put(room, "path", Rect(gate.start, r.y + 0.3, gate.w, r.h - 0.5), 0.0, None, "N")
+    # camminamento dal cancello pedonale fino alla casa; vialetto carrabile (fino al garage, se c'è)
+    if walk:
+        P._put(room, "path", Rect(gate.start, r.y + 0.3, gate.w, r.h - 0.5), 0.0, None, "N")
     if drive_w:
-        dl = min(6.0, r.h * 0.6)
-        P._put(room, "path", Rect(drive_x, r.y2 - dl, drive_w, dl - 0.15), 0.0, None, "N")
+        if plan.get("garage"):
+            dl = r.h - 0.15
+            if plan.get("ramp"):
+                # garage interrato: rampa verso la casa (3 m di dislivello al 20% = 15 m)
+                rl = snap(min(15.0, max(0.0, dl - 1.5)))
+                if rl > 0:
+                    P._put(room, "ramp", Rect(drive_x, r.y, drive_w, rl), 0.0, None, "N")
+                if rl < 15.0:
+                    lay.notes.append(f"Rampa del garage interrato lunga {_m(rl)}: per scendere di 3 m al 20% "
+                                     "ne servono circa 15.")
+                if dl - rl > 0.3:
+                    P._put(room, "path", Rect(drive_x, r.y + rl, drive_w, dl - rl), 0.0, None, "N")
+            else:
+                P._put(room, "path", Rect(drive_x, r.y, drive_w, dl), 0.0, None, "N")
+        else:
+            dl = min(6.0, r.h * 0.6)
+            P._put(room, "path", Rect(drive_x, r.y2 - dl, drive_w, dl - 0.15), 0.0, None, "N")
     # gazebo in un angolo libero, poi alberi
     for gw in (3.0, 2.5):
         if P.place_free(room, "gazebo", gw, gw, near=(r.x2 - gw, r.y + gw), gap=0.6, step=0.25):
@@ -2915,7 +3008,7 @@ def _build_layout(Wn: float, Ln: float, rt: str, n: int, palette: dict, shape: s
     if rt == "garage":
         return layout_garage(Wn, Ln, rng=rng, needs=opts["needs"], stair=opts.get("stair"))
     if rt == "garden":
-        return layout_garden(Wn, Ln, rng=rng)
+        return layout_garden(Wn, Ln, rng=rng, house=opts.get("house"))
     return layout_apartment(Wn, Ln, opts["doubles"], opts["singles"], opts["baths"],
                             shape=shape, rng=rng, kitchen=opts["kitchen"], needs=opts["needs"],
                             program=opts["program"], access=opts["access"], stair=opts.get("stair"))
@@ -2936,7 +3029,7 @@ def generate(width: float, length: float, room_type: str = "apartment",
              bathrooms: Optional[int] = None, kitchen: str = "auto", peninsula: bool = False,
              needs: Optional[dict] = None, program: str = "full", access: str = "street",
              stair_type: str = "auto", core: Optional[dict] = None,
-             wet: Optional[List[dict]] = None) -> dict:
+             wet: Optional[List[dict]] = None, house: Optional[dict] = None) -> dict:
     """Genera la pianta. Per gli appartamenti double/single_bedrooms e bathrooms, se indicati,
     hanno la precedenza su num_rooms; kitchen = auto | open | closed; peninsula = penisola in cucina;
     needs = {entry: True/False/"auto", suite, study, storage}.
@@ -2985,6 +3078,8 @@ def generate(width: float, length: float, room_type: str = "apartment",
         "kitchen": kitchen if kitchen in ("open", "closed") else "auto",
         "needs": dict(needs or {}),
     }
+    if rt == "garden" and house:
+        opts["house"] = house
     entry = opts["needs"].get("entry", "auto")
     opts["needs"]["entry"] = entry if entry in (True, False) else "auto"
     program = program if program in ("full", "day", "night") else "full"
@@ -3197,6 +3292,7 @@ def serialize(lay: Layout, palette: dict, seed: int) -> dict:
                        **({"parts": i.parts} if i.parts else {})} for i in lay.items],
         "stairs": export_stairs(lay),
         "notes": lay.notes,
+        **({"house": lay.options["house"]} if lay.options.get("house") else {}),
     }
 
 

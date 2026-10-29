@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { THEMES } from '../lib/themes';
 
 /*
- * Vista 3D navigabile della pianta del piano aperto: trascina per ruotare, rotellina per lo zoom,
- * tasto destro (o due dita) per spostarti. three.js si carica solo qui (import dinamico).
+ * Vista 3D navigabile del piano aperto o di tutta la casa (piani impilati con i solai, anche esplosa):
+ * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
+ * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, style = 'modern', lowWalls = false }) {
+export default function Plan3D({ plan, project = null, style = 'modern', lowWalls = false, spread = 0, onReady }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
 
@@ -16,7 +17,8 @@ export default function Plan3D({ plan, style = 'modern', lowWalls = false }) {
       try {
         const THREE = await import('three');
         const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-        const { buildScene } = await import('../lib/scene3d');
+        const { buildScene, buildHouse } = await import('../lib/scene3d');
+        const { sceneToDxf } = await import('../lib/dxf3d');
         if (disposed || !host.current) return;
         const el = host.current;
         const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -27,32 +29,41 @@ export default function Plan3D({ plan, style = 'modern', lowWalls = false }) {
         el.appendChild(renderer.domElement);
 
         const scene = new THREE.Scene();
-        const { width: W, length: L } = plan.dimensions;
-        scene.add(buildScene(THREE, plan, THEMES[style] || THEMES.modern, { lowWalls }));
+        const model = project
+          ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, spread })
+          : buildScene(THREE, plan, THEMES[style] || THEMES.modern, { lowWalls });
+        scene.add(model);
+        // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
+        const bb = new THREE.Box3().setFromObject(model);
+        const W = Math.max(1, bb.max.x), L = Math.max(1, bb.max.z), Ht = Math.max(1, bb.max.y);
         const ground = new THREE.Mesh(new THREE.PlaneGeometry(W + 20, L + 20), new THREE.MeshStandardMaterial({ color: '#e4e8ee' }));
         ground.rotation.x = -Math.PI / 2;
-        ground.position.set(W / 2, -0.01, L / 2);
+        ground.position.set(W / 2, bb.min.y - 0.01, L / 2);
         ground.receiveShadow = true;
         scene.add(ground);
         scene.add(new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3));
         const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
-        sun.position.set(W * 0.2 - 6, 14, L * 0.2 - 4);
+        sun.position.set(W * 0.2 - 6, 14 + Ht, L * 0.2 - 4);
         sun.target.position.set(W / 2, 0, L / 2);
         sun.castShadow = true;
         sun.shadow.mapSize.set(2048, 2048);
-        const ext = Math.max(W, L);
-        Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 });
+        const ext = Math.max(W, L, Ht);
+        Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + Ht * 2 });
         scene.add(sun, sun.target);
 
         const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
         // inquadratura a tre quarti dall'alto, abbastanza lontana da far entrare tutta la pianta
+        // inquadratura a tre quarti dall'alto: tutta la sfera che contiene il modello entra nel campo più stretto
+        const sphere = bb.getBoundingSphere(new THREE.Sphere());
         const frame = (aspect) => {
-          const fit = (ext * 0.75) / Math.tan((40 * Math.PI) / 360) / Math.min(1, aspect);
+          const v = (40 * Math.PI) / 180;
+          const h = 2 * Math.atan(Math.tan(v / 2) * aspect);
+          const dist = (sphere.radius / Math.sin(Math.min(v, h) / 2)) * 1.08;
           const dir = new THREE.Vector3(0.45, 0.8, 0.75).normalize();
-          camera.position.set(W / 2 + dir.x * fit, dir.y * fit, L / 2 + dir.z * fit);
+          camera.position.copy(sphere.center).addScaledVector(dir, dist);
         };
         const controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(W / 2, 0.6, L / 2);
+        controls.target.copy(sphere.center);
         controls.enableDamping = true;
         controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
         controls.minDistance = 2;
@@ -80,7 +91,18 @@ export default function Plan3D({ plan, style = 'modern', lowWalls = false }) {
           raf = requestAnimationFrame(loop);
         };
         loop();
+        onReady?.({
+          png: () => {
+            renderer.render(scene, camera);
+            return renderer.domElement.toDataURL('image/png');
+          },
+          // il DXF ha sempre le quote vere e i muri interi, anche se la vista è esplosa o con i muri bassi
+          dxf: () => sceneToDxf(THREE, !spread && !lowWalls ? model : project
+            ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern)
+            : buildScene(THREE, plan, THEMES[style] || THEMES.modern)),
+        });
         cleanup = () => {
+          onReady?.(null);
           cancelAnimationFrame(raf);
           ro.disconnect();
           controls.dispose();
@@ -99,7 +121,9 @@ export default function Plan3D({ plan, style = 'modern', lowWalls = false }) {
       disposed = true;
       cleanup();
     };
-  }, [plan, style, lowWalls]);
+    // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, project, style, lowWalls, spread]);
 
   return (
     <div className="pf-3d" ref={host}>

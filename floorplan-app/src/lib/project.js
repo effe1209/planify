@@ -78,10 +78,78 @@ export function moveFloor(project, floorId, delta) {
 
 /* La casa vista dal giardino: il piano terra (o il primo piano abitato) con la sua larghezza. */
 export function houseFor(project) {
-  const built = (project?.floors || []).filter((f) => typeof f.level === 'number' && f.level >= 0 && f.plan);
-  const f = built.find((x) => x.level === 0) || built.sort((a, b) => a.level - b.level)[0];
-  return f ? { w: f.plan.dimensions.width, name: f.name } : null;
+  const f = homeFloor(project);
+  if (!f) return null;
+  return { w: f.plan.dimensions.width, name: f.name, ...houseFront(project) };
 }
+
+const homeFloor = (project) => {
+  const built = (project?.floors || []).filter((f) => typeof f.level === 'number' && f.level >= 0 && f.plan
+    && f.meta?.type !== 'garage' && f.meta?.type !== 'garden');
+  return built.find((x) => x.level === 0) || [...built].sort((a, b) => a.level - b.level)[0] || null;
+};
+
+/* Lato del muro su cui sta un'apertura (N/E/S/W) e il suo centro, nella pianta. */
+function openingSide(o, W, L) {
+  if (o.rot === 90) return { side: o.x < W / 2 ? 'W' : 'E', cx: o.x, cy: o.y + o.w / 2 };
+  return { side: o.y < L / 2 ? 'N' : 'S', cx: o.x + o.w / 2, cy: o.y };
+}
+
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' };
+const LEFT_OF = { S: 'W', N: 'E', E: 'S', W: 'N' };   // il fianco sinistro guardando la facciata da fuori
+
+/* Dalla pianta alla facciata vista dal giardino: t lungo la facciata da sinistra, d dentro la casa. */
+function toFront(side, W, L) {
+  return {
+    S: (x, y) => [x, L - y], N: (x, y) => [W - x, y], E: (x, y) => [L - y, W - x], W: (x, y) => [y, x],
+  }[side];
+}
+
+/*
+ * La facciata d'ingresso della casa vista dal giardino (che sta davanti a lei, lato nord del lotto):
+ * larghezza, sagoma dei locali (per disegnarla), portoncino e basculante del garage (dello stesso piano
+ * o del piano interrato, che ha la stessa impronta). Misure in metri, t da sinistra guardando la casa.
+ */
+export function houseFront(project) {
+  const f = homeFloor(project);
+  if (!f) return null;
+  const { width: W, length: L } = f.plan.dimensions;
+  const door = f.plan.doors.find((d) => d.entrance && !d.kind) || f.plan.doors.find((d) => d.entrance);
+  const front = door ? openingSide(door, W, L).side : 'S';
+  const map = toFront(front, W, L);
+  const fw = front === 'S' || front === 'N' ? W : L;
+  const rects = f.plan.rooms.map((r) => {
+    const [a, b] = [map(r.x, r.y), map(r.x + r.w, r.y + r.h)];
+    return { t: Math.min(a[0], b[0]), d: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]), kind: r.kind };
+  });
+  const out = { w: fw, front, rects };
+  if (door) {
+    const o = openingSide(door, W, L);
+    const [t, d] = map(o.cx, o.cy);
+    out.door = { x: t, w: door.w, d };
+  }
+  // garage: prima sullo stesso piano, poi ai piani sotto (rampa)
+  const floors = (project.floors || []).filter((x) => typeof x.level === 'number' && x.level <= f.level && x.plan)
+    .sort((a, b) => b.level - a.level);
+  for (const g of floors) {
+    const gd = g.plan.doors.find((d) => d.kind === 'garage');
+    if (!gd) continue;
+    const { width: gW, length: gL } = g.plan.dimensions;
+    const o = openingSide(gd, gW, gL);
+    const side = o.side === front ? 'front' : o.side === OPPOSITE[front] ? 'back' : o.side === LEFT_OF[front] ? 'left' : 'right';
+    const [t, d] = map(o.cx, o.cy);
+    out.garage = { x: t, w: gd.w, d, side, ramp: g.level < f.level };
+    break;
+  }
+  return out;
+}
+
+/* Quello che serve al motore per disegnare il giardino davanti alla casa (POST /generate-plan, house). */
+export const houseRequest = (h) => h && {
+  w: h.w,
+  ...(h.door && { door: { x: h.door.x, w: h.door.w } }),
+  ...(h.garage && { garage: { x: h.garage.x, w: h.garage.w, side: h.garage.side, ramp: h.garage.ramp } }),
+};
 
 /* Etichetta breve del livello: «-1», «PT», «1°», «Est.» */
 export function levelLabel(level) {
