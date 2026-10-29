@@ -423,3 +423,8 @@
 .pf-item-ok { color: #16a34a; }
 .pf-mini.is-danger { color: #d92d20; }
 .pf-tool:disabled { opacity: 0.4; cursor: default; }
+
+/* Vista 3D */
+.pf-3d { position: relative; width: 100%; height: min(72vh, 760px); min-height: 360px; border-radius: 14px; overflow: hidden; background: #eef1f5; }
+.pf-3d canvas { display: block; width: 100% !important; height: 100% !important; }
+.pf-3d-hint { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #4b5563; background: rgba(255,255,255,0.8); padding: 3px 8px; border-radius: 8px; pointer-events: none; }

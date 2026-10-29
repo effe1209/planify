@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
+  AlertCircle, Armchair, Box, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Droplets, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
@@ -13,6 +13,7 @@ import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import RoomEditor from './components/RoomEditor';
 import ItemPanel from './components/ItemPanel';
+import Plan3D from './components/Plan3D';
 import { rotateItem, snapItem } from './lib/furnitureEdit';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
@@ -370,6 +371,7 @@ export default function App() {
   };
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
+  const [view3d, setView3d] = useState(null);   // null = pianta; { low } = vista 3D (muri bassi o interi)
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
   const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
   const moveFurniture = (index, x, y) => editFurniture((list) => list.map((f, i) => {
@@ -996,6 +998,15 @@ export default function App() {
               )}
             </div>
 
+            <div className="pf-group" role="group" aria-label="Vista 3D">
+              <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
+                onClick={() => setView3d(view3d ? null : { low: false })} title="Vista 3D navigabile"><Box size={15} /> 3D</button>
+              {view3d && (
+                <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
+                  onClick={() => setView3d({ low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
+              )}
+            </div>
+
             <div className="pf-group" role="group" aria-label="Annulla e ripeti">
               <button type="button" className="pf-tool" disabled={!stacks.undo.length} onClick={undo}
                 title="Annulla (⌘Z)" aria-label="Annulla"><Undo2 size={15} /></button>
@@ -1065,6 +1076,10 @@ export default function App() {
                 <FloorsOverview project={current} stage={stage} onOpen={selectFloor} devices={layers.alarm ? devices : null}
                   stairs={stairs.byFloor} electric={showElectric ? electricPlan.floors : null}
                   plumbing={showPlumbing ? plumbingPlan.floors : null} generator={plumbingCfg?.generator} />
+              </ErrorBoundary>
+            ) : plan && view3d ? (
+              <ErrorBoundary key={`3d-${current.id}-${floor.id}`}>
+                <Plan3D plan={plan} style={floor.meta?.style} lowWalls={view3d.low} />
               </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
