@@ -17,7 +17,8 @@ const SHAPES = {
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
   kitchen_peninsula: [0.9, 'counter'], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
   shoe_cabinet: [1.0, 'cabinet'], console: [0.8, 'wood'], floor_lamp: [1.6, 'lamp'], plant: [1.0, 'plant'],
-  toilet: [0.45, 'ceramic'], bidet: [0.4, 'ceramic'], sink: [0.85, 'ceramic'], shower: [0.06, 'ceramic'],
+  toilet: [0.45, 'ceramic'], bidet: [0.4, 'ceramic'], sink: [0.85, 'ceramic'], bath_column: [1.8, 'cabinet'],
+  towel_radiator: [1.2, 'ceramic', 0.2], shower: [0.06, 'ceramic'],
   shower_round: [0.06, 'ceramic'], shower_walkin: [0.06, 'ceramic'], bathtub: [0.55, 'ceramic'],
   washer: [0.85, 'ceramic'], dryer: [0.85, 'ceramic'], utility_sink: [0.85, 'ceramic'], minibar: [0.85, 'cabinet'],
   car: [1.45, 'car'], motorbike: [1.1, 'dark'], workbench: [0.9, 'wood'], shelving: [1.8, 'metal'],
@@ -149,6 +150,10 @@ export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
       else if (f === 'N') box(it.x, it.y + it.h - back, it.w, back, 0.42, h - 0.42, material);
       else if (f === 'E') box(it.x, it.y, back, it.h, 0.42, h - 0.42, material);
       else box(it.x + it.w - back, it.y, back, it.h, 0.42, h - 0.42, material);
+    } else if (it.type === 'sink' && it.parts?.cabinet) {
+      // lavabo su mobile: mobile con i cassetti e piano in ceramica
+      box(it.x, it.y, it.w, it.h, 0.15, 0.62, M.cabinet);
+      box(it.x, it.y, it.w, it.h, 0.77, 0.08, M.ceramic);
     } else if (it.type === 'bed') {
       box(it.x, it.y, it.w, it.h, 0, 0.3, M.wood);
       box(it.x + 0.03, it.y + 0.03, it.w - 0.06, it.h - 0.06, 0.3, 0.25, M.duvet);
