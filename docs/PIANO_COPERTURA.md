@@ -124,3 +124,11 @@ Importazione di DXF reali del cliente con muri e aperture, non solo le aree dei 
   - 15 layer con colori: AREE, MURI, PORTE, FINESTRE, ARREDI, ARREDI_TESTI (nome e altezza), TESTI, QUOTE, SENSORI, DISPOSITIVI, SENSORI_CAMPO, COPERTURA, COPERTURA_PARZIALE, ZONE_CIECHE, NON_SORVEGLIATO.
   - I dispositivi Ajax sono blocchi `AJAX_<sigla>` con gli attributi CODICE, MODELLO, LOCALE, ALTEZZA e DIREZIONE. I codici sono gli stessi della relazione.
   - Gli importatori (browser e Python) leggono anche le POLYLINE R12, quindi i file esportati si riaprono e si leggono più DXF dei clienti.
+- **Punto 6 — fatto.** Importazione di piante reali da DXF nel motore (`dxf_import.py`, test in `tests/test_dxf_import.py` su tre disegni generati da `tests/make_dxf_fixtures.py`).
+  - **Muri:** coppie di linee parallele a 6–65 cm, orizzontali e verticali. Le linee del vetro, le spallette e le ante delle porte non vengono scambiate per muri.
+  - **Aperture:** interruzioni dei muri, anche attaccate a un angolo. Una porta si riconosce dall'arco o dal blocco dell'anta, che dà anche il verso di apertura; una finestra dal suo blocco, dalle linee del vetro o perché il muro è esterno.
+  - **Locali:** zone chiuse ricostruite su una griglia da 5 cm, con i lati sull'asse dei muri. Un locale a L o a T diventa più rettangoli della stessa zona.
+  - **Nomi:** dai testi del disegno; balconi e terrazzi sono esclusi. Senza testo, il tipo si stima dalla superficie.
+  - **Unità:** da $INSUNITS o dalle misure (m, cm, mm). I blocchi vengono esplosi.
+  - **Limiti:** solo muri ortogonali (quelli obliqui sono ignorati, con un avviso) e spessore uniformato a 20 cm sull'asse originale.
+  - I DXF di Planify (layer AREE) passano ancora dall'importazione per polilinee. Senza motore collegato l'app legge solo i contorni dei locali.

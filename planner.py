@@ -3413,6 +3413,23 @@ def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
     palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
     polys = _read_dxf_polylines(dxf_content)
     tagged = [p for l, p in polys if l.strip().lower() in _ROOM_LAYERS]
+    if not tagged:
+        # disegno di studio (muri a doppia linea, porte, finestre, testi): pianta ricostruita dal disegno
+        try:
+            from dxf_import import import_real_dxf
+            lay = import_real_dxf(dxf_content, Layout, Opening, snap)
+        except Exception as e:  # noqa: BLE001 - si ripiega sull'importazione per polilinee
+            lay = None
+            print(f"import DXF reale non riuscito: {e}")
+        if lay is not None:
+            furnish(lay)
+            plan = serialize(lay, palette, random.randrange(1, 1_000_000))
+            # i pezzi senza nome di un locale a L / T hanno il colore del locale a cui appartengono
+            main = {r["zone"]: r for r in plan["rooms"] if r["name"]}
+            for r in plan["rooms"]:
+                if not r["name"] and r["zone"] in main:
+                    r["color"] = main[r["zone"]]["color"]
+            return plan
     polys = tagged or [p for l, p in polys if not l.strip().lower().startswith(_OTHER_LAYERS)]
     pts = [p for poly in polys for p in poly]
     if not pts:
