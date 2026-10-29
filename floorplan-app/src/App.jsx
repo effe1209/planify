@@ -34,7 +34,7 @@ import { readSharedProject, shareUrl } from './lib/share';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
-import { aimDevice, doorsFor, optimizeDevices, placeDevice } from './lib/coverage';
+import { aimDevice, coverFloor, doorsFor, optimizeDevices, placeDevice, sensorCodes } from './lib/coverage';
 import { useCoverage } from './hooks/useCoverage';
 import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
@@ -332,8 +332,8 @@ export default function App() {
   const doorState = current?.security?.doors || 'closed';
   const planAlarm = () => {
     // regole per locale, poi ogni volumetrico nel montaggio che copre di più (lib/coverage.js)
-    const base = planSecurity(current);
-    const security = { ...base, doors: doorState, devices: optimizeDevices(current, base.devices, { doors: doorState }) };
+    const rules = planSecurity(current);
+    const security = { ...rules, doors: doorState, devices: optimizeDevices(current, rules.devices, { doors: doorState }) };
     editProject((p) => ({ ...p, security }));
     setLayers((l) => ({ ...l, alarm: true, coverage: true }));
     say(`${security.devices.length} dispositivi Ajax posizionati`);
@@ -881,19 +881,17 @@ export default function App() {
     }
   };
 
-  const exportDxf = async () => {
+  /* DXF R12 a layer del piano aperto, con i dispositivi Ajax come blocchi e la copertura calcolata (lib/dxf.js). */
+  const exportDxf = () => {
     if (!plan) return;
-    say('Generazione file CAD in corso…');
-    let blob = null;
-    if (base) {
-      try {
-        blob = await (await postJson(base, '/export-dxf', plan)).blob();
-      } catch {
-        /* si usa l'esportatore locale */
-      }
-    }
-    saveBlob(blob ?? new Blob([buildDxf(plan)], { type: 'application/dxf' }), 'planimetria.dxf');
-    say('File CAD esportato');
+    const devs = floorDevices || [];
+    const opts = devs.length
+      ? { devices: devs, codes: sensorCodes(current, devices), coverage: coverFloor(plan, devs, { doors: floorDoors }) }
+      : {};
+    const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const name = [slug(current.name) || 'planimetria', current.floors.length > 1 ? slug(floor.name) : ''].filter(Boolean).join('-');
+    saveBlob(new Blob([buildDxf(plan, opts)], { type: 'application/dxf' }), `${name}.dxf`);
+    say(devs.length ? 'File CAD esportato con sensori e copertura' : 'File CAD esportato');
   };
 
   const copy = async (text, msg) => {

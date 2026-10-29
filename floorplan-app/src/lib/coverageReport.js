@@ -8,7 +8,7 @@
 import { jsPDF } from 'jspdf';
 import specs from '../data/ajax-specs.json';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
-import { aimDevice, ASSUMPTIONS, COVER_COLORS, coverFloor, deviceWarnings, doorsFor, sensorModel } from './coverage';
+import { aimDevice, ASSUMPTIONS, COVER_COLORS, coverFloor, deviceWarnings, doorsFor, sensorCodes } from './coverage';
 import { ACCENT, floorImage, footer, grossArea, INK, LINE, M, MUTED, safe, table } from './pdfExport';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
@@ -18,19 +18,6 @@ const m2 = (v) => `${v.toLocaleString('it-IT', { maximumFractionDigits: 1 })} mÂ
 const num = (v, d = 2) => v.toLocaleString('it-IT', { maximumFractionDigits: d });
 const OPENING = { door: 'Porta', window: 'Finestra' };
 const rgb = ([r, g, b]) => [r, g, b];
-
-/* Codici dei rilevatori (R1, R2â€¦ in ordine di piano), gli stessi in pianta e nelle tabelle. */
-function sensorCodes(project, devices) {
-  const codes = {};
-  let n = 0;
-  for (const f of project.floors) {
-    for (const d of devices) {
-      const m = sensorModel(d.model);
-      if (d.floor === f.id && m && m.kind !== 'glass') codes[d.id] = `R${++n}`;
-    }
-  }
-  return codes;
-}
 
 /* Copertura di un piano: totali dei locali con un sensore proprio. */
 function floorTotals(cov) {
