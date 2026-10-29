@@ -438,3 +438,8 @@
 .pf-est-table td { padding: 3px; border-top: 1px solid var(--border, #e5e7eb); vertical-align: middle; font-variant-numeric: tabular-nums; }
 .pf-est-table td:nth-child(2), .pf-est-table td:nth-child(4) { white-space: nowrap; }
 .pf-price { width: 58px; padding: 2px 4px; font: inherit; border: 1px solid var(--border, #d5dae1); border-radius: 6px; background: transparent; color: inherit; }
+
+/* Progetto condiviso in sola lettura */
+.pf-shared-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; padding: 8px 12px;
+  border-radius: 12px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 12.5px; }
+.pf-shared-bar span { flex: 1; min-width: 180px; }

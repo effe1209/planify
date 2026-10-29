@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Box, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
-  Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
+  Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Droplets, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
@@ -30,6 +30,7 @@ import EstimatePanel from './components/EstimatePanel';
 import SchedulePanel from './components/SchedulePanel';
 import { buildEstimate } from './lib/estimate';
 import { scheduleFor } from './lib/schedule';
+import { readSharedProject, shareUrl } from './lib/share';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
@@ -132,7 +133,16 @@ export default function App() {
   const consent = useConsent();
   const [cookieDialog, setCookieDialog] = useState(false);
   const history = usePlanHistory(consent.decided ? (consent.allowHistory ? 'on' : 'off') : 'pending');
-  const current = history.current;              // progetto aperto
+  // progetto condiviso aperto da un link (#progetto=…): si guarda in sola lettura, finché non se ne salva una copia
+  const [shared, setShared] = useState(null);
+  useEffect(() => {
+    const load = () => readSharedProject().then((p) => setShared(p));
+    load();
+    window.addEventListener('hashchange', load);
+    return () => window.removeEventListener('hashchange', load);
+  }, []);
+  const readOnly = !!shared;
+  const current = shared || history.current;     // progetto aperto
   const floor = activeFloor(current);            // piano su cui si lavora
   const plan = floor?.plan || null;
   // scale tra piani consecutivi: stessa posizione su entrambe le piante (vedi lib/stairs.js)
@@ -240,7 +250,8 @@ export default function App() {
       },
       sketch: shapes,
     };
-    if (pendingFloor && current) {
+    if (shared) closeShared();
+    if (pendingFloor && current && !readOnly) {
       history.update(current.id, (p) => addFloor(p, makeFloor({ ...data, name: pendingFloor.name, level: pendingFloor.level })));
       say(`Piano «${pendingFloor.name}» aggiunto al progetto`);
       setPendingFloor(null);
@@ -255,9 +266,29 @@ export default function App() {
   };
 
   /* ── Piani del progetto ── */
-  const editProject = (fn) => current && history.update(current.id, fn);
+  const editProject = (fn) => current && !readOnly && history.update(current.id, fn);
+  const closeShared = () => {
+    setShared(null);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  };
+  const copyShared = () => {
+    const { id: _id, ...copy } = shared;
+    closeShared();
+    history.add({ ...copy, name: copy.name || 'Progetto condiviso' });
+    say('Copia salvata nei tuoi progetti: ora puoi modificarla');
+  };
+  const shareProject = async () => {
+    try {
+      const url = await shareUrl(current);
+      await navigator.clipboard.writeText(url);
+      say(`Link copiato (${Math.round(url.length / 1024)} kB): chi lo apre vede il progetto in sola lettura`);
+    } catch (err) {
+      setError(`Impossibile creare il link: ${err.message}.`);
+    }
+  };
   const selectFloor = (id) => {
-    editProject((p) => ({ ...p, activeFloor: id }));
+    if (readOnly) setShared((p) => ({ ...p, activeFloor: id }));
+    else editProject((p) => ({ ...p, activeFloor: id }));
     setGlobalView(false);
     setSelectedId(null);
     setZoom(null);
@@ -372,7 +403,7 @@ export default function App() {
   const [undoState, setUndoState] = useState({ key: null, undo: [], redo: [] });
   const stacks = undoState.key === undoKey ? undoState : { key: undoKey, undo: [], redo: [] };
   const editPlan = (fn) => {   // agisce sul piano attivo
-    if (!current || !plan) return;
+    if (!current || !plan || readOnly) return;
     setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), plan], redo: [] });
     history.updatePlan(current.id, fn);
   };
@@ -485,6 +516,7 @@ export default function App() {
       });
     });
     const ground = floors.find((f) => f.level === 0) || floors[0];
+    if (shared) closeShared();
     history.add({ name: '', floors, activeFloor: ground.id });
     say(res.notes?.[0] || `Casa su ${floors.length} piani: zona giorno e notte collegate dalla scala`);
     setGlobalView(false);
@@ -992,6 +1024,14 @@ export default function App() {
 
         {/* ───────── Area di lavoro centrale ───────── */}
         <main className="pf-stage">
+          {readOnly && (
+            <div className="pf-shared-bar" role="status">
+              <Link2 size={15} />
+              <span>Progetto condiviso in <b>sola lettura</b>{shared.name ? ` · ${shared.name}` : ''}</span>
+              <button type="button" className="pf-mini is-accent" onClick={copyShared}>Salva una copia</button>
+              <button type="button" className="pf-mini" onClick={closeShared}>Chiudi</button>
+            </div>
+          )}
           <div className="pf-toolbar">
             <div className="pf-group" role="group" aria-label="Livelli">
               {[['furniture', Armchair, 'Arredi'], ['labels', Tag, 'Nomi'], ['dims', Ruler, 'Quote'], ['grid', LayoutGrid, 'Griglia'],
@@ -1067,6 +1107,10 @@ export default function App() {
                 title="Esporta progetto PDF: copertina, tutti i piani con i sensori e distinta materiali">
                 <FileText size={15} /> PDF progetto
               </button>
+              <button type="button" className="pf-tool" disabled={!plan} onClick={shareProject}
+                title="Copia un link per vedere il progetto in sola lettura (nessun server: il progetto è nel link)">
+                <Link2 size={15} /> Condividi
+              </button>
             </div>
           </div>
 
@@ -1109,7 +1153,7 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
-                  editable={!showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
+                  editable={!readOnly && !showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
