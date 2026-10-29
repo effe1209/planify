@@ -120,3 +120,7 @@ Importazione di DXF reali del cliente con muri e aperture, non solo le aree dei 
   - varchi verso l'esterno;
   - distinta materiali;
   - ipotesi, fonti ufficiali dei dati e limiti.
+- **Punto 5 — fatto.** Il pulsante «DXF (CAD)» genera nel browser un DXF R12 (AC1009), leggibile da AutoCAD, BricsCAD, DraftSight, LibreCAD e QCAD (`lib/dxf.js`, test in `tests/dxf.test.mjs`, verificato con l'audit di ezdxf).
+  - 15 layer con colori: AREE, MURI, PORTE, FINESTRE, ARREDI, ARREDI_TESTI (nome e altezza), TESTI, QUOTE, SENSORI, DISPOSITIVI, SENSORI_CAMPO, COPERTURA, COPERTURA_PARZIALE, ZONE_CIECHE, NON_SORVEGLIATO.
+  - I dispositivi Ajax sono blocchi `AJAX_<sigla>` con gli attributi CODICE, MODELLO, LOCALE, ALTEZZA e DIREZIONE. I codici sono gli stessi della relazione.
+  - Gli importatori (browser e Python) leggono anche le POLYLINE R12, quindi i file esportati si riaprono e si leggono più DXF dei clienti.

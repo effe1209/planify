@@ -3304,14 +3304,17 @@ def to_svg(plan: dict) -> str:
 # IMPORTAZIONE DXF E ARREDO
 # ----------------------------------------------------------------------------
 _ROOM_LAYERS = {"aree", "area", "room", "rooms", "stanza", "stanze", "locali"}
-_OTHER_LAYERS = ("muri", "wall", "arredi", "furniture", "quote", "dim")
+_OTHER_LAYERS = ("muri", "wall", "arredi", "furniture", "quote", "dim", "porte", "finestre", "testi", "sensori",
+                 "dispositivi", "copertura", "zone", "non_sorv")
 PASS_COST = {"corridor": 0, "living": 0.5, "living_kitchen": 0.5, "kitchen": 1, "study": 2, "bed": 3, "bath": 8}
 
 
 def _read_dxf_polylines(dxf_content: str) -> List[Tuple[str, List[Tuple[float, float]]]]:
-    """(layer, punti) di ogni LWPOLYLINE con almeno 3 vertici."""
+    """(layer, punti) di ogni polilinea con almeno 3 vertici: LWPOLYLINE e POLYLINE del formato R12
+    (vertici nelle entità VERTEX fino a SEQEND)."""
     lines = [l.strip() for l in dxf_content.splitlines()]
     out, cur_type, layer, pts = [], None, "", []
+    poly = None  # POLYLINE R12 in corso: [layer, punti]
 
     def flush():
         if cur_type == "LWPOLYLINE" and len(pts) >= 3:
@@ -3326,8 +3329,27 @@ def _read_dxf_polylines(dxf_content: str) -> List[Tuple[str, List[Tuple[float, f
         if code == 0:
             flush()
             cur_type, layer, pts = val.upper(), "", []
+            if cur_type == "POLYLINE":
+                poly = ["", []]
+            elif cur_type == "SEQEND" and poly is not None:
+                if len(poly[1]) >= 3:
+                    out.append((poly[0], poly[1]))
+                poly = None
+            elif cur_type != "VERTEX":
+                poly = None
         elif code == 8:
             layer = val
+            if cur_type == "POLYLINE" and poly is not None:
+                poly[0] = val
+        elif cur_type == "VERTEX" and poly is not None and code in (10, 20):
+            try:
+                v = float(val)
+            except ValueError:
+                continue
+            if code == 10:
+                poly[1].append([v, 0.0])
+            elif poly[1]:
+                poly[1][-1][1] = v
         elif cur_type == "LWPOLYLINE" and code in (10, 20):
             try:
                 v = float(val)

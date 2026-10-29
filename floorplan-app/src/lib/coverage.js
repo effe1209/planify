@@ -67,7 +67,7 @@ export function sensorModel(model) {
 }
 
 /* Portata (m) a un angolo dall'asse: dal profilo del diagramma ufficiale, o costante fino al bordo. */
-function reachAt(m, off) {
+export function reachAt(m, off) {
   if (off > m.hAngle / 2 + 1e-9) return 0;
   if (!m.profile) return m.range;
   const p = m.profile;
@@ -422,6 +422,19 @@ export function optimizeDevices(project, devices, { doors = 'closed', all = devi
     }
     return best ? best.cand : { ...d, ...aimDevice(plan, d) };
   });
+}
+
+/* Codici dei rilevatori (R1, R2… in ordine di piano): gli stessi in pianta, nella relazione e nel DXF. */
+export function sensorCodes(project, devices) {
+  const codes = {};
+  let n = 0;
+  for (const f of project.floors) {
+    for (const d of devices) {
+      const m = sensorModel(d.model);
+      if (d.floor === f.id && m && m.kind !== 'glass') codes[d.id] = `R${++n}`;
+    }
+  }
+  return codes;
 }
 
 /* Spostamento di un dispositivo: aggancio a 5 cm, dentro la pianta, locale aggiornato. */
