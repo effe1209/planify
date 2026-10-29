@@ -438,12 +438,14 @@ const FURNITURE = {
       <rect x={w * 0.55} y={h * 0.55} width={w * 0.3} height={h * 0.35} rx={1} fill="#c4b8a8" stroke={F_SOFT} strokeWidth="0.7" />
     </>
   ),
-  kitchen_counter: (w, h, s) => {
+  kitchen_counter: (w, h, s, t, item) => {
     const fridge = w >= 3 * s;
     const f0 = fridge ? 0.62 * s : 0;
     const usable = w - f0;
-    const hobX = f0 + usable * (fridge ? 0.3 : 0.18);
-    const sinkX = f0 + usable * 0.58;
+    const sinkW = Math.min(usable * 0.3, 0.8 * s);
+    // posizioni scelte dal motore (lavello sotto la finestra, fuochi lontani dal vetro) o quelle standard
+    const hobX = item?.parts?.hob != null ? item.parts.hob * s - 0.3 * s : f0 + usable * (fridge ? 0.3 : 0.18);
+    const sinkX = item?.parts?.sink != null ? item.parts.sink * s - sinkW / 2 : f0 + usable * 0.58;
     const r = Math.min(5, h * 0.15);
     return (
       <>
@@ -457,7 +459,7 @@ const FURNITURE = {
         {[0.28, 0.72].flatMap((cy) => [0, 1].map((k) => (
           <circle key={`${cy}-${k}`} cx={hobX + k * r * 2.6 + r} cy={h * cy} r={r} fill="none" stroke={F_STROKE} />
         )))}
-        <rect x={sinkX} y={h * 0.18} width={Math.min(usable * 0.3, 0.8 * s)} height={h * 0.64} rx={2} fill="#e3eefb" stroke={F_SOFT} />
+        <rect x={sinkX} y={h * 0.18} width={sinkW} height={h * 0.64} rx={2} fill="#e3eefb" stroke={F_SOFT} />
       </>
     );
   },
@@ -483,7 +485,7 @@ function Furn({ item, scale, theme }) {
         fill="#f1f3f6" stroke={F_STROKE} strokeWidth="1" />
     );
   }
-  return <Oriented item={item} scale={scale}>{(w, h) => draw(w, h, scale, theme)}</Oriented>;
+  return <Oriented item={item} scale={scale}>{(w, h) => draw(w, h, scale, theme, item)}</Oriented>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

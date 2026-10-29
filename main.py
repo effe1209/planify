@@ -162,6 +162,7 @@ class FurnitureItem(BaseModel):
     facing: str = ""   # lato verso cui è rivolto l'arredo (N/E/S/W)
     room: int = 0      # id della stanza che lo contiene
     flip: bool = False # disegno specchiato (doccia angolare, divano angolare, penisola)
+    parts: Optional[Dict[str, float]] = None   # posizioni interne (piano cucina: hob, sink in metri dall'inizio)
 
 
 class Notch(BaseModel):
