@@ -825,12 +825,14 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
                 P.place_beside(room, "bidet", wc, 0.38, 0.55, gap=0.25, sides=("left",), front=0.5)
         double = area >= 7.0 and max(inn.w, inn.h) >= 2.4
         return bool((double and P.place_wall(room, "sink", 1.2, 0.5, sink_sides, gap=0.1, front=0.5)) or
+                    (area >= 4.5 and P.place_wall(room, "sink", 0.8, 0.5, sink_sides, gap=0.1, front=0.5)) or
                     P.place_wall(room, "sink", 0.6, 0.5, sink_sides, gap=0.1, front=0.45) or
                     P.place_wall(room, "sink", 0.5, 0.4, sink_sides, gap=0.05, front=0.3))
 
     tub_ok = shower and main_bath and area >= 5.5 and max(inn.w, inn.h) >= 1.75
     for with_tub in ((True, False) if tub_ok else (False,)):
         if attempt(with_tub):
+            _bath_extras(P, room)
             return True
     # secondo giro: la porta si apre verso l'esterno per liberare spazio
     for d in lay.doors:
@@ -838,9 +840,29 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
             d.swing_into = d.room_a if d.room_b == room.id else d.room_b
     P.invalidate()
     if attempt(False):
+        _bath_extras(P, room)
         return True
     lay.notes.append(f"{room.name}: spazio insufficiente per tutti i sanitari")
     return False
+
+
+def _bath_extras(P: Placer, room: Room) -> None:
+    """Il bagno arredato, dopo i sanitari e solo nello spazio che resta libero: mobile sotto il lavabo (da 60 cm in
+    su), scaldasalviette vicino a doccia o vasca e una colonna contenitore su un muro libero."""
+    items = P.placed[room.id]
+    sink = next((it for it in items if it.type == "sink"), None)
+    if sink and max(sink.rect.w, sink.rect.h) >= 0.6 - EPS:
+        sink.parts = {"cabinet": 1.0}
+    wash = next((it for it in items if it.type in ("shower", "shower_round", "shower_walkin", "bathtub")), None)
+    if wash:
+        inn = P.inner(room)
+        dist = {"N": wash.rect.y - inn.y, "S": inn.y2 - wash.rect.y2, "W": wash.rect.x - inn.x, "E": inn.x2 - wash.rect.x2}
+        for side in sorted("NSEW", key=lambda k: dist[k]):
+            if P.place_wall(room, "towel_radiator", 0.5, 0.1, side, gap=0.1, front=0.5,
+                            target=wash.rect.cx if side in "NS" else wash.rect.cy):
+                break
+    P.place_wall(room, "bath_column", 0.4, 0.35, P.sides_far_from_door(room), order="end", gap=0.05, front=0.55,
+                 avoid_windows=True)
 
 
 # chi siede alla scrivania appoggiata al muro `side` guarda verso quel muro: ha alla sua sinistra questo lato

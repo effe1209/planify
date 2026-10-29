@@ -585,6 +585,7 @@ export default function App() {
       rot: 0,
       facing: 'S',
       room: roomId,
+      ...(entry.parts && { parts: entry.parts }),
     };
     editFurniture((list) => [...list, item]);
     say(`${entry.label} aggiunto`);

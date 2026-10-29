@@ -335,11 +335,13 @@ const BASE_FURNITURE = {
       <ellipse cx={w / 2} cy={h * 0.66} rx={w * 0.42} ry={h * 0.32} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
     </>
   ),
-  sink: (w, h, s) => {
+  sink: (w, h, s, _t, item) => {
     const n = w >= 1.05 * s ? 2 : 1; // lavabo doppio da 1,1-1,2 m
+    const cab = item?.parts?.cabinet;   // lavabo su mobile: il top va da muro a muro, il mobile si vede ai lati
     return (
       <>
-        <rect width={w} height={h} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
+        {cab && <rect x={-1} y={-1} width={w + 2} height={h + 2} rx={2} fill="#efe7da" stroke={F_STROKE} strokeWidth="1.1" />}
+        <rect x={cab ? 3 : 0} width={cab ? w - 6 : w} height={cab ? h - 3 : h} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth={cab ? 0.8 : 1.1} />
         {Array.from({ length: n }, (_, i) => {
           const cx = (w * (i + 0.5)) / n;
           return (
@@ -352,6 +354,21 @@ const BASE_FURNITURE = {
       </>
     );
   },
+  /* colonna contenitore: anta con la maniglia */
+  bath_column: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={1.5} fill="#efe7da" stroke={F_STROKE} strokeWidth="1.1" />
+      <line x1={2} y1={h - 3} x2={w - 2} y2={h - 3} stroke={F_SOFT} />
+      <line x1={w - 5} y1={h * 0.35} x2={w - 5} y2={h * 0.7} stroke={F_STROKE} strokeWidth="1.2" />
+    </>
+  ),
+  /* scaldasalviette a muro: barre orizzontali viste dall'alto */
+  towel_radiator: (w, h) => (
+    <>
+      <rect width={w} height={Math.max(h, 3)} rx={1} fill="#fff" stroke={F_STROKE} strokeWidth="1" />
+      {[0.25, 0.5, 0.75].map((k) => <line key={k} x1={w * k} y1={0} x2={w * k} y2={Math.max(h, 3)} stroke={F_SOFT} />)}
+    </>
+  ),
   bidet: (w, h) => (
     <>
       <rect x={w * 0.1} width={w * 0.8} height={h * 0.18} rx={2} fill="#fff" stroke={F_STROKE} strokeWidth="1" />
