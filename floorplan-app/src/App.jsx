@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
-  Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
+  Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Droplets, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
@@ -147,7 +147,7 @@ export default function App() {
   const [globalView, setGlobalView] = useState(false);
   const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
 
-  const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true });
+  const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true, technical: false });
   const [zoom, setZoom] = useState(null);
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -908,7 +908,8 @@ export default function App() {
         <main className="pf-stage">
           <div className="pf-toolbar">
             <div className="pf-group" role="group" aria-label="Livelli">
-              {[['furniture', Armchair, 'Arredi'], ['labels', Tag, 'Nomi'], ['dims', Ruler, 'Quote'], ['grid', LayoutGrid, 'Griglia']]
+              {[['furniture', Armchair, 'Arredi'], ['labels', Tag, 'Nomi'], ['dims', Ruler, 'Quote'], ['grid', LayoutGrid, 'Griglia'],
+                ['technical', PencilRuler, 'Tecnico']]
                 .map(([k, Icon, label]) => (
                   <button key={k} type="button" className={`pf-tool ${layers[k] ? 'is-on' : ''}`} aria-pressed={layers[k]}
                     onClick={() => toggle(k)}><Icon size={15} /> {label}</button>

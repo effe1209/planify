@@ -7,6 +7,10 @@ import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE } from '../lib/ajax';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
 import ElectricLayer from './ElectricLayer';
+import { FURNITURE_ART } from '../lib/furnitureArt';
+import Rug from './Rug';
+import Decor from './Decor';
+import { decorFor } from '../lib/decor';
 import PlumbingLayer from './PlumbingLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
@@ -46,7 +50,7 @@ const GREEN = '#7fae7a';
 const GREEN_DARK = '#4f7a4b';
 const METAL = '#c9ced6';
 
-const FURNITURE = {
+const BASE_FURNITURE = {
   /* ── garage ── */
   car: (w, h) => (
     <>
@@ -477,6 +481,9 @@ const FURNITURE = {
   },
 };
 
+// i pezzi principali hanno disegni dettagliati e dipendenti dallo stile (lib/furnitureArt.jsx)
+const FURNITURE = { ...BASE_FURNITURE, ...FURNITURE_ART };
+
 function Furn({ item, scale, theme }) {
   const draw = FURNITURE[item.type];
   if (!draw) {
@@ -788,6 +795,7 @@ export default function PlanSvg({
   const notches = plan.notches || [];
   const ref = (n) => `url(#${n}-${uid})`;
   const showFurn = layers.furniture && !thumb;
+  const tech = !!layers.technical;   // vista tecnica: bianco e nero, niente pavimenti, ombre, tappeti e decorazioni
   // tavole degli impianti: arredi attenuati (meno nell'idraulica, dove i sanitari fanno da riferimento)
   const furnOpacity = electric ? 0.22 : plumbing ? 0.5 : 1;
   const garden = !thumb && isGardenPlan(plan);
@@ -837,6 +845,12 @@ export default function PlanSvg({
         <filter id={`fshadow-${uid}`} x="-10%" y="-10%" width="120%" height="120%">
           <feDropShadow dx="0" dy="0.8" stdDeviation="0.9" floodColor="#000" floodOpacity="0.22" />
         </filter>
+        {/* vista tecnica: arredi in scala di grigi, come una tavola da cantiere */}
+        <filter id={`mono-${uid}`}>
+          <feColorMatrix type="saturate" values="0" />
+          <feComponentTransfer><feFuncR type="linear" slope="0.6" intercept="0.4" /><feFuncG type="linear" slope="0.6" intercept="0.4" />
+            <feFuncB type="linear" slope="0.6" intercept="0.4" /></feComponentTransfer>
+        </filter>
         <filter id={`pshadow-${uid}`} x="-10%" y="-10%" width="120%" height="125%">
           <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#1d2a44" floodOpacity="0.16" />
         </filter>
@@ -849,7 +863,7 @@ export default function PlanSvg({
         {garden && <HouseMark plan={plan} s={s} house={house} />}
         {notches.map((n, i) => (
           <g key={`n-${i}`}>
-            <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill="#f3f6f1" />
+            <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill={tech ? '#fff' : '#f3f6f1'} />
             <rect x={n.x * s} y={n.y * s} width={n.w * s} height={n.h * s} fill={ref('hatch')} />
             {!thumb && layers.labels && n.w * s > 74 && n.h * s > 34 && (
               <text x={(n.x + n.w / 2) * s} y={(n.y + n.h / 2) * s + 4} textAnchor="middle" fontSize="10.5"
@@ -860,13 +874,13 @@ export default function PlanSvg({
           </g>
         ))}
 
-        <g filter={thumb ? undefined : ref('pshadow')}>
+        <g filter={thumb || tech ? undefined : ref('pshadow')}>
           {plan.rooms.map((r) => (
-            <RoomShape key={`bg-${r.id}`} room={r} s={s} fill={r.color} />
+            <RoomShape key={`bg-${r.id}`} room={r} s={s} fill={tech ? '#fff' : r.color} />
           ))}
         </g>
         {plan.rooms.map((r) => {
-          const kind = FLOOR_BY_KIND[r.kind];
+          const kind = tech ? null : FLOOR_BY_KIND[r.kind];
           const fl = kind === 'wood' ? theme.floor : kind;   // 'concrete' e 'lawn' sono fissi
           return fl ? (
             <RoomShape key={`fl-${r.id}`} room={r} s={s} fill={ref(fl)} />
@@ -884,21 +898,23 @@ export default function PlanSvg({
           ) : null;
         })}
 
-        {showFurn && (
+        {showFurn && !tech && (
           <g pointerEvents="none" opacity={furnOpacity}>
             {rugsFor(plan).filter((r) => !coveredByStairs(r, stairs)).map((r, i) => (
-              <rect key={`rug-${i}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} rx={3}
-                fill={theme.rug} stroke={theme.rugLine} strokeWidth="0.8" strokeDasharray="1.5 2" />
+              <Rug key={`rug-${i}`} x={r.x * s} y={r.y * s} w={r.w * s} h={r.h * s} t={theme} />
             ))}
           </g>
         )}
         {showFurn && (
-          <g filter={ref('fshadow')} opacity={furnOpacity}>
+          <g filter={ref(tech ? 'mono' : 'fshadow')} opacity={furnOpacity}>
             {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
             {plan.furniture.filter((it) => !coveredByStairs(it, stairs))
               .sort((a, b) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
               .map((it, i) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
+        )}
+        {showFurn && !garden && !tech && (
+          <g opacity={furnOpacity}><Decor items={decorFor(plan)} s={s} t={theme} /></g>
         )}
         {stairs?.length > 0 && (
           <g pointerEvents="none" opacity={electric || plumbing ? 0.45 : 1}>
