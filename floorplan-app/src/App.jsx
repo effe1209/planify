@@ -34,6 +34,10 @@ import { readSharedProject, shareUrl } from './lib/share';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
+import { aimDevice, coverFloor, doorsFor, optimizeDevices, placeDevice, sensorCodes } from './lib/coverage';
+import { useCoverage } from './hooks/useCoverage';
+import CoveragePanel from './components/CoveragePanel';
+import DevicePanel from './components/DevicePanel';
 import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
@@ -325,10 +329,13 @@ export default function App() {
   /* ── Allarme Ajax: dispositivi di tutto il progetto, ognuno legato al suo piano ── */
   const devices = current?.security?.devices;
   const floorDevices = devices?.filter((d) => d.floor === floor?.id);
+  const doorState = current?.security?.doors || 'closed';
   const planAlarm = () => {
-    const security = planSecurity(current);
+    // regole per locale, poi ogni volumetrico nel montaggio che copre di più (lib/coverage.js)
+    const rules = planSecurity(current);
+    const security = { ...rules, doors: doorState, devices: optimizeDevices(current, rules.devices, { doors: doorState }) };
     editProject((p) => ({ ...p, security }));
-    setLayers((l) => ({ ...l, alarm: true }));
+    setLayers((l) => ({ ...l, alarm: true, coverage: true }));
     say(`${security.devices.length} dispositivi Ajax posizionati`);
   };
   const clearAlarm = () => editProject((p) => {
@@ -402,28 +409,87 @@ export default function App() {
   const undoKey = current && floor ? `${current.id}:${floor.id}` : null;
   const [undoState, setUndoState] = useState({ key: null, undo: [], redo: [] });
   const stacks = undoState.key === undoKey ? undoState : { key: undoKey, undo: [], redo: [] };
+  // ogni passo salva la pianta del piano e i dispositivi d'allarme (che stanno nel progetto)
+  const snapshot = () => ({ plan, security: current.security });
+  const restoreSnap = (snap) => history.update(current.id, (p) => {
+    const next = updateFloor(p, floor.id, (f) => ({ ...f, plan: snap.plan }));
+    if (snap.security) next.security = snap.security;
+    else delete next.security;
+    return next;
+  });
+  const pushUndo = () => setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), snapshot()], redo: [] });
   const editPlan = (fn) => {   // agisce sul piano attivo
     if (!current || !plan || readOnly) return;
-    setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), plan], redo: [] });
+    pushUndo();
     history.updatePlan(current.id, fn);
+  };
+  const editSecurity = (fn) => {   // dispositivi d'allarme, con annulla
+    if (!current || !plan || readOnly || !current.security) return;
+    pushUndo();
+    editProject((p) => ({ ...p, security: fn(p.security) }));
   };
   const undo = () => {
     if (!current || !stacks.undo.length) return;
     const prev = stacks.undo[stacks.undo.length - 1];
-    setUndoState({ key: undoKey, undo: stacks.undo.slice(0, -1), redo: [...stacks.redo, plan] });
-    history.updatePlan(current.id, () => prev);
+    setUndoState({ key: undoKey, undo: stacks.undo.slice(0, -1), redo: [...stacks.redo, snapshot()] });
+    restoreSnap(prev);
   };
   const redo = () => {
     if (!current || !stacks.redo.length) return;
     const next = stacks.redo[stacks.redo.length - 1];
-    setUndoState({ key: undoKey, undo: [...stacks.undo, plan], redo: stacks.redo.slice(0, -1) });
-    history.updatePlan(current.id, () => next);
+    setUndoState({ key: undoKey, undo: [...stacks.undo, snapshot()], redo: stacks.redo.slice(0, -1) });
+    restoreSnap(next);
   };
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
   const [view3d, setView3d] = useState(null);   // null = pianta; { low } = vista 3D (muri bassi o interi)
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
   const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
+  // dispositivo d'allarme selezionato (per id, sul piano aperto); esclude l'arredo selezionato e viceversa
+  const selectedDevice = selection?.key === undoKey && selection.device
+    ? floorDevices?.find((d) => d.id === selection.device) || null : null;
+  const setSelectedDevice = (id) => setSelection(id == null ? null : { key: undoKey, device: id });
+  const editDevice = (id, fn) => editSecurity((sec) => ({ ...sec, devices: sec.devices.map((d) => (d.id === id ? fn(d) : d)) }));
+  const moveDevice = (id, x, y) => editDevice(id, (d) => placeDevice(plan, d, x, y));
+  const changeDevice = (id, patch) => editDevice(id, (d) => ({ ...d, ...patch }));
+  const removeDevice = (id) => {
+    editSecurity((sec) => ({ ...sec, devices: sec.devices.filter((d) => d.id !== id) }));
+    setSelectedDevice(null);
+    say('Dispositivo rimosso');
+  };
+  // stato generale delle porte (azzera quelle cambiate una per una) e porta singola con un clic in pianta
+  const setDoors = (doors) => editSecurity((sec) => ({ ...sec, doors, doorStates: {} }));
+  const toggleDoor = (i) => editSecurity((sec) => {
+    const cur = doorsFor(sec, floor.id);
+    const next = (cur[i] || cur.default) === 'open' ? 'closed' : 'open';
+    return { ...sec, doorStates: { ...sec.doorStates, [floor.id]: { ...(sec.doorStates?.[floor.id] || {}), [i]: next } } };
+  });
+  /* ── Copertura dei sensori: calcolata nel Web Worker, anche durante il trascinamento di un sensore ── */
+  const [devicePreview, setDevicePreview] = useState(null);
+  const floorDoors = useMemo(() => doorsFor(current?.security, floor?.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current?.security?.doors, current?.security?.doorStates, floor?.id]);
+  const coverageDevices = useMemo(
+    () => (devicePreview ? floorDevices?.map((d) => (d.id === devicePreview.id ? devicePreview : d)) : floorDevices),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current?.security?.devices, floor?.id, devicePreview],
+  );
+  const coverageOn = !!layers.coverage && layers.alarm !== false && !!floorDevices?.length && !showElectric && !showPlumbing;
+  const coverage = useCoverage(plan, coverageDevices, floorDoors, coverageOn);
+  const [coverHighlight, setCoverHighlight] = useState(null);
+  /* Nuovo volumetrico nel locale selezionato (o nel più grande), già nel montaggio migliore. */
+  const addSensor = () => {
+    const room = plan.rooms.find((r) => r.id === selectedId)
+      || [...plan.rooms].filter((r) => r.kind !== 'garden').sort((a, b) => b.w * b.h - a.w * a.h)[0];
+    if (!room) return;
+    const id = `dev-${Date.now().toString(36)}`;
+    const dev = { id, model: 'motionprotect', floor: floor.id, room: room.id, roomName: room.name,
+      x: room.x + room.w / 2, y: room.y + room.h / 2, purpose: 'Volumetrico aggiunto' };
+    const [placed] = optimizeDevices(current, [dev], { doors: doorState, all: devices || [] });
+    editSecurity((sec) => ({ ...sec, devices: [...sec.devices, placed] }));
+    setSelectedDevice(id);
+    say(`MotionProtect aggiunto in «${room.name}»`);
+  };
   const moveFurniture = (index, x, y) => editFurniture((list) => list.map((f, i) => {
     if (i !== index) return f;
     const p = snapItem(plan, f, x, y);
@@ -454,6 +520,21 @@ export default function App() {
       if (mod && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+        return;
+      }
+      if (selectedDevice && !mod) {
+        const step = e.shiftKey ? 0.25 : 0.05;
+        const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+        if (arrows[e.key]) {
+          e.preventDefault();
+          moveDevice(selectedDevice.id, selectedDevice.x + arrows[e.key][0], selectedDevice.y + arrows[e.key][1]);
+        } else if (e.key === 'r' || e.key === 'R') {
+          const a = aimDevice(plan, selectedDevice).dir + (e.shiftKey ? -15 : 15);
+          changeDevice(selectedDevice.id, { dir: ((Math.round(a) % 360) + 360) % 360 });
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          removeDevice(selectedDevice.id);
+        } else if (e.key === 'Escape') setSelectedDevice(null);
         return;
       }
       if (selectedItem == null || mod) return;
@@ -788,19 +869,29 @@ export default function App() {
     }
   };
 
-  const exportDxf = async () => {
-    if (!plan) return;
-    say('Generazione file CAD in corso…');
-    let blob = null;
-    if (base) {
-      try {
-        blob = await (await postJson(base, '/export-dxf', plan)).blob();
-      } catch {
-        /* si usa l'esportatore locale */
-      }
+  const exportCoverage = async () => {
+    if (!current?.security?.devices?.length) return;
+    say('Preparazione della relazione di copertura…');
+    try {
+      const { exportCoverageReport } = await import('./lib/coverageReport');
+      await exportCoverageReport(current);
+      say('Relazione di copertura esportata');
+    } catch (e) {
+      setError(`Relazione di copertura non riuscita: ${e.message}`);
     }
-    saveBlob(blob ?? new Blob([buildDxf(plan)], { type: 'application/dxf' }), 'planimetria.dxf');
-    say('File CAD esportato');
+  };
+
+  /* DXF R12 a layer del piano aperto, con i dispositivi Ajax come blocchi e la copertura calcolata (lib/dxf.js). */
+  const exportDxf = () => {
+    if (!plan) return;
+    const devs = floorDevices || [];
+    const opts = devs.length
+      ? { devices: devs, codes: sensorCodes(current, devices), coverage: coverFloor(plan, devs, { doors: floorDoors }) }
+      : {};
+    const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const name = [slug(current.name) || 'planimetria', current.floors.length > 1 ? slug(floor.name) : ''].filter(Boolean).join('-');
+    saveBlob(new Blob([buildDxf(plan, opts)], { type: 'application/dxf' }), `${name}.dxf`);
+    say(devs.length ? 'File CAD esportato con sensori e copertura' : 'File CAD esportato');
   };
 
   const copy = async (text, msg) => {
@@ -1155,6 +1246,10 @@ export default function App() {
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
                   editable={!readOnly && !showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
+                  selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
+                  onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
+                  onDeviceDrag={setDevicePreview} coverage={coverage} coverageHighlight={coverHighlight}
+                  doorStates={coverage && !readOnly ? (i) => floorDoors[i] || floorDoors.default : null} onDoorToggle={toggleDoor}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
                   plumbingLines={plumbingCfg?.lines !== false} generator={plumbingCfg?.generator}
@@ -1198,7 +1293,18 @@ export default function App() {
               {selectedItem != null && (
                 <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
                   onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onHeight={(z) => editFurniture((list) => list.map((f, i) => {
+                    if (i !== selectedItem) return f;
+                    const next = { ...f, z };
+                    if (!z) delete next.z;
+                    return next;
+                  }))}
                   onClose={() => setSelectedItem(null)} />
+              )}
+              {selectedDevice && (
+                <DevicePanel plan={plan} device={selectedDevice} devices={devices} doors={floorDoors}
+                  onChange={(patch) => changeDevice(selectedDevice.id, patch)} onRemove={() => removeDevice(selectedDevice.id)}
+                  onClose={() => setSelectedDevice(null)} />
               )}
               {selectedRoom && (
                 <RoomEditor
@@ -1275,7 +1381,14 @@ export default function App() {
               <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
                 onClear={clearEstimate} />
 
-              <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm} />
+              <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm}
+                doors={doorState} onDoors={setDoors} onAddSensor={readOnly ? null : addSensor}
+                roomName={plan.rooms.find((r) => r.id === selectedId)?.name} />
+              {floorDevices?.length > 0 && !showElectric && !showPlumbing && (
+                <CoveragePanel coverage={coverage} shown={!!layers.coverage}
+                  onToggle={() => { setLayers((l) => ({ ...l, coverage: !l.coverage, alarm: true })); setCoverHighlight(null); }}
+                  highlight={coverHighlight} onHighlight={setCoverHighlight} onReport={exportCoverage} />
+              )}
 
               <DesignReport design={plan.design} />
 

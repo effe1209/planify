@@ -146,6 +146,7 @@ export const FURNITURE_LABEL = {
   shelving: 'Scaffali', vacuum: 'Aspirapolvere', car: 'Auto', motorbike: 'Moto', workbench: 'Banco da lavoro',
   shelving_heavy: 'Scaffalatura pesante', hedge: 'Siepe', fence: 'Recinzione', gate_pedestrian: 'Cancello pedonale',
   gate_driveway: 'Cancello carrabile', gazebo: 'Gazebo', path: 'Camminamento', tree: 'Albero',
+  sideboard: 'Madia', bookcase: 'Libreria', dresser: 'Cassettiera', shoe_cabinet: 'Scarpiera', floor_lamp: 'Lampada da terra',
 };
 
 export const LOADING_STEPS = [

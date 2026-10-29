@@ -1,11 +1,11 @@
-import { ShieldCheck, Trash2 } from 'lucide-react';
+import { Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { billOfMaterials, DEVICE_STYLE } from '../lib/ajax';
 
 /*
- * Allarme Ajax: avvia la disposizione ottimale dei dispositivi sul progetto (tutti i piani),
- * mostra la legenda dei simboli e la distinta materiali.
+ * Allarme Ajax: avvia la disposizione ottimale dei dispositivi sul progetto (tutti i piani), aggiunge
+ * volumetrici, imposta lo stato delle porte interne per il calcolo e mostra legenda e distinta materiali.
  */
-export default function SecurityPanel({ project, floorId, onPlan, onClear }) {
+export default function SecurityPanel({ project, floorId, onPlan, onClear, doors = 'closed', onDoors, onAddSensor, roomName }) {
   const devices = project.security?.devices || [];
   const bom = billOfMaterials(project, devices);
   const here = devices.filter((d) => d.floor === floorId).length;
@@ -20,14 +20,29 @@ export default function SecurityPanel({ project, floorId, onPlan, onClear }) {
         </p>
       ) : (
         <p className="pf-hint">
-          <b>{devices.length}</b> dispositivi nel progetto, <b>{here}</b> su questo piano.
-          Dopo aver modificato le piante, ricalcola la disposizione.
+          <b>{devices.length}</b> dispositivi nel progetto, <b>{here}</b> su questo piano. Clicca un dispositivo
+          per spostarlo, ruotarlo o cambiarne modello e altezza.
         </p>
+      )}
+      {devices.length > 0 && onDoors && (
+        <label className="pf-field-sm">
+          <span>Porte interne ad allarme inserito</span>
+          <select className="pf-input-sm" value={typeof doors === 'string' ? doors : 'closed'} onChange={(e) => onDoors(e.target.value)}>
+            <option value="closed">Chiuse (caso peggiore)</option>
+            <option value="open">Aperte</option>
+          </select>
+        </label>
       )}
       <div className="pf-security-actions">
         <button type="button" className="pf-btn-add" onClick={onPlan}>
           <ShieldCheck size={14} /> {devices.length ? 'Ricalcola disposizione' : 'Disposizione ottimale allarme'}
         </button>
+        {devices.length > 0 && onAddSensor && (
+          <button type="button" className="pf-mini" onClick={onAddSensor}
+            title={roomName ? `Aggiungi un MotionProtect in «${roomName}»` : 'Aggiungi un MotionProtect (seleziona prima un locale)'}>
+            <Plus size={13} /> Volumetrico{roomName ? ` in ${roomName}` : ''}
+          </button>
+        )}
         {devices.length > 0 && (
           <button type="button" className="pf-mini" onClick={onClear} title="Rimuovi i dispositivi dal progetto"
             aria-label="Rimuovi i dispositivi"><Trash2 size={13} /></button>
