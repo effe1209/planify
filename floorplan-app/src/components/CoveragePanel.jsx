@@ -1,4 +1,4 @@
-import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
+import { Eye, EyeOff, FileText, TriangleAlert } from 'lucide-react';
 import { ASSUMPTIONS, COVER_COLORS } from '../lib/coverage';
 
 const rgba = ([r, g, b, a]) => `rgba(${r},${g},${b},${Math.min(1, (a / 255) * 2.2)})`;
@@ -7,9 +7,9 @@ const OPENING = { door: 'Porta', window: 'Finestra' };
 
 /*
  * Copertura del piano aperto (lib/coverage.js, calcolata nel Web Worker): totale, barra per locale, zone cieche
- * con la causa (clic per evidenziarle in pianta), varchi verso l'esterno e ipotesi di calcolo.
+ * con la causa (clic per evidenziarle in pianta), varchi verso l'esterno, ipotesi e relazione PDF di tutto il progetto.
  */
-export default function CoveragePanel({ coverage, shown, onToggle, highlight, onHighlight }) {
+export default function CoveragePanel({ coverage, shown, onToggle, highlight, onHighlight, onReport }) {
   const rooms = coverage?.rooms.filter((r) => r.area > 0) || [];
   const watched = rooms.filter((r) => r.own > 0);   // locali con un sensore montato dentro
   const unwatched = rooms.filter((r) => r.own === 0 && r.kind !== 'garden');
@@ -99,6 +99,14 @@ export default function CoveragePanel({ coverage, shown, onToggle, highlight, on
             </details>
           )}
           <p className="pf-hint">Clic su una porta in pianta per aprirla o chiuderla nel calcolo.</p>
+          {onReport && (
+            <div className="pf-security-actions">
+              <button type="button" className="pf-btn-add" onClick={onReport}
+                title="PDF da allegare al preventivo: tavole di copertura di tutti i piani, rilevatori, locali, varchi, ipotesi e fonti">
+                <FileText size={14} /> Relazione di copertura (PDF)
+              </button>
+            </div>
+          )}
           <details className="pf-bom">
             <summary>Ipotesi di calcolo</summary>
             <ul className="pf-notes">

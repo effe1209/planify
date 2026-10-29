@@ -21,20 +21,20 @@ import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
 import { fmt, fmtM } from './utils';
 
-const INK = '#14181f';
-const MUTED = '#6b7482';
-const LINE = '#d5dae1';
-const ACCENT = '#0071e3';
-const M = 16;   // margine pagina, mm
+export const INK = '#14181f';
+export const MUTED = '#6b7482';
+export const LINE = '#d5dae1';
+export const ACCENT = '#0071e3';
+export const M = 16;   // margine pagina, mm
 const LAYERS = { furniture: true, labels: true, dims: true, grid: false, alarm: true };
 
 /* I font standard del PDF coprono solo WinAnsi: niente apostrofi tipografici, ≥, frecce… */
-const safe = (s) => String(s ?? '')
+export const safe = (s) => String(s ?? '')
   .replace(/[‘’]/g, "'").replace(/[“”«»]/g, '"').replace(/[—–]/g, '-').replace(/≥/g, '>=').replace(/≤/g, '<=')
   .replace(/[^\n\x20-\x7e\xa0-\xff]/g, '');
 
 /* Disegna PlanSvg fuori schermo e lo rasterizza in PNG. */
-async function floorImage(floor, devices, extra, k = 3) {
+export async function floorImage(floor, devices, extra, k = 3) {
   const host = document.createElement('div');
   const root = createRoot(host);
   flushSync(() => root.render(createElement(PlanSvg, {
@@ -64,9 +64,9 @@ async function floorImage(floor, devices, extra, k = 3) {
   }
 }
 
-const grossArea = (plan) => plan.stats?.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0);
+export const grossArea = (plan) => plan.stats?.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0);
 
-function footer(doc, project, page, pages) {
+export function footer(doc, project, page, pages) {
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   doc.setDrawColor(LINE).setLineWidth(0.2).line(M, ph - 11, pw - M, ph - 11);
@@ -75,7 +75,7 @@ function footer(doc, project, page, pages) {
   doc.text(`Pagina ${page} di ${pages}`, pw - M, ph - 6.5, { align: 'right' });
 }
 
-function tagBadge(doc, x, y, model) {
+export function tagBadge(doc, x, y, model) {
   const st = DEVICE_STYLE[model] || { tag: '?', color: INK };
   const w = Math.max(7, st.tag.length * 2 + 3);
   doc.setFillColor(st.color).roundedRect(x, y - 3.2, w, 4.6, 2.3, 2.3, 'F');
@@ -136,7 +136,7 @@ function cover(doc, project, devices, bom) {
 }
 
 /* Tabella semplice con intestazione, righe a capo e salto pagina. Restituisce la y finale. */
-function table(doc, y, head, rows, fr, { onNewPage } = {}) {
+export function table(doc, y, head, rows, fr, { onNewPage } = {}) {
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
   const W = pw - 2 * M;
