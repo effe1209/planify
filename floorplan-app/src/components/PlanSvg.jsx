@@ -48,7 +48,7 @@ function Oriented({ item, scale, children }) {
 const F_STROKE = '#5b6472';
 const F_SOFT = '#bcc3ce';
 
-const GROUND = new Set(['path', 'hedge']);
+const GROUND = new Set(['path', 'ramp', 'hedge']);
 const GREEN = '#7fae7a';
 const GREEN_DARK = '#4f7a4b';
 const METAL = '#c9ced6';
@@ -199,6 +199,22 @@ const BASE_FURNITURE = {
             width={horiz ? step - 4 : w - 4} height={horiz ? h - 4 : step - 4} rx={3}
             fill="#e4ded3" stroke="#b9ae9c" strokeWidth="0.8" />
         ))}
+      </>
+    );
+  },
+  /* rampa del garage interrato: cemento rigato, freccia che scende verso la casa (lato nord) */
+  ramp: (w, h) => {
+    const n = Math.max(1, Math.floor(h / 18));
+    const cx = w / 2;
+    return (
+      <>
+        <rect x={0} y={0} width={w} height={h} fill="#dcdfe3" stroke="#9aa1ab" strokeWidth="0.9" />
+        {Array.from({ length: n }, (_, i) => (
+          <line key={i} x1={3} y1={(i + 0.5) * (h / n)} x2={w - 3} y2={(i + 0.5) * (h / n)} stroke="#b7bdc6" strokeWidth="0.7" />
+        ))}
+        <path d={`M ${cx} ${h - 10} L ${cx} 14 M ${cx - 7} 24 L ${cx} 14 L ${cx + 7} 24`} fill="none" stroke="#5b6472" strokeWidth="1.6" />
+        <text x={cx} y={h / 2} textAnchor="middle" fontSize="9" fontWeight="700" fill="#5b6472" stroke="#dcdfe3" strokeWidth="3"
+          paintOrder="stroke" transform={`rotate(-90 ${cx} ${h / 2})`}>RAMPA</text>
       </>
     );
   },
@@ -718,37 +734,86 @@ const stairLabels = (st) => (st.engine
   : [`${st.role === 'up' ? 'SALE' : 'SCENDE'} a ${st.other}`]);
 
 /*
- * Giardino: la casa sta sul lato nord, fuori dal lotto. Si disegna come un edificio sopra il giardino,
- * largo quanto il piano terra del progetto se c'è, con l'ingresso dove arriva il camminamento; sotto,
- * oltre la recinzione, la strada.
+ * Giardino: la casa sta sul lato nord, fuori dal lotto, con la facciata d'ingresso verso il giardino.
+ * Si disegna la parte davanti della sua pianta (i locali del piano terra, tagliati in alto) nel punto in cui
+ * il motore l'ha messa (plan.house.x), con il portoncino e la basculante; sotto, oltre la recinzione, la strada.
+ * Giardini senza la casa collegata: un edificio schematico centrato sul camminamento.
  */
 function HouseMark({ plan, s, house }) {
   const W = plan.svgWidth;
   const H = plan.svgHeight;
+  const D = HOUSE_BAND - 10;   // profondità della casa disegnata, in pixel
   const paths = plan.furniture.filter((f) => f.type === 'path').sort((a, b) => a.y - b.y);
-  const doorX = paths.length ? (paths[0].x + paths[0].w / 2) * s : W / 2;
-  const hw = Math.min(W, Math.max(4 * s, house?.w ? house.w * s : W * 0.65));
-  const hx = clamp(doorX - hw / 2, 0, W - hw);
-  const top = -HOUSE_BAND + 12;
-  const hh = HOUSE_BAND - 14;
-  return (
-    <g fontFamily={FONT} pointerEvents="none">
-      <rect x={hx} y={top} width={hw} height={hh} fill="#e8e4dc" stroke={INK} strokeWidth="2.6" />
-      <path d={`M ${hx} ${top} L ${hx + hw} ${top + hh} M ${hx + hw} ${top} L ${hx} ${top + hh}`}
-        stroke={INK} strokeOpacity="0.12" strokeWidth="1" />
-      <text x={hx + hw / 2} y={top + hh / 2 - 2} textAnchor="middle" fontSize="13" fontWeight="800" fill={INK}
-        letterSpacing="2" stroke="#e8e4dc" strokeWidth="4" paintOrder="stroke">CASA</text>
-      <text x={hx + hw / 2} y={top + hh / 2 + 12} textAnchor="middle" fontSize="9" fill="#3d4654"
-        stroke="#e8e4dc" strokeWidth="3" paintOrder="stroke">
-        {house?.name ? `${house.name} · ` : ''}lato nord del giardino
-      </text>
-      <rect x={doorX - 0.5 * s} y={top + hh - 3} width={s} height={5} fill="#d92d20" />
-      <text x={doorX} y={top + hh - 7} textAnchor="middle" fontSize="8" fontWeight="700" fill="#d92d20"
-        stroke="#e8e4dc" strokeWidth="3" paintOrder="stroke">ingresso</text>
+  const pathX = paths.length ? paths[0].x + paths[0].w / 2 : W / s / 2;
+  const real = house?.rects?.length > 0;
+  const street = (
+    <>
       <line x1={0} y1={H + 12} x2={W} y2={H + 12} stroke="#8a8f98" strokeWidth="1" strokeDasharray="8 5" />
       <text x={W / 2} y={H + 26} textAnchor="middle" fontSize="10.5" fontWeight="700" letterSpacing="3" fill="#6b7482">
         STRADA
       </text>
+    </>
+  );
+  const label = (cx, cy, sub) => (
+    <>
+      <text x={cx} y={cy - 2} textAnchor="middle" fontSize="13" fontWeight="800" fill={INK}
+        letterSpacing="2" stroke="#e8e4dc" strokeWidth="4" paintOrder="stroke">CASA</text>
+      <text x={cx} y={cy + 12} textAnchor="middle" fontSize="9" fill="#3d4654"
+        stroke="#e8e4dc" strokeWidth="3" paintOrder="stroke">{sub}</text>
+    </>
+  );
+  const mark = (x, w, d, color, text) => (
+    <g key={text}>
+      <rect x={x} y={-d * s - 3} width={w} height={6} fill={color} />
+      <text x={x + w / 2} y={-d * s - 7} textAnchor="middle" fontSize="8" fontWeight="700" fill={color}
+        stroke="#e8e4dc" strokeWidth="3" paintOrder="stroke">{text}</text>
+    </g>
+  );
+
+  if (!real) {
+    const doorX = pathX * s;
+    const hw = Math.min(W, Math.max(4 * s, house?.w ? house.w * s : W * 0.65));
+    const hx = clamp(doorX - hw / 2, 0, W - hw);
+    return (
+      <g fontFamily={FONT} pointerEvents="none">
+        <rect x={hx} y={-D} width={hw} height={D - 2} fill="#e8e4dc" stroke={INK} strokeWidth="2.6" />
+        {label(hx + hw / 2, -D / 2, `${house?.name ? `${house.name} · ` : ''}lato nord del giardino`)}
+        {mark(doorX - 0.5 * s, s, 0, '#d92d20', 'ingresso')}
+        {street}
+      </g>
+    );
+  }
+
+  // dove sta la casa sul lotto: dal motore, altrimenti col portoncino sul camminamento
+  const hx = (plan.house?.x ?? (house.door ? pathX - house.door.x : (W / s - house.w) / 2)) * s;
+  const cut = Math.max(...house.rects.map((r) => r.d + r.h)) * s > D;
+  const zig = Array.from({ length: Math.ceil((house.w * s) / 12) + 1 }, (_, i) => `${hx + i * 12} ${-D + (i % 2 ? 4 : -4)}`);
+  const g = house.garage;
+  return (
+    <g fontFamily={FONT} pointerEvents="none">
+      <defs>
+        <clipPath id="pf-house-clip"><rect x={-60} y={-D} width={W + 120} height={D} /></clipPath>
+      </defs>
+      <g clipPath="url(#pf-house-clip)">
+        {house.rects.map((r, i) => (
+          <rect key={i} x={hx + r.t * s} y={-(r.d + r.h) * s} width={r.w * s} height={r.h * s}
+            fill={r.kind === 'garage' ? '#dfe2e6' : '#e8e4dc'} stroke={INK} strokeWidth="1.6" />
+        ))}
+      </g>
+      {cut && <path d={`M ${zig.join(' L ')}`} fill="none" stroke={INK} strokeWidth="1.2" />}
+      {label(clamp(hx + (house.w * s) / 2, 50, W - 50), -D / 2 - 6,
+        `${house.name ? `${house.name} · ` : ''}facciata d'ingresso`)}
+      {house.door && mark(hx + (house.door.x - house.door.w / 2) * s, house.door.w * s, house.door.d, '#d92d20', 'ingresso')}
+      {g?.side === 'front' && mark(hx + (g.x - g.w / 2) * s, g.w * s, g.ramp ? 0 : g.d, '#3d4654',
+        g.ramp ? 'rampa al garage interrato' : 'garage')}
+      {g && g.side !== 'front' && (
+        <text x={g.side === 'left' ? hx - 6 : g.side === 'right' ? hx + house.w * s + 6 : hx + (house.w * s) / 2}
+          y={g.side === 'back' ? -D + 18 : -14} textAnchor={g.side === 'left' ? 'end' : g.side === 'right' ? 'start' : 'middle'}
+          fontSize="8.5" fontWeight="700" fill="#3d4654" stroke="#fff" strokeWidth="3" paintOrder="stroke">
+          {g.side === 'back' ? 'garage sul retro ↑' : `${g.side === 'left' ? '↑ ' : ''}garage sul fianco${g.side === 'right' ? ' ↑' : ''}`}
+        </text>
+      )}
+      {street}
     </g>
   );
 }

@@ -38,7 +38,7 @@ import { aimDevice, coverFloor, doorsFor, optimizeDevices, placeDevice, sensorCo
 import { useCoverage } from './hooks/useCoverage';
 import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
-import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
+import { activeFloor, addFloor, houseFor, houseFront, houseRequest, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -655,6 +655,27 @@ export default function App() {
     }
   };
 
+  /* Giardino: rigenerato davanti alla casa del progetto (portoncino, garage), con le stesse misure. */
+  const gardenFront = floor?.meta?.type === 'garden' && plan && engineHas('garden_house') ? houseFront(current) : null;
+  const gardenAligned = gardenFront && plan.house && Math.abs(plan.house.w - gardenFront.w) < 0.01;
+  const realignGarden = async () => {
+    if (!gardenFront || !base) return;
+    const params = { ...form, ...floor.params, roomType: 'garden' };
+    const body = { ...planBody(params, plan.dimensions.width, plan.dimensions.length, randomSeed()), house: houseRequest(gardenFront) };
+    setError(null);
+    setIsLoading(true);
+    try {
+      const data = await readJson(await postJson(base, '/generate-plan', body));
+      editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, plan: data })));
+      setSelectedId(null);
+      say(`«${floor.name}» allineato alla casa`);
+    } catch (err) {
+      setError(`Impossibile rigenerare il giardino: ${err.message}.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const run = async ({ variant = false } = {}) => {
     setError(null);
     if (!base) {
@@ -728,6 +749,9 @@ export default function App() {
         });
       }
       if (garageCore) body.core = garageCore;
+      // giardino di una casa già disegnata: cancelli e vialetti davanti al portoncino e al garage
+      const front = form.roomType === 'garden' && pendingFloor && engineHas('garden_house') ? houseFront(current) : null;
+      if (front) body.house = houseRequest(front);
       const request = async () => readJson(await postJson(base, '/generate-plan', body, controller.signal));
       let data;
       try {
@@ -1055,7 +1079,10 @@ export default function App() {
                 </div>
               )}
               {form.roomType === 'garden' && (
-                <p className="pf-hint">Giardino con la casa sul lato nord e la strada a sud: recinzione, cancello pedonale e carrabile, siepi, camminamento, gazebo e alberi.</p>
+                <p className="pf-hint">
+                  Giardino davanti alla facciata d'ingresso, con la strada a sud: recinzione, cancello pedonale e carrabile, siepi, camminamento, gazebo e alberi.
+                  {pendingFloor && houseFront(current) ? ' Il cancello va davanti al portoncino e il vialetto davanti al garage (con la rampa, se è interrato).' : ' Aggiunto a un progetto con la casa, si allinea al portoncino e al garage.'}
+                </p>
               )}
               {form.roomType === 'apartment' && engineHas('stairs') && (pendingFloor ? hasNeighbour(pendingFloor.level) : engineHas('house')) && (
                 <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')}
@@ -1496,6 +1523,11 @@ export default function App() {
                   {alignCore && (
                     <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignFloor}>
                       <Shuffle size={15} /> Rigenera questo piano con la scala allineata
+                    </button>
+                  )}
+                  {gardenFront && (
+                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignGarden}>
+                      <Shuffle size={15} /> {gardenAligned ? 'Rigenera il giardino davanti alla casa' : 'Allinea il giardino alla casa'}
                     </button>
                   )}
                 </section>
