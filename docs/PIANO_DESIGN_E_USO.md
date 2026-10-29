@@ -46,3 +46,13 @@ piatte, e lo stile (`lib/themes.js`) cambia quasi solo i colori.
 - 2c: `lib/themes.js` con la grammatica delle forme per stile (round, arm, legs, low, tuft, rugPattern,
   accent, metal, leather).
 - 2d: pulsante «Tecnico» nella barra (layers.technical).
+
+## Stato del punto 3 (29/10/2026) — fatto
+
+- 3a: `lib/furnitureEdit.js` (aggancio, rotazione, controlli), trascinamento in `PlanSvg`, `components/ItemPanel.jsx`,
+  annulla/ripeti in `App.jsx` (pulsanti e ⌘Z / ⇧⌘Z).
+- 3b: `lib/scene3d.js` + `components/Plan3D.jsx` (three.js caricato solo all'apertura), pulsanti «3D» e «Muri bassi».
+- 3c: `lib/estimate.js` + `components/EstimatePanel.jsx`, pagina nel PDF.
+- 3d: `lib/schedule.js` + `components/SchedulePanel.jsx`, codici e quote interne nella vista «Tecnico», abaco e
+  tavola quotata per piano nel PDF. Corretto nel motore il portoncino di 60 cm sul lato corto dell'atrio.
+- 3e: `lib/share.js`, pulsante «Condividi», barra di sola lettura con «Salva una copia».
