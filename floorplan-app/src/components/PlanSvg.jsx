@@ -5,6 +5,7 @@
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
+import { aimDevice, placeDevice, sensorModel } from '../lib/coverage';
 import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
 import ElectricLayer from './ElectricLayer';
 import { FURNITURE_ART } from '../lib/furnitureArt';
@@ -839,6 +840,96 @@ function roomLabel(room, s) {
   return { name, fs };
 }
 
+/*
+ * Dispositivi Ajax: simbolo con sigla; i sensori hanno anche il ventaglio (apertura reale, 1,2 m) e l'asse.
+ * Modificabili: trascinamento del simbolo per spostare, della maniglia sull'asse per ruotare (passi di 5°).
+ */
+function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onMove, onRotate }) {
+  const [drag, setDrag] = useState(null);   // { id, mode: 'move' | 'rotate', start, orig, x, y, dir, moved }
+  const shown = (d) => (drag?.id === d.id ? { ...d, x: drag.x, y: drag.y, dir: drag.dir } : d);
+  const start = (e, d, mode) => {
+    if (!editable) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    onSelect?.(d.id);
+    const a = aimDevice(plan, d);
+    setDrag({ id: d.id, mode, start: toMeters(e), orig: { x: d.x, y: d.y }, x: d.x, y: d.y, dir: a.dir, moved: false });
+  };
+  const move = (e, d) => {
+    if (drag?.id !== d.id) return;
+    const m = toMeters(e);
+    if (drag.mode === 'move') {
+      const p = placeDevice(plan, d, drag.orig.x + m.x - drag.start.x, drag.orig.y + m.y - drag.start.y);
+      setDrag({ ...drag, x: p.x, y: p.y, moved: drag.moved || p.x !== d.x || p.y !== d.y });
+    } else {
+      const dir = Math.round(Math.atan2(m.y - drag.y, m.x - drag.x) / (Math.PI / 180) / 5) * 5;
+      setDrag({ ...drag, dir, moved: true });
+    }
+  };
+  const end = () => {
+    if (drag?.moved) {
+      if (drag.mode === 'move') onMove?.(drag.id, drag.x, drag.y);
+      else onRotate?.(drag.id, drag.dir);
+    }
+    setDrag(null);
+  };
+  return (
+    <g fontFamily={FONT} fontWeight="700" textAnchor="middle" pointerEvents={editable ? undefined : 'none'}>
+      {devices.map(shown).map((d) => {
+        const m = sensorModel(d.model);
+        if (!m || m.kind === 'glass') return null;
+        const { dir } = aimDevice(plan, d);
+        const st = DEVICE_STYLE[d.model] || { color: INK };
+        const R = 1.2 * s;
+        const half = Math.max(m.hAngle, 8) / 2;
+        const arc = (a) => {
+          const p = (k) => [Math.cos(((a + k * half) * Math.PI) / 180) * R, Math.sin(((a + k * half) * Math.PI) / 180) * R];
+          const [x0, y0] = p(-1), [x1, y1] = p(1);
+          return `M0 0L${x0} ${y0}A${R} ${R} 0 0 1 ${x1} ${y1}Z`;
+        };
+        const sel = d.id === selected;
+        return (
+          <g key={`fan-${d.id}`} transform={`translate(${d.x * s},${d.y * s})`} pointerEvents="none">
+            {(m.twoWay ? [dir, dir + 180] : [dir]).map((a) => (
+              <path key={a} d={arc(a)} fill={st.color} fillOpacity={sel ? 0.2 : 0.1} stroke={st.color}
+                strokeOpacity={sel ? 0.7 : 0.35} strokeWidth="0.8" />
+            ))}
+            <line x2={Math.cos((dir * Math.PI) / 180) * R} y2={Math.sin((dir * Math.PI) / 180) * R}
+              stroke={st.color} strokeWidth="1" strokeDasharray="3 2" strokeOpacity={sel ? 0.9 : 0.5} />
+          </g>
+        );
+      })}
+      {devices.map(shown).map((d) => {
+        const st = DEVICE_STYLE[d.model] || { tag: '?', color: INK };
+        const r = st.tag.length > 2 ? 9.5 : 7.5;
+        const sel = d.id === selected;
+        const m = sensorModel(d.model);
+        const aimed = m && m.kind !== 'glass';
+        const { dir } = aimed ? aimDevice(plan, d) : { dir: 0 };
+        const hx = Math.cos((dir * Math.PI) / 180) * 1.35 * s, hy = Math.sin((dir * Math.PI) / 180) * 1.35 * s;
+        return (
+          <g key={d.id} transform={`translate(${d.x * s},${d.y * s})`}>
+            <title>{`${AJAX_MODELS[d.model]?.name || d.model} — ${d.purpose}`}</title>
+            {sel && <circle r={r + 3.5} fill="none" stroke="#1f4fd8" strokeWidth="1.6" strokeDasharray="3 2" />}
+            <circle r={r} fill={st.color} stroke="#fff" strokeWidth="1.6"
+              style={editable ? { cursor: drag?.id === d.id ? 'grabbing' : 'grab' } : undefined}
+              onPointerDown={(e) => start(e, d, 'move')} onPointerMove={(e) => move(e, d)} onPointerUp={end}
+              onClick={(e) => e.stopPropagation()} />
+            <text y="2.4" fontSize={st.tag.length > 2 ? 6 : 6.8} fill="#fff" pointerEvents="none">{st.tag}</text>
+            {sel && editable && aimed && (
+              <circle cx={hx} cy={hy} r="5" fill="#fff" stroke="#1f4fd8" strokeWidth="1.8" style={{ cursor: 'crosshair' }}
+                onPointerDown={(e) => start(e, d, 'rotate')} onPointerMove={(e) => move(e, d)} onPointerUp={end}
+                onClick={(e) => e.stopPropagation()}>
+                <title>Trascina per ruotare il sensore</title>
+              </circle>
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
    Il foglio: planimetria + quote + cartiglio
    ──────────────────────────────────────────────────────────────────────────── */
@@ -847,6 +938,7 @@ export default function PlanSvg({
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
+  selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate,
 }) {
   const uid = useId().replace(/:/g, '');
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
@@ -1124,19 +1216,8 @@ export default function PlanSvg({
         {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}
 
         {!electric && !plumbing && !thumb && layers.alarm !== false && devices?.length > 0 && (
-          <g pointerEvents="none" fontFamily={FONT} fontWeight="700" textAnchor="middle">
-            {devices.map((d) => {
-              const st = DEVICE_STYLE[d.model] || { tag: '?', color: INK };
-              const r = st.tag.length > 2 ? 9.5 : 7.5;
-              return (
-                <g key={d.id} transform={`translate(${d.x * s},${d.y * s})`}>
-                  <title>{`${AJAX_MODELS[d.model]?.name || d.model} — ${d.purpose}`}</title>
-                  <circle r={r} fill={st.color} stroke="#fff" strokeWidth="1.6" />
-                  <text y="2.4" fontSize={st.tag.length > 2 ? 6 : 6.8} fill="#fff">{st.tag}</text>
-                </g>
-              );
-            })}
-          </g>
+          <Devices devices={devices} plan={plan} s={s} selected={selectedDevice} toMeters={toMeters}
+            editable={editable && !!onDeviceMove} onSelect={onDeviceSelect} onMove={onDeviceMove} onRotate={onDeviceRotate} />
         )}
 
         {!thumb && layers.dims && (

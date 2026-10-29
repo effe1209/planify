@@ -34,6 +34,8 @@ import { readSharedProject, shareUrl } from './lib/share';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
+import { aimDevice, optimizeDevices, placeDevice } from './lib/coverage';
+import DevicePanel from './components/DevicePanel';
 import { activeFloor, addFloor, houseFor, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph } from './components/Icons';
@@ -325,8 +327,11 @@ export default function App() {
   /* ── Allarme Ajax: dispositivi di tutto il progetto, ognuno legato al suo piano ── */
   const devices = current?.security?.devices;
   const floorDevices = devices?.filter((d) => d.floor === floor?.id);
+  const doorState = current?.security?.doors || 'closed';
   const planAlarm = () => {
-    const security = planSecurity(current);
+    // regole per locale, poi ogni volumetrico nel montaggio che copre di più (lib/coverage.js)
+    const base = planSecurity(current);
+    const security = { ...base, doors: doorState, devices: optimizeDevices(current, base.devices, { doors: doorState }) };
     editProject((p) => ({ ...p, security }));
     setLayers((l) => ({ ...l, alarm: true }));
     say(`${security.devices.length} dispositivi Ajax posizionati`);
@@ -402,28 +407,68 @@ export default function App() {
   const undoKey = current && floor ? `${current.id}:${floor.id}` : null;
   const [undoState, setUndoState] = useState({ key: null, undo: [], redo: [] });
   const stacks = undoState.key === undoKey ? undoState : { key: undoKey, undo: [], redo: [] };
+  // ogni passo salva la pianta del piano e i dispositivi d'allarme (che stanno nel progetto)
+  const snapshot = () => ({ plan, security: current.security });
+  const restoreSnap = (snap) => history.update(current.id, (p) => {
+    const next = updateFloor(p, floor.id, (f) => ({ ...f, plan: snap.plan }));
+    if (snap.security) next.security = snap.security;
+    else delete next.security;
+    return next;
+  });
+  const pushUndo = () => setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), snapshot()], redo: [] });
   const editPlan = (fn) => {   // agisce sul piano attivo
     if (!current || !plan || readOnly) return;
-    setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), plan], redo: [] });
+    pushUndo();
     history.updatePlan(current.id, fn);
+  };
+  const editSecurity = (fn) => {   // dispositivi d'allarme, con annulla
+    if (!current || !plan || readOnly || !current.security) return;
+    pushUndo();
+    editProject((p) => ({ ...p, security: fn(p.security) }));
   };
   const undo = () => {
     if (!current || !stacks.undo.length) return;
     const prev = stacks.undo[stacks.undo.length - 1];
-    setUndoState({ key: undoKey, undo: stacks.undo.slice(0, -1), redo: [...stacks.redo, plan] });
-    history.updatePlan(current.id, () => prev);
+    setUndoState({ key: undoKey, undo: stacks.undo.slice(0, -1), redo: [...stacks.redo, snapshot()] });
+    restoreSnap(prev);
   };
   const redo = () => {
     if (!current || !stacks.redo.length) return;
     const next = stacks.redo[stacks.redo.length - 1];
-    setUndoState({ key: undoKey, undo: [...stacks.undo, plan], redo: stacks.redo.slice(0, -1) });
-    history.updatePlan(current.id, () => next);
+    setUndoState({ key: undoKey, undo: [...stacks.undo, snapshot()], redo: stacks.redo.slice(0, -1) });
+    restoreSnap(next);
   };
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
   const [view3d, setView3d] = useState(null);   // null = pianta; { low } = vista 3D (muri bassi o interi)
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
   const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
+  // dispositivo d'allarme selezionato (per id, sul piano aperto); esclude l'arredo selezionato e viceversa
+  const selectedDevice = selection?.key === undoKey && selection.device
+    ? floorDevices?.find((d) => d.id === selection.device) || null : null;
+  const setSelectedDevice = (id) => setSelection(id == null ? null : { key: undoKey, device: id });
+  const editDevice = (id, fn) => editSecurity((sec) => ({ ...sec, devices: sec.devices.map((d) => (d.id === id ? fn(d) : d)) }));
+  const moveDevice = (id, x, y) => editDevice(id, (d) => placeDevice(plan, d, x, y));
+  const changeDevice = (id, patch) => editDevice(id, (d) => ({ ...d, ...patch }));
+  const removeDevice = (id) => {
+    editSecurity((sec) => ({ ...sec, devices: sec.devices.filter((d) => d.id !== id) }));
+    setSelectedDevice(null);
+    say('Dispositivo rimosso');
+  };
+  const setDoors = (doors) => editSecurity((sec) => ({ ...sec, doors }));
+  /* Nuovo volumetrico nel locale selezionato (o nel più grande), già nel montaggio migliore. */
+  const addSensor = () => {
+    const room = plan.rooms.find((r) => r.id === selectedId)
+      || [...plan.rooms].filter((r) => r.kind !== 'garden').sort((a, b) => b.w * b.h - a.w * a.h)[0];
+    if (!room) return;
+    const id = `dev-${Date.now().toString(36)}`;
+    const dev = { id, model: 'motionprotect', floor: floor.id, room: room.id, roomName: room.name,
+      x: room.x + room.w / 2, y: room.y + room.h / 2, purpose: 'Volumetrico aggiunto' };
+    const [placed] = optimizeDevices(current, [dev], { doors: doorState, all: devices || [] });
+    editSecurity((sec) => ({ ...sec, devices: [...sec.devices, placed] }));
+    setSelectedDevice(id);
+    say(`MotionProtect aggiunto in «${room.name}»`);
+  };
   const moveFurniture = (index, x, y) => editFurniture((list) => list.map((f, i) => {
     if (i !== index) return f;
     const p = snapItem(plan, f, x, y);
@@ -454,6 +499,21 @@ export default function App() {
       if (mod && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+        return;
+      }
+      if (selectedDevice && !mod) {
+        const step = e.shiftKey ? 0.25 : 0.05;
+        const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+        if (arrows[e.key]) {
+          e.preventDefault();
+          moveDevice(selectedDevice.id, selectedDevice.x + arrows[e.key][0], selectedDevice.y + arrows[e.key][1]);
+        } else if (e.key === 'r' || e.key === 'R') {
+          const a = aimDevice(plan, selectedDevice).dir + (e.shiftKey ? -15 : 15);
+          changeDevice(selectedDevice.id, { dir: ((Math.round(a) % 360) + 360) % 360 });
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          removeDevice(selectedDevice.id);
+        } else if (e.key === 'Escape') setSelectedDevice(null);
         return;
       }
       if (selectedItem == null || mod) return;
@@ -1155,6 +1215,8 @@ export default function App() {
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
                   editable={!readOnly && !showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
+                  selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
+                  onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
                   plumbingLines={plumbingCfg?.lines !== false} generator={plumbingCfg?.generator}
@@ -1198,7 +1260,18 @@ export default function App() {
               {selectedItem != null && (
                 <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
                   onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onHeight={(z) => editFurniture((list) => list.map((f, i) => {
+                    if (i !== selectedItem) return f;
+                    const next = { ...f, z };
+                    if (!z) delete next.z;
+                    return next;
+                  }))}
                   onClose={() => setSelectedItem(null)} />
+              )}
+              {selectedDevice && (
+                <DevicePanel plan={plan} device={selectedDevice} devices={devices} doors={doorState}
+                  onChange={(patch) => changeDevice(selectedDevice.id, patch)} onRemove={() => removeDevice(selectedDevice.id)}
+                  onClose={() => setSelectedDevice(null)} />
               )}
               {selectedRoom && (
                 <RoomEditor
@@ -1275,7 +1348,9 @@ export default function App() {
               <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
                 onClear={clearEstimate} />
 
-              <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm} />
+              <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm}
+                doors={doorState} onDoors={setDoors} onAddSensor={readOnly ? null : addSensor}
+                roomName={plan.rooms.find((r) => r.id === selectedId)?.name} />
 
               <DesignReport design={plan.design} />
 

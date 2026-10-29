@@ -86,3 +86,19 @@ Il DXF si genera nel browser, perché lì ci sono già sensori e coperture.
 ## Punto 6 — Più avanti
 
 Importazione di DXF reali del cliente con muri e aperture, non solo le aree dei locali. Serve per lavorare su piante esistenti e non generate.
+
+## Stato
+
+- **Punto 1 — fatto.** `lib/coverage.js`, test in `floorplan-app/tests/coverage.test.mjs`:
+
+  ```
+  node --import ./tests/loader.mjs tests/coverage.test.mjs [pianta.json]
+  ```
+- **Punto 2 — fatto.**
+  - Il posizionamento automatico aggiunge un volumetrico «trappola» nel disimpegno, e nell'ingresso se è ampio o se manca il disimpegno.
+  - Mette un volumetrico anche in cucina e nelle camere che danno sull'esterno; quello delle camere è segnato come da escludere con l'inserimento notturno.
+  - Ogni volumetrico va nel montaggio che copre di più tra angoli e centri delle pareti lunghe. Sono esclusi i punti a meno di 1 m dalla centrale e sono penalizzati quelli con la lente verso una finestra o verso il piano cottura.
+  - I sensori si trascinano e si ruotano (maniglia, R, frecce) con annulla e ripeti.
+  - Il pannello del sensore permette di cambiare modello, altezza e direzione, e mostra la copertura del locale, le cause delle zone cieche e gli avvisi.
+  - Si può impostare lo stato delle porte interne (tutte chiuse o tutte aperte) e l'altezza di ogni arredo.
+  - Resta da fare lo stato delle porte una per una, che arriva con il layer del punto 3.

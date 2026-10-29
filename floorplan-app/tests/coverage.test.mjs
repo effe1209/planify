@@ -53,6 +53,15 @@ test('porta chiusa blocca, porta aperta lascia vedere la stanza accanto', () => 
   assert.equal(closed.pctAny, 0, 'con la porta chiusa B non si vede');
   assert.ok(open.pctAny > 3, `con la porta aperta B si vede in parte (${open.pctAny}%)`);
 });
+test('causa delle zone cieche dal sensore del locale, non da quello dietro il muro', () => {
+  const plan = box(10, 4, { furniture: [{ type: 'wardrobe', x: 2.5, y: 1.5, w: 0.6, h: 1.8 }] });
+  plan.rooms = [{ id: 1, name: 'A', kind: 'living', x: 0, y: 0, w: 5, h: 4 }, { id: 2, name: 'B', kind: 'corridor', x: 5, y: 0, w: 5, h: 4 }];
+  plan.walls.push({ x: 4.9, y: 0, w: T, h: 4 });
+  const s = [sensorAt(0.3, 0.3, 33.7), { ...sensorAt(5.3, 2, 0), id: 'b', room: 2 }];
+  const a = coverFloor(plan, s).rooms[0];
+  assert.ok(a.blindCauses[0].label === 'Armadio' || a.blindCauses[0].kind === 'below', a.blindCauses.map((c) => c.label).join(','));
+  assert.ok(!a.blindCauses.some((c) => c.label === 'Muro' && c.area > 0.5), 'il muro verso B non deve risultare la causa');
+});
 test('vetrata: il PIR non vede oltre il vetro', () => {
   const plan = box(6, 4, { windows: [{ x: 2, y: 3.8, w: 2.4, rot: 0 }] });
   plan.rooms.push({ id: 2, name: 'Giardino', kind: 'garden', x: 0, y: 4, w: 6, h: 3 });

@@ -221,14 +221,14 @@ function look(s, px, py, pz) {
  * opts.doors come in obstacles(). Restituisce per ogni locale la griglia delle celle (CELL_STATE), il numero di
  * sensori che vedono ogni cella, le superfici e le zone cieche raggruppate per causa; più lo stato dei varchi.
  */
-export function coverFloor(plan, devices, { doors = 'closed' } = {}) {
-  const boxes = obstacles(plan, { doors });
+export function coverFloor(plan, devices, { doors = 'closed', only = null, boxes = obstacles(plan, { doors }) } = {}) {
   const sensors = devices.map((d) => prepare(plan, d, boxes)).filter(Boolean);
   const occupiers = boxes.filter((b) => b.kind === 'furniture' && b.z0 < 0.3 && b.z1 >= 0.3);
   const walls = boxes.filter((b) => b.kind !== 'furniture');
 
   const rooms = [];
   for (const r of plan.rooms) {
+    if (only && !only.includes(r.id)) continue;
     const step = r.kind === 'garden' ? CELL.garden : CELL.inside;
     const bx = r.poly ? Math.min(...r.poly.map((p) => p[0])) : r.x;
     const by = r.poly ? Math.min(...r.poly.map((p) => p[1])) : r.y;
@@ -262,8 +262,8 @@ export function coverFloor(plan, devices, { doors = 'closed' } = {}) {
               seen[q] = true;
               any = true;
             } else if (res.st !== 'out') {
-              // causa dal sensore più vicino che avrebbe visto il punto
-              const d = Math.hypot(px - s.x, py - s.y);
+              // causa dal sensore più vicino che avrebbe visto il punto, prima quelli montati nel locale stesso
+              const d = Math.hypot(px - s.x, py - s.y) + (s.dev.room === r.id ? 0 : 1000);
               if (d < whyD) {
                 whyD = d;
                 why = res.st === 'below' ? { kind: 'below', label: 'Sotto il rilevatore' } : { kind: res.by.kind, label: res.by.label };
@@ -311,7 +311,127 @@ export function coverFloor(plan, devices, { doors = 'closed' } = {}) {
   }
 
   return { rooms, sensors: sensors.map(({ dev, x, y, h, dirs, m }) => ({ id: dev.id, model: dev.model, x, y, h, dir: dirs[0], kind: m.kind })),
-    openings: openingsStatus(plan, devices, sensors), boxes };
+    openings: only ? [] : openingsStatus(plan, devices, sensors), boxes };
+}
+
+/* ── posizionamento migliore dei volumetrici ── */
+
+const HEAT = new Set(['kitchen_counter', 'kitchen_peninsula']);   // piano cottura: temperatura che cambia in fretta
+const HUBS = new Set(['hub2_plus', 'rex2']);
+
+/* Punti di montaggio candidati in un locale: gli angoli e, sulle pareti lunghe, il centro della parete. */
+function mounts(r) {
+  const c = center(r);
+  const pts = r.poly
+    ? r.poly.map(([x, y]) => {
+      const d = Math.hypot(c.x - x, c.y - y) || 1;
+      return { x: x + ((c.x - x) / d) * 0.3, y: y + ((c.y - y) / d) * 0.3 };
+    })
+    : [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => ({ x: r.x + 0.25 + a * (r.w - 0.5), y: r.y + 0.25 + b * (r.h - 0.5) }));
+  const out = pts.filter((p) => contains(r, p.x, p.y)).map((p) => ({ ...p, dir: Math.atan2(c.y - p.y, c.x - p.x) / deg }));
+  if (!r.poly) {
+    if (r.w > 5) out.push({ x: c.x, y: r.y + 0.25, dir: 90 }, { x: c.x, y: r.y + r.h - 0.25, dir: -90 });
+    if (r.h > 5) out.push({ x: r.x + 0.25, y: c.y, dir: 0 }, { x: r.x + r.w - 0.25, y: c.y, dir: 180 });
+  }
+  return out;
+}
+
+/*
+ * Valuta un montaggio: superficie del locale coperta (le celle parziali valgono metà), varchi verso l'esterno
+ * visti da dentro (chi entra deve attraversare il campo), penalità se la lente guarda una finestra (sole diretto)
+ * o il piano cottura entro 4 m (avvisi del manuale Ajax).
+ */
+function score(plan, room, dev, ctx) {
+  const cov = coverFloor(plan, [dev], { only: [room.id], boxes: ctx.boxes }).rooms[0];
+  const free = cov.covered + cov.partial + cov.blind || 1;
+  let sc = (cov.covered + cov.partial / 2) / free;
+  const s = prepare(plan, dev, ctx.boxes);
+  for (const op of ctx.exits) {
+    if (op.room?.id !== room.id) continue;
+    const p = inside(op, 0.6);
+    if (look(s, p.x, p.y, 1.0).st === 'seen') sc += 0.15;
+  }
+  for (const w of ctx.windows) {
+    if (w.room?.id !== room.id) continue;
+    const off = Math.abs(((Math.atan2(w.cy - s.y, w.cx - s.x) / deg - s.dirs[0] + 540) % 360) - 180);
+    if (off < 30 && Math.hypot(w.cx - s.x, w.cy - s.y) < 8) sc -= 0.1;
+  }
+  for (const it of plan.furniture) {
+    if (!HEAT.has(it.type)) continue;
+    const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+    const off = Math.abs(((Math.atan2(cy - s.y, cx - s.x) / deg - s.dirs[0] + 540) % 360) - 180);
+    if (off < 40 && Math.hypot(cx - s.x, cy - s.y) < 4) sc -= 0.08;
+  }
+  return { sc, pct: cov.pct };
+}
+
+/*
+ * Sposta ogni volumetrico interno nel montaggio migliore del suo locale (angoli e centri delle pareti lunghe),
+ * con direzione e altezza consigliata. Gli altri dispositivi restano come sono, con la loro direzione predefinita.
+ */
+export function optimizeDevices(project, devices, { doors = 'closed', all = devices } = {}) {
+  const ctxs = {};
+  return devices.map((d) => {
+    const m = sensorModel(d.model);
+    const floor = project.floors.find((f) => f.id === d.floor);
+    const plan = floor?.plan;
+    if (!m || !plan) return d;
+    if (m.kind !== 'volumetric') return { ...d, ...aimDevice(plan, d) };
+    const room = plan.rooms.find((r) => r.id === d.room);
+    if (!room) return { ...d, ...aimDevice(plan, d) };
+    if (!ctxs[floor.id]) {
+      const ops = [...plan.doors.filter((x) => x.kind !== 'gate'), ...plan.windows].map((o) => opening(plan, o));
+      ctxs[floor.id] = {
+        boxes: obstacles(plan, { doors }),
+        exits: ops.filter((op) => op.exterior),
+        windows: plan.windows.map((w) => opening(plan, w)).filter((op) => op.exterior),
+      };
+    }
+    // manuale Ajax: mai a meno di 1 m dalla centrale o da un ripetitore
+    const hubs = all.filter((x) => x.floor === d.floor && HUBS.has(x.model));
+    let best = null;
+    for (const p of mounts(room)) {
+      if (hubs.some((hb) => Math.hypot(hb.x - p.x, hb.y - p.y) < 1)) continue;
+      const cand = { ...d, x: +p.x.toFixed(2), y: +p.y.toFixed(2), dir: Math.round(p.dir), h: m.mount };
+      const r = score(plan, room, cand, ctxs[floor.id]);
+      if (!best || r.sc > best.sc) best = { ...r, cand };
+    }
+    return best ? best.cand : { ...d, ...aimDevice(plan, d) };
+  });
+}
+
+/* Spostamento di un dispositivo: aggancio a 5 cm, dentro la pianta, locale aggiornato. */
+export function placeDevice(plan, dev, x, y) {
+  const sx = Math.round(Math.min(plan.dimensions.width, Math.max(0, x)) * 20) / 20;
+  const sy = Math.round(Math.min(plan.dimensions.length, Math.max(0, y)) * 20) / 20;
+  const r = roomAt(plan, sx, sy);
+  return { ...dev, x: sx, y: sy, room: r?.id ?? null, roomName: r?.name || dev.roomName || '' };
+}
+
+/* Avvisi di posizionamento di un sensore (manuale Ajax): altezza, sole sulla lente, fonti di calore. */
+export function deviceWarnings(plan, dev, devices = []) {
+  const m = sensorModel(dev.model);
+  if (!m || m.kind === 'glass') return [];
+  const { x, y, dir, h } = aimDevice(plan, dev);
+  const out = [];
+  if (devices.some((o) => o.floor === dev.floor && HUBS.has(o.model) && Math.hypot(o.x - x, o.y - y) < 1)) {
+    out.push('A meno di 1 m dalla centrale: Ajax indica di installare i rilevatori ad almeno 1 m.');
+  }
+  if (m.kind === 'volumetric' && Math.abs(h - m.mount) > 0.05) {
+    out.push(`Ajax indica il montaggio a ${String(m.mount).replace('.', ',')} m: a un'altezza diversa la portata reale cambia.`);
+  }
+  if (m.kind === 'outdoor' && (h < 0.8 || h > 1.3)) out.push('Ajax indica il montaggio tra 0,8 e 1,3 m da terra.');
+  const facing = (px, py) => Math.abs(((Math.atan2(py - y, px - x) / deg - dir + 540) % 360) - 180);
+  const room = plan.rooms.find((r) => r.id === dev.room) || roomAt(plan, x, y);
+  if (m.kind === 'volumetric' && room?.kind !== 'garden') {
+    const win = plan.windows.map((w) => opening(plan, w))
+      .find((w) => w.exterior && w.room?.id === room?.id && facing(w.cx, w.cy) < 30 && Math.hypot(w.cx - x, w.cy - y) < 8);
+    if (win) out.push('La lente guarda una finestra: il sole diretto può causare falsi allarmi.');
+    const hob = plan.furniture.find((it) => HEAT.has(it.type)
+      && facing(it.x + it.w / 2, it.y + it.h / 2) < 40 && Math.hypot(it.x + it.w / 2 - x, it.y + it.h / 2 - y) < 4);
+    if (hob) out.push('Il piano cottura è nel campo del sensore: le variazioni di temperatura possono dare falsi allarmi.');
+  }
+  return out;
 }
 
 /*
