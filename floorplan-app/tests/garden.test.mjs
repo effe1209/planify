@@ -28,4 +28,14 @@ assert.equal(h.garage.side, 'left');
 assert.deepEqual(houseRequest(h), { w: 8, door: { x: 5.5, w: 1 }, garage: { x: 0, w: 2.5, side: 'left', ramp: true } });
 
 assert.equal(houseFront({ floors: [{ level: 'out', plan, meta: { type: 'garden' } }] }), null);
+// garage al piano strada: il piano terra è il garage, la porta di casa è sul vano scala, niente rampa
+const streetGarage = {
+  dimensions: { width: 10, length: 8 },
+  rooms: [{ x: 0, y: 0, w: 10, h: 8, kind: 'garage' }],
+  doors: [{ x: 1, y: 7.8, w: 2.5, rot: 0, entrance: true, kind: 'garage' }, { x: 7, y: 7.8, w: 0.9, rot: 0, entrance: true }],
+};
+h = houseFront({ floors: [{ level: 0, plan: streetGarage, meta: { type: 'garage' } }, { level: 1, plan }] });
+assert.equal(h.front, 'S');
+assert.equal(h.door.x, 7.45);
+assert.deepEqual({ side: h.garage.side, ramp: h.garage.ramp }, { side: 'front', ramp: false });
 console.log('garden ok');

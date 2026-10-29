@@ -17,7 +17,7 @@ export default function Plan3D({ plan, project = null, style = 'modern', lowWall
       try {
         const THREE = await import('three');
         const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-        const { buildScene, buildHouse } = await import('../lib/scene3d');
+        const { buildScene, buildHouse, addGround } = await import('../lib/scene3d');
         const { sceneToDxf } = await import('../lib/dxf3d');
         if (disposed || !host.current) return;
         const el = host.current;
@@ -34,17 +34,12 @@ export default function Plan3D({ plan, project = null, style = 'modern', lowWall
           : buildScene(THREE, plan, THEMES[style] || THEMES.modern, { lowWalls });
         scene.add(model);
         // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
-        const bb = new THREE.Box3().setFromObject(model);
-        const W = Math.max(1, bb.max.x), L = Math.max(1, bb.max.z), Ht = Math.max(1, bb.max.y);
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(W + 20, L + 20), new THREE.MeshStandardMaterial({ color: '#e4e8ee' }));
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.set(W / 2, bb.min.y - 0.01, L / 2);
-        ground.receiveShadow = true;
-        scene.add(ground);
+        const { bb, center, size } = addGround(THREE, scene, model);
+        const W = Math.max(1, size.x), L = Math.max(1, size.z), Ht = Math.max(1, bb.max.y);
         scene.add(new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3));
         const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
-        sun.position.set(W * 0.2 - 6, 14 + Ht, L * 0.2 - 4);
-        sun.target.position.set(W / 2, 0, L / 2);
+        sun.position.set(center.x - W * 0.3 - 6, 14 + Ht, center.z - L * 0.3 - 4);
+        sun.target.position.set(center.x, 0, center.z);
         sun.castShadow = true;
         sun.shadow.mapSize.set(2048, 2048);
         const ext = Math.max(W, L, Ht);

@@ -50,7 +50,7 @@ import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
 import { engineStair, neighbourCore, neighbourWet, projectStairs, stairNote, stairsFit } from './lib/stairs';
-import { HOUSE_PRESETS, floorName, houseFloorsRequest, suggestProgram } from './lib/house';
+import { HOUSE_PRESETS, floorName, houseFloorsRequest, houseShift, suggestProgram } from './lib/house';
 
 const REQUEST_TIMEOUT_MS = 90000;
 const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
@@ -123,7 +123,7 @@ export default function App() {
     garageLaundry: true, garageStorage: true,
     // casa su più piani (vedi lib/house.js)
     house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto',
-    houseGarage: false,
+    houseGarage: false, garageMode: 'basement',
     floorProgram: 'full',
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -598,7 +598,8 @@ export default function App() {
   /* Progetto nuovo con tutti i piani della casa (risposta di /generate-house). */
   const openHouse = (res) => {
     const floors = res.floors.map(({ level, program, plan: p }) => {
-      const spec = form.houseFloors.find((f) => f.level === level) || { level, program };
+      const shift = engineHas('street_garage') ? houseShift(form) : 0;
+      const spec = { ...(form.houseFloors.find((f) => f.level + shift === level) || { program }), level };
       const type = program === 'garage' ? 'garage' : 'apartment';
       return makeFloor({
         name: floorName(spec), level, plan: p,
@@ -718,7 +719,7 @@ export default function App() {
       if (houseMode) {
         const req = {
           width: clamp(w, 3.5, 60), length: clamp(l, 3.5, 60), style: form.style, seed: requestSeed,
-          stair_type: form.stairType, floors: houseFloorsRequest(form),
+          stair_type: form.stairType, floors: houseFloorsRequest(form, { street: engineHas('street_garage') }),
         };
         const house = async () => readJson(await postJson(base, '/generate-house', req, controller.signal));
         let res;
@@ -1085,7 +1086,7 @@ export default function App() {
                 </p>
               )}
               {form.roomType === 'apartment' && engineHas('stairs') && (pendingFloor ? hasNeighbour(pendingFloor.level) : engineHas('house')) && (
-                <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')}
+                <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')} streetGarage={engineHas('street_garage')}
                   stairFixed={!!pendingFloor && !!neighbourCore(current, pendingFloor.level)} />
               )}
               {form.roomType === 'apartment' ? (

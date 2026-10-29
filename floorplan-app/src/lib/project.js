@@ -83,9 +83,11 @@ export function houseFor(project) {
   return { w: f.plan.dimensions.width, name: f.name, ...houseFront(project) };
 }
 
+/* Il piano alla quota del giardino: il piano terra (anche se è il garage al piano strada), altrimenti il più basso
+   fuori terra. */
 const homeFloor = (project) => {
-  const built = (project?.floors || []).filter((f) => typeof f.level === 'number' && f.level >= 0 && f.plan
-    && f.meta?.type !== 'garage' && f.meta?.type !== 'garden');
+  const built = (project?.floors || []).filter((f) => typeof f.level === 'number' && f.level >= 0 && f.plan?.rooms?.length
+    && f.meta?.type !== 'garden');
   return built.find((x) => x.level === 0) || [...built].sort((a, b) => a.level - b.level)[0] || null;
 };
 
@@ -111,6 +113,11 @@ function toFront(side, W, L) {
  * o del piano interrato, che ha la stessa impronta). Misure in metri, t da sinistra guardando la casa.
  */
 export function houseFront(project) {
+  return frontOf(project)?.facade || null;
+}
+
+/* La facciata e la funzione che porta un punto del giardino nella pianta del piano terra (vedi lib/scene3d.js). */
+export function frontOf(project) {
   const f = homeFloor(project);
   if (!f) return null;
   const { width: W, length: L } = f.plan.dimensions;
@@ -141,7 +148,7 @@ export function houseFront(project) {
     out.garage = { x: t, w: gd.w, d, side, ramp: g.level < f.level };
     break;
   }
-  return out;
+  return { facade: out, floor: f, W, L };
 }
 
 /* Quello che serve al motore per disegnare il giardino davanti alla casa (POST /generate-plan, house). */

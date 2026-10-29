@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import { HOUSE_PRESETS, MAX_HOUSE_LEVEL, PROGRAMS, STAIR_TYPES, floorName } from '../lib/house';
+import { GARAGE_MODES, HOUSE_PRESETS, MAX_HOUSE_LEVEL, PROGRAMS, STAIR_TYPES, floorName, houseShift } from '../lib/house';
 import { levelLabel } from '../lib/project';
 
 /*
@@ -21,7 +21,7 @@ function Seg({ label, value, options, onChange }) {
   );
 }
 
-export default function HouseOptions({ form, setF, pending = null, stairFixed = false, garage = false }) {
+export default function HouseOptions({ form, setF, pending = null, stairFixed = false, garage = false, streetGarage = false }) {
   if (pending) {
     return (
       <div className="pf-needs">
@@ -43,6 +43,7 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
     setF('housePreset', HOUSE_PRESETS.find((p) => JSON.stringify(p.floors) === JSON.stringify(list))?.id || 'custom');
   };
   const top = Math.max(...floors.map((f) => f.level));
+  const shift = garage && streetGarage ? houseShift(form) : 0;
   return (
     <div className="pf-needs">
       <label className="pf-check">
@@ -61,7 +62,7 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
           </div>
           {[...floors].sort((a, b) => b.level - a.level).map((f) => (
             <div key={f.level} className="pf-house-floor">
-              <Seg label={`${levelLabel(f.level)} · ${floorName(f)}`} value={f.program} options={PROGRAMS}
+              <Seg label={`${levelLabel(f.level + shift)} · ${floorName({ ...f, level: f.level + shift })}`} value={f.program} options={PROGRAMS}
                 onChange={(v) => setFloors(floors.map((x) => (x === f ? { ...x, program: v } : x)))} />
             </div>
           ))}
@@ -78,8 +79,18 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
           {garage && (
             <label className="pf-check">
               <input type="checkbox" checked={form.houseGarage} onChange={(e) => setF('houseGarage', e.target.checked)} />
-              <span>Piano interrato con garage <em>(la scala scende in un vano chiuso con porta sul box)</em></span>
+              <span>Piano con garage <em>(la scala arriva in un vano chiuso con porta sul box)</em></span>
             </label>
+          )}
+          {garage && streetGarage && form.houseGarage && (
+            <>
+              <Seg label="Garage" value={form.garageMode} options={GARAGE_MODES} onChange={(v) => setF('garageMode', v)} />
+              <p className="pf-hint">
+                {form.garageMode === 'street'
+                  ? 'Il garage è il piano terra, con la porta di casa sul vano scala; si abita dal primo piano. Il giardino è alla quota del garage.'
+                  : 'Il garage è sotto il piano terra: dal giardino ci si scende con una rampa.'}
+              </p>
+            </>
           )}
           <Seg label="Scala" value={form.stairType} options={STAIR_TYPES} onChange={(v) => setF('stairType', v)} />
           <p className="pf-hint">
