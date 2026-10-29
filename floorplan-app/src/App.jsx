@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, Armchair, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
-  Info, LayoutGrid, Loader2, Lock, Moon, PencilLine, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Droplets, Unlock, Upload, Zap, ZoomIn, ZoomOut,
+  AlertCircle, Armchair, Box, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
+  Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
+  Droplets, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -12,6 +12,9 @@ import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME,
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import RoomEditor from './components/RoomEditor';
+import ItemPanel from './components/ItemPanel';
+import Plan3D from './components/Plan3D';
+import { rotateItem, snapItem } from './lib/furnitureEdit';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
 import HistoryPanel from './components/HistoryPanel';
@@ -23,6 +26,11 @@ import FloorsOverview from './components/FloorsOverview';
 import SecurityPanel from './components/SecurityPanel';
 import ElectricPanel from './components/ElectricPanel';
 import PlumbingPanel from './components/PlumbingPanel';
+import EstimatePanel from './components/EstimatePanel';
+import SchedulePanel from './components/SchedulePanel';
+import { buildEstimate } from './lib/estimate';
+import { scheduleFor } from './lib/schedule';
+import { readSharedProject, shareUrl } from './lib/share';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
@@ -43,7 +51,6 @@ import { HOUSE_PRESETS, floorName, houseFloorsRequest, suggestProgram } from './
 const REQUEST_TIMEOUT_MS = 90000;
 const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
 const STAIR_TRIES = 4;      // …da 4 richieste in parallelo
-const NEXT_FACING = { S: 'W', W: 'N', N: 'E', E: 'S' };
 
 async function postJson(base, path, body, signal) {
   const res = await fetch(`${base}${path}`, {
@@ -126,7 +133,16 @@ export default function App() {
   const consent = useConsent();
   const [cookieDialog, setCookieDialog] = useState(false);
   const history = usePlanHistory(consent.decided ? (consent.allowHistory ? 'on' : 'off') : 'pending');
-  const current = history.current;              // progetto aperto
+  // progetto condiviso aperto da un link (#progetto=…): si guarda in sola lettura, finché non se ne salva una copia
+  const [shared, setShared] = useState(null);
+  useEffect(() => {
+    const load = () => readSharedProject().then((p) => setShared(p));
+    load();
+    window.addEventListener('hashchange', load);
+    return () => window.removeEventListener('hashchange', load);
+  }, []);
+  const readOnly = !!shared;
+  const current = shared || history.current;     // progetto aperto
   const floor = activeFloor(current);            // piano su cui si lavora
   const plan = floor?.plan || null;
   // scale tra piani consecutivi: stessa posizione su entrambe le piante (vedi lib/stairs.js)
@@ -147,7 +163,7 @@ export default function App() {
   const [globalView, setGlobalView] = useState(false);
   const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
 
-  const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true });
+  const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true, technical: false });
   const [zoom, setZoom] = useState(null);
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -234,7 +250,8 @@ export default function App() {
       },
       sketch: shapes,
     };
-    if (pendingFloor && current) {
+    if (shared) closeShared();
+    if (pendingFloor && current && !readOnly) {
       history.update(current.id, (p) => addFloor(p, makeFloor({ ...data, name: pendingFloor.name, level: pendingFloor.level })));
       say(`Piano «${pendingFloor.name}» aggiunto al progetto`);
       setPendingFloor(null);
@@ -249,9 +266,29 @@ export default function App() {
   };
 
   /* ── Piani del progetto ── */
-  const editProject = (fn) => current && history.update(current.id, fn);
+  const editProject = (fn) => current && !readOnly && history.update(current.id, fn);
+  const closeShared = () => {
+    setShared(null);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  };
+  const copyShared = () => {
+    const { id: _id, ...copy } = shared;
+    closeShared();
+    history.add({ ...copy, name: copy.name || 'Progetto condiviso' });
+    say('Copia salvata nei tuoi progetti: ora puoi modificarla');
+  };
+  const shareProject = async () => {
+    try {
+      const url = await shareUrl(current);
+      await navigator.clipboard.writeText(url);
+      say(`Link copiato (${Math.round(url.length / 1024)} kB): chi lo apre vede il progetto in sola lettura`);
+    } catch (err) {
+      setError(`Impossibile creare il link: ${err.message}.`);
+    }
+  };
   const selectFloor = (id) => {
-    editProject((p) => ({ ...p, activeFloor: id }));
+    if (readOnly) setShared((p) => ({ ...p, activeFloor: id }));
+    else editProject((p) => ({ ...p, activeFloor: id }));
     setGlobalView(false);
     setSelectedId(null);
     setZoom(null);
@@ -345,19 +382,98 @@ export default function App() {
     });
   };
 
+  /* ── Preventivo indicativo: impostazioni (prezzi, IVA, imprevisti) nel progetto, quantità ricalcolate ── */
+  const estimateCfg = current?.estimate || null;
+  const schedule = useMemo(() => (current ? scheduleFor(current) : null), [current]);
+  const estimate = useMemo(() => (current && estimateCfg ? buildEstimate(current, estimateCfg) : null), [current, estimateCfg]);
+  const startEstimate = () => {
+    editProject((p) => ({ ...p, estimate: { prices: {}, vat: 10, contingency: 10 } }));
+    say('Preventivo calcolato su tutto il progetto');
+  };
+  const changeEstimate = (patch) => editProject((p) => ({ ...p, estimate: { ...p.estimate, ...patch } }));
+  const clearEstimate = () => editProject((p) => {
+    const next = { ...p };
+    delete next.estimate;
+    return next;
+  });
+
   /* ── Personalizzazione: le modifiche finiscono nella voce di cronologia (e quindi vengono salvate) ── */
-  const editPlan = (fn) => current && history.updatePlan(current.id, fn);   // agisce sul piano attivo
+  // annulla / ripeti: le piante precedenti del piano aperto (si azzera cambiando progetto o piano)
+  const undoKey = current && floor ? `${current.id}:${floor.id}` : null;
+  const [undoState, setUndoState] = useState({ key: null, undo: [], redo: [] });
+  const stacks = undoState.key === undoKey ? undoState : { key: undoKey, undo: [], redo: [] };
+  const editPlan = (fn) => {   // agisce sul piano attivo
+    if (!current || !plan || readOnly) return;
+    setUndoState({ key: undoKey, undo: [...stacks.undo.slice(-59), plan], redo: [] });
+    history.updatePlan(current.id, fn);
+  };
+  const undo = () => {
+    if (!current || !stacks.undo.length) return;
+    const prev = stacks.undo[stacks.undo.length - 1];
+    setUndoState({ key: undoKey, undo: stacks.undo.slice(0, -1), redo: [...stacks.redo, plan] });
+    history.updatePlan(current.id, () => prev);
+  };
+  const redo = () => {
+    if (!current || !stacks.redo.length) return;
+    const next = stacks.redo[stacks.redo.length - 1];
+    setUndoState({ key: undoKey, undo: [...stacks.undo, plan], redo: stacks.redo.slice(0, -1) });
+    history.updatePlan(current.id, () => next);
+  };
+  // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
+  const [selection, setSelection] = useState(null);
+  const [view3d, setView3d] = useState(null);   // null = pianta; { low } = vista 3D (muri bassi o interi)
+  const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
+  const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
+  const moveFurniture = (index, x, y) => editFurniture((list) => list.map((f, i) => {
+    if (i !== index) return f;
+    const p = snapItem(plan, f, x, y);
+    return { ...f, x: p.x, y: p.y, room: p.room };
+  }));
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
   const editFurniture = (fn) => editPlan((p) => ({ ...p, furniture: fn(p.furniture) }));
   const removeFurniture = (index) => {
     editFurniture((list) => list.filter((_, i) => i !== index));
+    setSelectedItem(null);
     say('Arredo rimosso');
   };
-  const rotateFurniture = (index) =>
-    editFurniture((list) => list.map((f, i) => (i === index ? { ...f, facing: NEXT_FACING[f.facing || 'S'] || 'S' } : f)));
+  // ruotare scambia larghezza e profondità attorno al centro (prima cambiava solo il verso)
+  const rotateFurniture = (index) => editFurniture((list) => list.map((f, i) => (i === index ? rotateItem(f) : f)));
   const flipFurniture = (index) =>
     editFurniture((list) => list.map((f, i) => (i === index ? { ...f, flip: !f.flip } : f)));
+  // tastiera: annulla/ripeti ovunque; con un arredo selezionato frecce, R, F, Canc, Esc
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (selectedItem == null || mod) return;
+      const it = plan?.furniture[selectedItem];
+      if (!it) return;
+      const step = e.shiftKey ? 0.25 : 0.05;
+      const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (arrows[e.key]) {
+        e.preventDefault();
+        moveFurniture(selectedItem, it.x + arrows[e.key][0], it.y + arrows[e.key][1]);
+      } else if (e.key === 'r' || e.key === 'R') rotateFurniture(selectedItem);
+      else if (e.key === 'f' || e.key === 'F') flipFurniture(selectedItem);
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        removeFurniture(selectedItem);
+      } else if (e.key === 'Escape') setSelectedItem(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const addFurniture = (roomId, catalogId) => {
     const room = plan.rooms.find((r) => r.id === roomId);
     const entry = FURNITURE.find((f) => f.id === catalogId);
@@ -400,6 +516,7 @@ export default function App() {
       });
     });
     const ground = floors.find((f) => f.level === 0) || floors[0];
+    if (shared) closeShared();
     history.add({ name: '', floors, activeFloor: ground.id });
     say(res.notes?.[0] || `Casa su ${floors.length} piani: zona giorno e notte collegate dalla scala`);
     setGlobalView(false);
@@ -655,6 +772,7 @@ export default function App() {
       ...(current.security && { security: current.security }),
       ...(current.electric && { electric: current.electric }),
       ...(current.plumbing && { plumbing: current.plumbing }),
+      ...(current.estimate && { estimate: current.estimate }),
     };
     saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'progetto-planify.json');
   };
@@ -906,9 +1024,18 @@ export default function App() {
 
         {/* ───────── Area di lavoro centrale ───────── */}
         <main className="pf-stage">
+          {readOnly && (
+            <div className="pf-shared-bar" role="status">
+              <Link2 size={15} />
+              <span>Progetto condiviso in <b>sola lettura</b>{shared.name ? ` · ${shared.name}` : ''}</span>
+              <button type="button" className="pf-mini is-accent" onClick={copyShared}>Salva una copia</button>
+              <button type="button" className="pf-mini" onClick={closeShared}>Chiudi</button>
+            </div>
+          )}
           <div className="pf-toolbar">
             <div className="pf-group" role="group" aria-label="Livelli">
-              {[['furniture', Armchair, 'Arredi'], ['labels', Tag, 'Nomi'], ['dims', Ruler, 'Quote'], ['grid', LayoutGrid, 'Griglia']]
+              {[['furniture', Armchair, 'Arredi'], ['labels', Tag, 'Nomi'], ['dims', Ruler, 'Quote'], ['grid', LayoutGrid, 'Griglia'],
+                ['technical', PencilRuler, 'Tecnico']]
                 .map(([k, Icon, label]) => (
                   <button key={k} type="button" className={`pf-tool ${layers[k] ? 'is-on' : ''}`} aria-pressed={layers[k]}
                     onClick={() => toggle(k)}><Icon size={15} /> {label}</button>
@@ -929,6 +1056,22 @@ export default function App() {
                   <Droplets size={15} /> Idraulico
                 </button>
               )}
+            </div>
+
+            <div className="pf-group" role="group" aria-label="Vista 3D">
+              <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
+                onClick={() => setView3d(view3d ? null : { low: false })} title="Vista 3D navigabile"><Box size={15} /> 3D</button>
+              {view3d && (
+                <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
+                  onClick={() => setView3d({ low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
+              )}
+            </div>
+
+            <div className="pf-group" role="group" aria-label="Annulla e ripeti">
+              <button type="button" className="pf-tool" disabled={!stacks.undo.length} onClick={undo}
+                title="Annulla (⌘Z)" aria-label="Annulla"><Undo2 size={15} /></button>
+              <button type="button" className="pf-tool" disabled={!stacks.redo.length} onClick={redo}
+                title="Ripeti (⇧⌘Z)" aria-label="Ripeti"><Redo2 size={15} /></button>
             </div>
 
             <div className="pf-group" role="group" aria-label="Disegno e import">
@@ -964,6 +1107,10 @@ export default function App() {
                 title="Esporta progetto PDF: copertina, tutti i piani con i sensori e distinta materiali">
                 <FileText size={15} /> PDF progetto
               </button>
+              <button type="button" className="pf-tool" disabled={!plan} onClick={shareProject}
+                title="Copia un link per vedere il progetto in sola lettura (nessun server: il progetto è nel link)">
+                <Link2 size={15} /> Condividi
+              </button>
             </div>
           </div>
 
@@ -994,6 +1141,10 @@ export default function App() {
                   stairs={stairs.byFloor} electric={showElectric ? electricPlan.floors : null}
                   plumbing={showPlumbing ? plumbingPlan.floors : null} generator={plumbingCfg?.generator} />
               </ErrorBoundary>
+            ) : plan && view3d ? (
+              <ErrorBoundary key={`3d-${current.id}-${floor.id}`}>
+                <Plan3D plan={plan} style={floor.meta?.style} lowWalls={view3d.low} />
+              </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
               <div className="pf-sheet" key={`${current.id}-${floor.id}`}>
@@ -1002,6 +1153,8 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
+                  editable={!readOnly && !showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
+                  onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   electric={showElectric ? electricPlan.floors[floor.id] : null} electricLinks={electricCfg?.links !== false}
                   plumbing={showPlumbing ? plumbingPlan.floors[floor.id] || null : null}
                   plumbingLines={plumbingCfg?.lines !== false} generator={plumbingCfg?.generator}
@@ -1042,6 +1195,11 @@ export default function App() {
         <aside className="pf-inspector">
           {plan && stats ? (
             <>
+              {selectedItem != null && (
+                <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
+                  onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onClose={() => setSelectedItem(null)} />
+              )}
               {selectedRoom && (
                 <RoomEditor
                   key={selectedRoom.id}
@@ -1111,6 +1269,11 @@ export default function App() {
 
               <PlumbingPanel config={plumbingCfg} data={plumbingPlan} floorId={floor.id} sheet={showPlumbing ? 'plumbing' : 'arch'}
                 onStart={startPlumbing} onSheet={setSheet} onChange={changePlumbing} onClear={clearPlumbing} />
+
+              <SchedulePanel schedule={schedule} />
+
+              <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
+                onClear={clearEstimate} />
 
               <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm} />
 

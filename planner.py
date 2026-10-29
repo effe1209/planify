@@ -289,6 +289,9 @@ class Layout:
         room = self.room(room_id)
         orient, line, lo, hi = self._side_geom(room, side)
         margin = 0.35 if kind != "garage" else 0.25
+        if hi - lo - 2 * margin < width:
+            # lato corto (es. l'atrio largo 1,30 m): si stringono i margini prima di stringere la porta
+            margin = max(0.1, (hi - lo - width) / 2)
         avail = hi - lo - 2 * margin
         w = min(width, avail)
         start = snap(lo + margin + (avail - w) * at)
@@ -920,6 +923,8 @@ def furnish_bedroom(P: Placer, room: Room):
                 break
         if commit and ((not double and area >= 8) or area >= 13):
             P.place_wall(room, "desk", 1.2 if double else 1.0, 0.55, desks, gap=0.1, zone_gap=0.2, front=0.6)
+        if commit and double and area >= 14:
+            P.place_wall(room, "dresser", 1.0, 0.5, wardrobe_walls, gap=0.1, zone_gap=0.3, front=0.6, avoid_windows=True)
         return (100 if wardrobe else 0) + 10 * len(stands) + (wardrobe.rect.w * wardrobe.rect.h if wardrobe else 0) \
             + width * 3 + (2 if avoid else 0) + (1 if side in P.sides_far_from_door(room)[:2] else 0) + foot * 5 \
             + _bed_score(P, room, bed)
@@ -1269,15 +1274,32 @@ def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
     if not with_kitchen and area >= 18 and not has_dining:
         _place_dining(P, room)
     _place_armchair(P, room)
+    _living_extras(P, room, area)
     if area >= 16:   # una pianta in un angolo libero, lontano dalla porta
         P.place_corner(room, "plant", 0.5, 0.5, gap=0.15)
+
+
+def _living_extras(P: Placer, room: Room, area: float) -> None:
+    """Il soggiorno completo: lampada da terra accanto al divano, una madia su un muro libero (non sotto
+    la finestra) e, nei soggiorni grandi, una libreria."""
+    sofa = next((it for it in P.placed[room.id] if it.type in ("sofa", "sofa_corner")), None)
+    if sofa and not P.place_beside(room, "floor_lamp", sofa, 0.4, 0.4, gap=0.08, sides=("left",)):
+        P.place_beside(room, "floor_lamp", sofa, 0.4, 0.4, gap=0.08, sides=("right",))
+    if area >= 15:
+        sides = P.sides_far_from_door(room)
+        for length in (1.8, 1.6, 1.2):
+            if P.place_wall(room, "sideboard", length, 0.45, sides, gap=0.25, zone_gap=0.3, front=0.6, avoid_windows=True):
+                break
+    if area >= 24:
+        P.place_wall(room, "bookcase", 1.2, 0.35, P.sides_far_from_door(room), gap=0.25, zone_gap=0.3,
+                     front=0.6, avoid_windows=True)
 
 
 def furnish_dining(P: Placer, room: Room):
     """Zona pranzo: tavolo al centro e una credenza a muro."""
     if not _place_dining(P, room):
         P.lay.notes.append(f"{room.name}: tavolo non inserito")
-    P.place_wall(room, "console", 1.6, 0.45, P.sides_far_from_door(room), gap=0.3, zone_gap=0.3, front=0.6)
+    P.place_wall(room, "sideboard", 1.6, 0.45, P.sides_far_from_door(room), gap=0.3, zone_gap=0.3, front=0.6)
 
 
 def furnish_sleep_zone(P: Placer, room: Room):
@@ -1293,6 +1315,8 @@ def furnish_sleep_zone(P: Placer, room: Room):
 
 def furnish_study(P: Placer, room: Room):
     P.place_wall(room, "desk", 1.4, 0.7, desk_sides(P, room), gap=0.4, zone_gap=0.3)
+    P.place_wall(room, "bookcase", 1.2, 0.35, free_wall_sides(P, room), gap=0.2, zone_gap=0.3, front=0.6,
+                 avoid_windows=True)
 
 
 def furnish_meeting(P: Placer, room: Room):
@@ -1371,7 +1395,8 @@ def furnish_service(P: Placer, room: Room):
         if not P.placed[room.id]:
             P.place_wall(room, "wardrobe", snap(min(max(inn.w, inn.h) - 0.05, 2.0) - 0.024), 0.5, "NSEW", gap=0.0)
     elif room.kind == "entry":
-        P.place_wall(room, "console", 1.0, 0.35, "NSEW", gap=0.05, zone_gap=0.3, front=0.9)
+        # scarpiera bassa con lo specchio sopra (lo specchio lo disegna il frontend)
+        P.place_wall(room, "shoe_cabinet", 1.0, 0.35, "NSEW", gap=0.05, zone_gap=0.3, front=0.9)
 
 
 PATH_KINDS = ("living", "living_kitchen", "zone_day", "dining", "kitchen", "bed", "study")
