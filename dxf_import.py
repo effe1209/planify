@@ -31,39 +31,48 @@ from typing import Dict, List, Optional, Tuple
 try:
     import ezdxf
     from ezdxf import recover
+    import ezdxf.bbox
 except ImportError:  # pragma: no cover - ezdxf è nei requisiti
     ezdxf = None
 
-WALL_RE = re.compile(r"mur|wall|paret|tramez|tampon|struttur|pilastr|sett[io]|a-wal|cls|calcestr|lateriz", re.I)
-DOOR_RE = re.compile(r"port[ae]|door|a-door|anta|uscio", re.I)
-WINDOW_RE = re.compile(r"finestr|window|serram|infiss|glaz|vetr|a-win|^fin[_ -]|^f\d", re.I)
-IGNORE_RE = re.compile(r"quot|dim|arred|furn|mobil|campit|hatch|tratteg|text|test[io]|scritt|assi|axis|grid|griglia|"
-                       r"sanit|eletti?r|idraul|impiant|cartigl|title|viewport|defpoints|esterno|giardin|vegetaz|ombr", re.I)
+# nomi di layer e blocchi in italiano, inglese e spagnolo (molti disegni scaricabili sono in spagnolo)
+WALL_RE = re.compile(r"mur|wall|paret|pared|tramez|tampon|struttur|pilastr|sett[io]|a-wal|cls|calcestr|lateriz|tabique", re.I)
+DOOR_RE = re.compile(r"port[ae]|door|a-door|anta|uscio|puert", re.I)
+WINDOW_RE = re.compile(r"finestr|window|serram|infiss|glaz|vetr|a-win|^fin[_ -]|^f\d|ventan|cristal", re.I)
+IGNORE_RE = re.compile(r"quot|dim|arred|furn|mobil|muebl|campit|hatch|hacth|tratteg|text|test[io]|scritt|assi|axis|grid|griglia|"
+                       r"sanit|eletti?r|electr|idraul|impiant|cartigl|title|viewport|defpoints|esterno|giardin|vegetaz|ombr|"
+                       r"tetto|techo|roof|cubiert|trav[ei]|viga|beam|npt|sheet|marco|tarjeta|cajet|meset|bancon|"
+                       r"elev|prospett|seccion|section|sezion|detail|detall|dettagl|textur|tierra|terreno|matas|plant|"
+                       r"agua|varill|baj[oa]|parapet|vuelo|cascaron|perrill|piso\b|pisos|escaler|scal[ae]\b|stair|ringhier|"
+                       r"barand|varanda|column|pilar|tuber|pipe|duct|hvac", re.I)
 
 T_MIN, T_MAX = 0.06, 0.65      # spessori plausibili dei muri (m)
+AXIS_TOL = 0.08                 # tratti con assi più vicini di così sono lo stesso muro (spessori diversi)
 PIECE_MIN = 0.2                 # tratti più corti: spallette e incroci, non muri
 OPEN_MIN, OPEN_MAX = 0.45, 4.0  # larghezze plausibili delle aperture (m)
+DEBUG_GRID: list = []          # test: se non vuota riceve la griglia del calcolo
 END_OPEN_MAX = 2.0              # apertura tra la fine di un muro e il muro perpendicolare
 ANG = math.radians(1.5)         # tolleranza per considerare una linea orizzontale / verticale
 
 ROOM_WORDS = [
-    (r"soggiorno.*cucina|cucina.*soggiorno|living.*kitchen|open space", "living_kitchen", "Soggiorno con Cucina"),
-    (r"soggiorno|salotto|living|salone|sala\b", "living", "Soggiorno"),
-    (r"pranzo|dining", "dining", "Sala da pranzo"),
-    (r"cucin|cottura|kitchen|kitchenette", "kitchen", "Cucina"),
-    (r"matrimon|camera padronale|master", "bed", "Camera Matrimoniale"),
-    (r"camer|letto|bedroom|cameretta", "bed", "Camera"),
-    (r"\bw\.?c\b|toilet|antibagno", "wc", "WC"),
-    (r"bagn|servizi|doccia|bath", "bath", "Bagno"),
-    (r"disimp|corridoi|\bdis\b|passaggio|hall|distribuz", "corridor", "Disimpegno"),
-    (r"ingress|atrio|entrata|\bentry\b", "entry", "Ingresso"),
-    (r"studio|ufficio|office", "study", "Studio"),
-    (r"lavander|laundry", "laundry", "Lavanderia"),
-    (r"guardarob|cabina armadi|closet", "closet", "Guardaroba"),
-    (r"ripost|\brip\b|deposito|cantina|storage|dispensa", "storage", "Ripostiglio"),
-    (r"garage|\bbox\b|autorimessa", "garage", "Garage"),
+    (r"soggiorno.*cucina|cucina.*soggiorno|living.*kitchen|open space|sala.*cocina|cocina.*sala", "living_kitchen", "Soggiorno con Cucina"),
+    (r"soggiorno|salotto|living|salone|sala\b|lounge|family room|estar", "living", "Soggiorno"),
+    (r"pranzo|dining|comedor|breakfast|desayun", "dining", "Sala da pranzo"),
+    (r"cucin|cottura|kitchen|kitchenette|cocina", "kitchen", "Cucina"),
+    (r"matrimon|padronale|master|main|principal", "bed", "Camera Matrimoniale"),
+    (r"camer|letto|bedroom|cameretta|dormitor|habitac|recamar|alcoba|\broom\s*\d|^room\b", "bed", "Camera"),
+    (r"\bw\.?c\b|toilet|antibagno|medio bano|half bath|powder", "wc", "WC"),
+    (r"bagn|servizi igien|doccia|bath|bano|aseo|sanitario", "bath", "Bagno"),
+    (r"disimp|corridoi|\bdis\b|passaggio|hall|distribuz|corridor|pasillo|vestibul", "corridor", "Disimpegno"),
+    (r"ingress|atrio|entrata|\bentry\b|entrance|foyer|recibidor|acceso|vestibulo", "entry", "Ingresso"),
+    (r"studio|ufficio|office|study|estudio|despacho", "study", "Studio"),
+    (r"lavander|laundry|washing|lavado|lavanderia", "laundry", "Lavanderia"),
+    (r"guardarob|cabina armadi|closet|vestidor|walk.?in|clothing", "closet", "Guardaroba"),
+    (r"ripost|\brip\b|deposito|cantina|storage|dispensa|pantry|despensa|bodega|service room|cuarto de servicio|utility", "storage", "Ripostiglio"),
+    (r"garage|\bbox\b|autorimessa|garaje|cochera|carport", "garage", "Garage"),
 ]
-OUTSIDE_WORDS = re.compile(r"balcon|terrazz|loggia|portico|veranda|giardin|cortile|esterno", re.I)
+OUTSIDE_WORDS = re.compile(r"balcon|terrazz|terraza|terrace|loggia|portico|porche|porch|veranda|giardin|jardin|garden|cortile|patio|"
+                           r"esterno|gallery|galeria|marquee|marquesina|deck|piscina|pool", re.I)
 
 
 def _plain(s: str) -> str:
@@ -75,6 +84,9 @@ def _plain(s: str) -> str:
 # 1-2. lettura e ruoli
 # ----------------------------------------------------------------------------
 def _role(layer: str, block: str) -> str:
+    # prima ciò che non è pianta (prospetti, tetto, impianti, arredi…), poi porte, finestre, muri
+    if IGNORE_RE.search(layer or ""):
+        return "ignore"
     for name in (block or "", layer or ""):
         if not name:
             continue
@@ -82,7 +94,7 @@ def _role(layer: str, block: str) -> str:
             return "door"
         if WINDOW_RE.search(name):
             return "window"
-    if IGNORE_RE.search(layer or "") or IGNORE_RE.search(block or ""):
+    if IGNORE_RE.search(block or ""):
         return "ignore"
     if WALL_RE.search(layer or ""):
         return "wall"
@@ -91,10 +103,14 @@ def _role(layer: str, block: str) -> str:
 
 def _read(text: str):
     """Elementi del disegno: segmenti, archi, testi (in unità del file), con il ruolo."""
+    # lettura normale (veloce); quella di recupero solo per i file danneggiati
     try:
-        doc, _ = recover.read(io.BytesIO(text.encode("utf-8", errors="ignore")))
-    except Exception:  # noqa: BLE001 - file illeggibile
-        return None
+        doc = ezdxf.read(io.StringIO(text))
+    except Exception:  # noqa: BLE001
+        try:
+            doc, _ = recover.read(io.BytesIO(text.encode("utf-8", errors="ignore")))
+        except Exception:  # noqa: BLE001 - file illeggibile
+            return None
     segs: List[Tuple[float, float, float, float, str]] = []
     arcs: List[Tuple[float, float, float, float, float, str]] = []   # cx, cy, r, a0, a1 (gradi), ruolo
     texts: List[Tuple[float, float, str]] = []
@@ -163,8 +179,13 @@ def _read(text: str):
                     p = e.dxf.align_point if e.dxf.get("halign", 0) and e.dxf.hasattr("align_point") else e.dxf.insert
                     texts.append((p.x, p.y, e.dxf.text))
                 elif t == "MTEXT":
-                    p = e.dxf.insert
-                    texts.append((p.x, p.y, e.plain_text()))
+                    # il punto d'inserimento è un angolo del riquadro: si usa il centro del testo
+                    try:
+                        ext = ezdxf.bbox.extents([e], fast=True)
+                        cx, cy = (ext.extmin.x + ext.extmax.x) / 2, (ext.extmin.y + ext.extmax.y) / 2
+                    except Exception:  # noqa: BLE001
+                        cx, cy = e.dxf.insert.x, e.dxf.insert.y
+                    texts.append((cx, cy, e.plain_text()))
             except Exception:  # noqa: BLE001 - un elemento difettoso non blocca l'importazione
                 continue
 
@@ -173,9 +194,38 @@ def _read(text: str):
     return segs, arcs, texts, boxes, units
 
 
+def _typical_gap(segs) -> Optional[float]:
+    """Distanza più comune tra una linea orizzontale e la parallela più vicina sopra (in unità del disegno):
+    in una pianta è lo spessore dei muri."""
+    roles = {"wall"} if any(s[4] == "wall" for s in segs) else {"wall", "other"}
+    hs = sorted(((y1 + y2) / 2, min(x1, x2), max(x1, x2)) for x1, y1, x2, y2, r in segs
+                if r in roles and abs(y2 - y1) <= abs(x2 - x1) * 0.026 and abs(x2 - x1) > 0)
+    gaps = []
+    for i, (c, a, b) in enumerate(hs):
+        for c2, a2, b2 in hs[i + 1:i + 60]:
+            d = c2 - c
+            if d <= (b - a) * 1e-3:
+                continue
+            if min(b, b2) - max(a, a2) > (b - a) * 0.3:
+                gaps.append(d)
+                break
+    if len(gaps) < 6:
+        return None
+    gaps.sort()
+    return gaps[len(gaps) // 3]   # terzile basso: i muri, non le stanze
+
+
 def _scale(units: int, segs) -> float:
-    """Metri per unità di disegno: dall'intestazione, o dalle misure (casa entro 60 m)."""
+    """Metri per unità di disegno. L'unità dichiarata ($INSUNITS) vale solo se lo spessore tipico dei muri
+    risulta plausibile (6-50 cm): molti file la dichiarano sbagliata. Altrimenti si sceglie l'unità che lo
+    rende plausibile; senza muri riconoscibili, quella che dà una casa entro 60 m."""
     known = {1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1.0, 14: 0.1}
+    gap = _typical_gap(segs)
+    cands = ([known[units]] if units in known else []) + [1.0, 0.01, 0.001, 0.0254, 0.1, 0.3048]
+    if gap:
+        for k in cands:
+            if 0.06 <= gap * k <= 0.5:
+                return k
     if units in known:
         return known[units]
     xs = [v for s in segs for v in (s[0], s[2])]
@@ -191,7 +241,7 @@ def _scale(units: int, segs) -> float:
 # ----------------------------------------------------------------------------
 def _axis_segments(segs, k, roles):
     """Segmenti orizzontali (y, x0, x1) e verticali (x, y0, y1) in metri, solo con i ruoli dati."""
-    hs, vs, slanted = [], [], 0
+    hs, vs, slanted = [], [], []
     for x1, y1, x2, y2, role in segs:
         if role not in roles:
             continue
@@ -206,7 +256,7 @@ def _axis_segments(segs, k, roles):
         elif abs(a - math.pi / 2) < ANG:
             vs.append(((x1 + x2) / 2, min(y1, y2), max(y1, y2)))
         elif length > 0.5:
-            slanted += 1
+            slanted.append((x1, y1, x2, y2))
     return hs, vs, slanted
 
 
@@ -224,7 +274,7 @@ def _pair_walls(lines):
                 break
             lo, hi = max(a1, a2), min(b1, b2)
             # la linea più vicina; a parità di distanza quella che si sovrappone di più (non una spalletta)
-            if hi - lo >= 0.05 and (best is None or (round(d, 2), lo - hi) < (round(best[0], 2), best[1] - best[2])):
+            if hi - lo >= PIECE_MIN and (best is None or (round(d, 2), lo - hi) < (round(best[0], 2), best[1] - best[2])):
                 best = (d, lo, hi)
         if best:
             d, lo, hi = best
@@ -238,7 +288,7 @@ def _split_infill(pieces):
     """Tratti molto più sottili, sullo stesso asse e tra due tratti di muro: sono le linee del vetro di una finestra."""
     by: Dict[float, list] = {}
     for p in pieces:
-        key = next((kk for kk in by if abs(kk - p[0]) <= 0.03), p[0])
+        key = next((kk for kk in by if abs(kk - p[0]) <= AXIS_TOL), p[0])
         by.setdefault(key, []).append(p)
     walls, hints = [], []
     for c, ps in by.items():
@@ -257,7 +307,7 @@ def _merge(pieces):
     """Tratti sullo stesso asse uniti: {asse: [(inizio, fine, spessore)]} ordinati."""
     by: Dict[float, list] = {}
     for c, lo, hi, t in sorted(pieces, key=lambda p: (p[0], p[1])):
-        key = next((kk for kk in by if abs(kk - c) <= 0.03), c)
+        key = next((kk for kk in by if abs(kk - c) <= AXIS_TOL), c)
         by.setdefault(key, []).append([lo, hi, t])
     out = {}
     for c, ivs in by.items():
@@ -374,6 +424,15 @@ class Grid:
     def ij(self, x, y):
         return int((x - self.x0) / self.step), int((y - self.y0) / self.step)
 
+    def line(self, x1, y1, x2, y2, val):
+        """Segmento qualsiasi (muri obliqui), spesso due celle."""
+        n = int(math.hypot(x2 - x1, y2 - y1) / (self.step / 2)) + 1
+        for s in range(n + 1):
+            i, j = self.ij(x1 + (x2 - x1) * s / n, y1 + (y2 - y1) * s / n)
+            for a, b in ((i, j), (i + 1, j), (i, j + 1)):
+                if 0 <= a < self.nx and 0 <= b < self.ny:
+                    self.v[b * self.nx + a] = val
+
     def fill_rect(self, x0, y0, x1, y1, val):
         i0, j0 = self.ij(x0, y0)
         i1, j1 = self.ij(x1, y1)
@@ -441,6 +500,8 @@ def _name_room(texts_in: List[str], area: float):
     joined = " ".join(_plain(t) for t in texts_in)
     if OUTSIDE_WORDS.search(joined):
         return None, None, True
+    if re.search(ROOM_WORDS[1][0], joined) and re.search(ROOM_WORDS[3][0], joined):
+        return "living_kitchen", "Soggiorno con Cucina", True
     for pat, kind, name in ROOM_WORDS:
         if re.search(pat, joined):
             return kind, name, True
@@ -453,6 +514,43 @@ def _name_room(texts_in: List[str], area: float):
     if area >= 9:
         return "bed", "Camera", False
     return "study", "Locale", False
+
+
+def _drawings(hp, vp, texts_m):
+    """Gruppi di muri vicini (entro 1,5 m): un file di progetto ha più piante, prospetti e sezioni.
+    Restituisce i gruppi ordinati per punteggio (muri + nomi di locali dentro), ognuno con il suo ingombro."""
+    rects = [(lo, c - t / 2, hi, c + t / 2) for c, lo, hi, t in hp] + [(c - t / 2, lo, c + t / 2, hi) for c, lo, hi, t in vp]
+    parent = list(range(len(rects)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    cell, gap = 2.0, 1.5
+    buckets: Dict[Tuple[int, int], list] = {}
+    for i, (x0, y0, x1, y1) in enumerate(rects):
+        for bx in range(int(math.floor((x0 - gap) / cell)), int(math.floor((x1 + gap) / cell)) + 1):
+            for by in range(int(math.floor((y0 - gap) / cell)), int(math.floor((y1 + gap) / cell)) + 1):
+                for j in buckets.get((bx, by), ()):
+                    a, b = rects[j], rects[i]
+                    if a[0] - gap <= b[2] and b[0] - gap <= a[2] and a[1] - gap <= b[3] and b[1] - gap <= a[3]:
+                        parent[find(i)] = find(j)
+                buckets.setdefault((bx, by), []).append(i)
+    groups: Dict[int, list] = {}
+    for i in range(len(rects)):
+        groups.setdefault(find(i), []).append(i)
+    out = []
+    for idx in groups.values():
+        x0 = min(rects[i][0] for i in idx); y0 = min(rects[i][1] for i in idx)
+        x1 = max(rects[i][2] for i in idx); y1 = max(rects[i][3] for i in idx)
+        if x1 - x0 < 2.5 or y1 - y0 < 2.5:
+            continue
+        names = sum(1 for x, y, txt in texts_m if x0 <= x <= x1 and y0 <= y <= y1
+                    and any(re.search(p, _plain(txt)) for p, _, _ in ROOM_WORDS))
+        out.append({"box": (x0, y0, x1, y1), "pieces": len(idx), "names": names, "score": len(idx) + 8 * names})
+    return sorted(out, key=lambda g: -g["score"])
 
 
 # ----------------------------------------------------------------------------
@@ -468,24 +566,69 @@ def import_real_dxf(text: str, Layout, Opening, snap):
     segs, arcs, texts, boxes, units = data
     k = _scale(units, segs)
     roles = {"wall"} if any(s[4] == "wall" for s in segs) else {"wall", "other"}
-    # l'anta di una porta va dal centro dell'arco (cardine) a uno dei suoi estremi: non è un muro
-    hinges = []
+    # l'anta di una porta va dal centro dell'arco (cardine) a uno dei suoi estremi: non è un muro.
+    # Indice dei cardini a celle di ~1 m, così ogni linea si confronta solo con gli archi vicini.
+    cell = 1.0 / k
+    hinges: Dict[Tuple[int, int], list] = {}
     for cx, cy, r, a0, a1, _ in arcs:
         ends = [(cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))) for a in (a0, a1)]
-        hinges.append((cx, cy, r, ends))
+        hinges.setdefault((int(cx // cell), int(cy // cell)), []).append((cx, cy, r, ends))
 
     def leaf(s):
         x1, y1, x2, y2, _ = s
-        for cx, cy, r, ends in hinges:
-            for (hx, hy), (fx, fy) in (((x1, y1), (x2, y2)), ((x2, y2), (x1, y1))):
-                if math.hypot(hx - cx, hy - cy) <= 0.05 * r and min(math.hypot(fx - ex, fy - ey) for ex, ey in ends) <= 0.1 * r:
-                    return True
+        for (hx, hy), (fx, fy) in (((x1, y1), (x2, y2)), ((x2, y2), (x1, y1))):
+            bx, by = int(hx // cell), int(hy // cell)
+            for i in (bx - 1, bx, bx + 1):
+                for j in (by - 1, by, by + 1):
+                    for cx, cy, r, ends in hinges.get((i, j), ()):
+                        if math.hypot(hx - cx, hy - cy) <= 0.05 * r and \
+                                min(math.hypot(fx - ex, fy - ey) for ex, ey in ends) <= 0.1 * r:
+                            return True
         return False
-    wall_segs = [s for s in segs if not leaf(s)] if hinges else segs
+    wall_segs = [s for s in segs if s[4] in roles and not leaf(s)] if hinges else segs
     hs, vs, slanted = _axis_segments(wall_segs, k, roles)
     hp, hh = _split_infill(_pair_walls(hs))
     vp, vh = _split_infill(_pair_walls(vs))
+    # più disegni nello stesso file (piani, prospetti, sezioni): si importa la pianta più ricca di muri e nomi
+    others = []
+    groups = _drawings(hp, vp, [(x * k, y * k, t) for x, y, t in texts])
+    if len(groups) > 1:
+        bx0, by0, bx1, by1 = groups[0]["box"]
+        keep = lambda x0, y0, x1, y1: x0 >= bx0 - 1 and x1 <= bx1 + 1 and y0 >= by0 - 1 and y1 <= by1 + 1
+        hp = [p for p in hp if keep(p[1], p[0], p[2], p[0])]
+        vp = [p for p in vp if keep(p[0], p[1], p[0], p[2])]
+        hh = [p for p in hh if keep(p[1], p[0], p[2], p[0])]
+        vh = [p for p in vh if keep(p[0], p[1], p[0], p[2])]
+        inside = lambda x, y: bx0 - 1 <= x * k <= bx1 + 1 and by0 - 1 <= y * k <= by1 + 1
+        texts = [t for t in texts if inside(t[0], t[1])]
+        arcs = [a for a in arcs if inside(a[0], a[1])]
+        boxes = [b for b in boxes if inside((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)]
+        segs = [sg for sg in segs if inside(sg[0], sg[1]) or inside(sg[2], sg[3])]
+        others = [g for g in groups[1:] if g["names"] >= 2 or g["pieces"] >= groups[0]["pieces"] * 0.4]
     hwalls, vwalls = _merge(hp), _merge(vp)     # asse → tratti [inizio, fine, spessore]
+
+    # linee lunghe sul layer dei muri rimaste senza coppia (muri a linea singola, recinzioni, l'altra faccia
+    # su un layer di travi…): non diventano muri della pianta, ma separano i locali dall'esterno
+    def lonely(lines, walls_by_axis):
+        out = []
+        for c, a, b in lines:
+            if b - a < 0.8:
+                continue
+            covered = 0.0
+            for cc, ivs in walls_by_axis.items():
+                if abs(cc - c) <= T_MAX / 2 + 0.01:
+                    covered += sum(max(0.0, min(b, hi) - max(a, lo)) for lo, hi, _ in ivs)
+            if covered < (b - a) * 0.5:
+                out.append((c, a, b))
+        return out
+    h_single = lonely(hs, hwalls) if groups else []
+    v_single = lonely(vs, vwalls) if groups else []
+    if len(groups) > 1:
+        bx0, by0, bx1, by1 = groups[0]["box"]
+        h_single = [l for l in h_single if bx0 - 1 <= l[1] and l[2] <= bx1 + 1 and by0 - 1 <= l[0] <= by1 + 1]
+        slanted = [l for l in slanted if bx0 - 1 <= min(l[0], l[2]) and max(l[0], l[2]) <= bx1 + 1
+                   and by0 - 1 <= min(l[1], l[3]) and max(l[1], l[3]) <= by1 + 1]
+        v_single = [l for l in v_single if by0 - 1 <= l[1] and l[2] <= by1 + 1 and bx0 - 1 <= l[0] <= bx1 + 1]
     # le linee di vetro diventano indizi di finestra (ingombri in unità del disegno, come quelli dei blocchi)
     for c, lo, hi, t in hh:
         boxes.append((lo / k, (c - t) / k, hi / k, (c + t) / k, "window"))
@@ -502,41 +645,82 @@ def import_real_dxf(text: str, Layout, Opening, snap):
     if X1 - X0 > 80 or Y1 - Y0 > 80 or X1 - X0 < 2 or Y1 - Y0 < 2:
         return None
 
-    # aperture
-    gaps = []
-    for orient, g in [("h", g) for g in _gaps(hwalls, vwalls)] + [("v", g) for g in _gaps(vwalls, hwalls)]:
+    # aperture: quelle all'estremità di un muro valgono subito solo con un indizio (arco, blocco, vetro)
+    all_gaps, gaps = [], []
+    # anche i muri a linea singola chiudono un'apertura che arriva fino a loro
+    hcross = {c: list(ivs) for c, ivs in hwalls.items()}
+    vcross = {c: list(ivs) for c, ivs in vwalls.items()}
+    for c, a, b in h_single:
+        hcross.setdefault(c, []).append([a, b, 0.02])
+    for c, a, b in v_single:
+        vcross.setdefault(c, []).append([a, b, 0.02])
+    for orient, g in [("h", g) for g in _gaps(hwalls, vcross)] + [("v", g) for g in _gaps(vwalls, hcross)]:
         c, g0, g1, t, at_end = g
+        all_gaps.append((orient, (c, g0, g1, t)))
         if at_end and _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, False)[0] == "passage":
             continue   # fine di un muro dentro un locale, non un vano
         gaps.append((orient, (c, g0, g1, t)))
 
-    # griglia: muri e aperture chiusi, esterno dal bordo
+    # griglia: muri e aperture chiusi, esterno dal bordo, zone libere rimaste = locali
     step = 0.05 if max(X1 - X0, Y1 - Y0) <= 30 else 0.1
-    grid = Grid(X0 - 1, Y0 - 1, X1 + 1, Y1 + 1, step)
-    for c, ivs in hwalls.items():
-        for lo, hi, t in ivs:
-            grid.fill_rect(lo - step, c - t / 2 - step / 2, hi + step, c + t / 2 + step / 2, 1)
-    for c, ivs in vwalls.items():
-        for lo, hi, t in ivs:
-            grid.fill_rect(c - t / 2 - step / 2, lo - step, c + t / 2 + step / 2, hi + step, 1)
-    for o, (c, g0, g1, t) in gaps:
-        if o == "h":
-            grid.fill_rect(g0, c - t / 2, g1, c + t / 2, 1)
-        else:
-            grid.fill_rect(c - t / 2, g0, c + t / 2, g1, 1)
-    border = [(i, 0) for i in range(grid.nx)] + [(i, grid.ny - 1) for i in range(grid.nx)] + \
-             [(0, j) for j in range(grid.ny)] + [(grid.nx - 1, j) for j in range(grid.ny)]
-    grid.flood(border, 2)
 
-    comps = []
-    label = 3
-    for j in range(grid.ny):
-        for i in range(grid.nx):
-            if grid.v[j * grid.nx + i] == 0:
-                cells = grid.flood([(i, j)], label if label < 255 else 254)
-                if len(cells) * step * step >= 1.0:
-                    comps.append(cells)
-                label += 1
+    def partition(closed):
+        grid = Grid(X0 - 1, Y0 - 1, X1 + 1, Y1 + 1, step)
+        for c, ivs in hwalls.items():
+            for lo, hi, t in ivs:
+                grid.fill_rect(lo - step, c - t / 2 - step / 2, hi + step, c + t / 2 + step / 2, 1)
+        for c, ivs in vwalls.items():
+            for lo, hi, t in ivs:
+                grid.fill_rect(c - t / 2 - step / 2, lo - step, c + t / 2 + step / 2, hi + step, 1)
+        for x1, y1, x2, y2 in slanted:
+            grid.line(x1, y1, x2, y2, 1)
+        for c, a, b in h_single:
+            grid.fill_rect(a, c - step / 2, b, c + step / 2, 1)
+        for c, a, b in v_single:
+            grid.fill_rect(c - step / 2, a, c + step / 2, b, 1)
+        for o, (c, g0, g1, t) in closed:
+            if o == "h":
+                grid.fill_rect(g0, c - t / 2, g1, c + t / 2, 1)
+            else:
+                grid.fill_rect(c - t / 2, g0, c + t / 2, g1, 1)
+        border = [(i, 0) for i in range(grid.nx)] + [(i, grid.ny - 1) for i in range(grid.nx)] + \
+                 [(0, j) for j in range(grid.ny)] + [(grid.nx - 1, j) for j in range(grid.ny)]
+        grid.flood(border, 2)
+        comps, label = [], 3
+        for j in range(grid.ny):
+            for i in range(grid.nx):
+                if grid.v[j * grid.nx + i] == 0:
+                    cells = grid.flood([(i, j)], label if label < 255 else 254)
+                    if len(cells) * step * step >= 1.0:
+                        comps.append(cells)
+                    label += 1
+        return grid, comps
+
+    named = [(x * k, y * k) for x, y, t in texts
+             if any(re.search(p, _plain(t)) for p, _, _ in ROOM_WORDS) and not OUTSIDE_WORDS.search(_plain(t))]
+    grid, comps = partition(gaps)
+    # un locale con il nome finito «fuori»: l'esterno entra da un'apertura senza porta né finestra disegnata
+    # (es. verso il portico). Si chiudono anche quelle e si tengono le zone con un nome o già interne prima,
+    # così i pezzi di giardino tra la casa e la recinzione non diventano locali.
+    leaked = [p for p in named if grid.v[grid.ij(*p)[1] * grid.nx + grid.ij(*p)[0]] == 2]
+    if leaked and len(all_gaps) > len(gaps):
+        before = grid
+        grid, comps2 = partition(all_gaps)
+        name_cells = {grid.ij(*p) for p in named}
+        with_name = [c for c in comps2 if any(cell in name_cells for cell in c)]
+        # ingombro dei locali con un nome: le zone senza nome che ne escono sono giardino (tra casa e recinzione)
+        ci = [i for c in with_name for i, _ in c]
+        cj = [j for c in with_name for _, j in c]
+        pad = int(0.3 / step)
+        box = (min(ci) - pad, min(cj) - pad, max(ci) + pad, max(cj) + pad) if ci else None
+        def indoor(c):
+            if c in with_name or not any(before.v[j * before.nx + i] == 2 for i, j in c[:: max(1, len(c) // 200)]):
+                return True
+            return box is not None and all(box[0] <= i <= box[2] and box[1] <= j <= box[3] for i, j in c)
+        comps = [c for c in comps2 if indoor(c)]
+        gaps = all_gaps
+    if DEBUG_GRID:
+        DEBUG_GRID.append(grid)
     if not comps:
         return None
 
@@ -555,17 +739,22 @@ def import_real_dxf(text: str, Layout, Opening, snap):
     tpts = [(x * k, y * k, s) for x, y, s in texts]
     for gid, cells in enumerate(comps, 1):
         cellset = set(cells)
-        inside = [s for x, y, s in tpts if grid.ij(x, y) in cellset]
-        for n, (i0, j0, i1, j1) in enumerate(_rects(cells, 0, 0)):
+        inside = [(grid.ij(x, y), s) for x, y, s in tpts if grid.ij(x, y) in cellset]
+        pieces = _rects(cells, 0, 0)
+        own = lambda r: [s for (i, j), s in inside if r[0] <= i <= r[2] and r[1] <= j <= r[3]]
+        # testi caduti fuori da ogni rettangolo (negli scarti della scomposizione): al pezzo principale
+        stray = [s for (i, j), s in inside if not any(r[0] <= i <= r[2] and r[1] <= j <= r[3] for r in pieces)]
+        for n, (i0, j0, i1, j1) in enumerate(pieces):
             x0, y0 = grid.x0 + i0 * step, grid.y0 + j0 * step
             x1, y1 = grid.x0 + (i1 + 1) * step, grid.y0 + (j1 + 1) * step
+            mine = own((i0, j0, i1, j1)) + (stray if n == 0 else [])
             x0 = snap_edge(x0, vwalls, y0, y1, -1)
             x1 = snap_edge(x1, vwalls, y0, y1, 1)
             y0 = snap_edge(y0, hwalls, x0, x1, -1)
             y1 = snap_edge(y1, hwalls, x0, x1, 1)
             if (x1 - x0) * (y1 - y0) < 0.8 and n:
                 continue
-            rooms.append([x0, y0, x1, y1, gid, inside if n == 0 else [], n])
+            rooms.append([x0, y0, x1, y1, gid, mine, n])
 
     # pezzi dello stesso locale (L, T): il lato aperto tocca esattamente il pezzo accanto
     for r in rooms:
@@ -614,7 +803,15 @@ def import_real_dxf(text: str, Layout, Opening, snap):
             main = group_room.get(gid)
             if main in (None, -1):
                 continue
-            lay.add_room("", "corridor", x0 - RX0, RY1 - y1, x1 - RX0, RY1 - y0, group=lay.room(main).group)
+            # pezzo di un locale aperto (soggiorno a L, zona giorno con cucina e pranzo): col suo nome se ne ha uno
+            kind, name, named = _name_room(inside, area) if inside else (None, None, False)
+            if not named or kind is None:
+                kind, name = "corridor", ""
+            else:
+                counts[name] = counts.get(name, 0) + 1
+                if counts[name] > 1:
+                    name = f"{name} {counts[name]}"
+            lay.add_room(name, kind, x0 - RX0, RY1 - y1, x1 - RX0, RY1 - y0, group=lay.room(main).group)
 
     # porte e finestre sugli assi (coordinate del layout)
     def room_at(px, py):
@@ -686,7 +883,11 @@ def import_real_dxf(text: str, Layout, Opening, snap):
         lay.notes.append(f"Muri del disegno da {thick[0] * 100:.0f} a {thick[-1] * 100:.0f} cm: nella pianta hanno lo spessore "
                          "standard di 20 cm, centrati sull'asse del muro originale.")
     if slanted:
-        lay.notes.append(f"{slanted} linee oblique ignorate: la pianta riconosce solo muri orizzontali e verticali.")
+        lay.notes.append(f"{len(slanted)} tratti di muro obliqui usati solo per separare i locali: la pianta ha muri "
+                         "orizzontali e verticali, quindi lì il muro non compare.")
+    if others:
+        lay.notes.append(f"Il file contiene altri {len(others)} disegni simili a una pianta (altri piani, prospetti o sezioni): "
+                         "importata la pianta con più muri e nomi di locali.")
     if outside:
         lay.notes.append(f"{outside} spazi esterni (balconi, terrazzi) esclusi dai locali.")
     if guessed:

@@ -73,6 +73,28 @@ def test_l_shaped_living_corner_door_and_unnamed_room():
     assert any("senza nome" in n for n in plan["notes"])
 
 
+def test_wrong_units_in_header_are_ignored():
+    """Molti file dichiarano un'unità sbagliata ($INSUNITS): conta lo spessore dei muri."""
+    with open(os.path.join(HERE, "appartamento_cm.dxf")) as f:
+        txt = f.read()
+    # il file è in centimetri; si dichiara millimetri (4) al posto di centimetri (5)
+    txt = txt.replace("$INSUNITS\n 70\n5", "$INSUNITS\n 70\n4")
+    assert "$INSUNITS\n 70\n4" in txt
+    _check_apartment(planner.import_dxf_data(txt))
+
+
+def test_room_names_in_english_and_spanish():
+    import dxf_import as D
+    cases = {"LIVING ROOM": "living", "KITCHEN": "kitchen", "DINING ROOM": "dining", "ROOM 1": "bed", "ROOM MAIN": "bed",
+             "Dormitorio": "bed", "Baño": "bath", "BATH": "bath", "Cocina": "kitchen", "Sala": "living",
+             "PANTRY": "storage", "WASHING AREA": "laundry", "Pasillo": "corridor"}
+    for text, kind in cases.items():
+        assert D._name_room([text], 10)[0] == kind, text
+    assert D._name_room(["ROOM MAIN"], 14)[1] == "Camera Matrimoniale"
+    assert D._name_room(["LIVING ROOM", "KITCHEN"], 30)[0] == "living_kitchen"
+    assert D._name_room(["GALLERY"], 10)[0] is None and D._name_room(["Terraza"], 10)[0] is None
+
+
 def test_own_dxf_export_still_uses_room_layer():
     """I DXF di Planify (layer AREE) passano dall'importazione per polilinee, come prima."""
     txt = "\n".join(["0", "SECTION", "2", "ENTITIES",
