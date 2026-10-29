@@ -153,6 +153,7 @@ class Item:
     keep: Optional[Rect] = None   # area di rispetto (es. davanti al WC)
     facing: str = ""
     flip: bool = False            # disegno specchiato (pezzi asimmetrici: doccia angolare, divano angolare)
+    parts: Optional[dict] = None  # posizioni interne nel riferimento del disegno (piano cucina: hob, sink in m)
 
     def __post_init__(self):
         if self.keep is None:
@@ -489,6 +490,8 @@ class Placer:
         self._dz: Dict[int, List[Rect]] = {}
         self._inner: Dict[int, Rect] = {}
         self._open: Dict[int, set] = {}
+        self._paths: Dict[int, List[Rect]] = {}
+        self.use_paths = False   # percorsi liberi tra le porte (vedi path_zones), attivati da furnish
 
     def invalidate(self):
         self._dz.clear()
@@ -538,6 +541,35 @@ class Placer:
         self._dz[room.id] = zones
         return zones
 
+    def path_zones(self, room: Room) -> List[Rect]:
+        """Percorsi da lasciare liberi tra le porte del locale: fasce larghe 80 cm a forma di L. Delle due L
+        possibili si sceglie quella che non corre lungo un muro (lì vanno gli arredi) e, a parità, la più
+        esterna (il centro del locale resta per la zona conversazione o il tavolo)."""
+        if not self.use_paths:
+            return []
+        if room.id in self._paths:
+            return self._paths[room.id]
+        inn = self.inner(room)
+        pts = []
+        for d in self.lay.doors:
+            if room.id not in (d.room_a, d.room_b) or d.kind in ("garage", "gate"):
+                continue
+            if d.orient == "h":
+                pts.append((d.start + d.w / 2, inn.y if room.rect.cy > d.line else inn.y2))
+            else:
+                pts.append((inn.x if room.rect.cx > d.line else inn.x2, d.start + d.w / 2))
+        on_wall = lambda c: min(abs(c[0] - inn.x), abs(c[0] - inn.x2), abs(c[1] - inn.y), abs(c[1] - inn.y2)) < 0.3
+        far = lambda c: (c[0] - inn.cx) ** 2 + (c[1] - inn.cy) ** 2
+        zones, h = [], 0.4
+        for i in range(len(pts)):
+            for j in range(i + 1, len(pts)):
+                (ax, ay), (bx, by) = pts[i], pts[j]
+                corner = max(((ax, by), (bx, ay)), key=lambda c: (not on_wall(c), far(c)))
+                for (x0, y0), (x1, y1) in (((ax, ay), corner), (corner, (bx, by))):
+                    zones.append(Rect(min(x0, x1) - h, min(y0, y1) - h, abs(x1 - x0) + 2 * h, abs(y1 - y0) + 2 * h))
+        self._paths[room.id] = zones
+        return zones
+
     def window_zones(self, room: Room) -> List[Rect]:
         lay, zs = self.lay, []
         t = WALL + 0.4
@@ -564,6 +596,21 @@ class Placer:
             if s not in out: out.append(s)
         return out
 
+    def _side(self, room: Room, o: Opening) -> str:
+        if o.orient == "h":
+            return "N" if room.rect.cy > o.line else "S"
+        return "W" if room.rect.cx > o.line else "E"
+
+    def window_spans(self, room: Room, side: str) -> List[Tuple[float, float]]:
+        """Finestre del locale sul lato `side`, come tratti (inizio, fine) lungo quel muro."""
+        return [(w.start, w.start + w.w) for w in self.lay.windows
+                if w.room_a == room.id and self._side(room, w) == side]
+
+    def door_spans(self, room: Room, side: str) -> List[Tuple[float, float, bool]]:
+        """Porte del locale sul lato `side`: (inizio, fine, è l'ingresso dall'esterno)."""
+        return [(d.start, d.start + d.w, d.room_b is None) for d in self.lay.doors
+                if room.id in (d.room_a, d.room_b) and self._side(room, d) == side]
+
     def door_centers(self, room: Room) -> List[Tuple[float, float]]:
         out = []
         for d in self.lay.doors:
@@ -587,6 +634,9 @@ class Placer:
             return False
         for z in self.door_zones(room):
             if r.overlaps(z, zone_gap):
+                return False
+        for z in self.path_zones(room):
+            if r.overlaps(z):
                 return False
         if avoid_windows:
             for z in self.window_zones(room):
@@ -752,23 +802,28 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
     def attempt(with_tub: bool) -> bool:
         P.clear(room)
         sides = P.sides_far_from_door(room)
+        # WC su una parete laterale (non in faccia a chi apre la porta), lavabo sulla parete che si vede entrando
+        door = next((s for s in "NSEW" if P.door_spans(room, s)), None)
+        side_walls = [s for s in sides if door and s not in (door, OPP[door])]
+        wc_sides = side_walls + [s for s in sides if s not in side_walls] if door else sides
+        sink_sides = ([OPP[door]] + side_walls + [door]) if door else sides
         if shower:
             ok = None
             if with_tub:
                 ok = P.place_wall(room, "bathtub", 1.7, 0.75, sides, order="start", front=0.5)
             if not (ok or _place_shower(P, room)):
                 return False
-        wc = (P.place_wall(room, "toilet", 0.4, 0.7, sides, gap=0.2, front=0.55) or
-              P.place_wall(room, "toilet", 0.4, 0.6, sides, gap=0.15, front=0.4))
+        wc = (P.place_wall(room, "toilet", 0.4, 0.7, wc_sides, gap=0.2, front=0.55) or
+              P.place_wall(room, "toilet", 0.4, 0.6, wc_sides, gap=0.15, front=0.4))
         if not wc:
             return False
         if shower:   # niente bidet nei WC di servizio
             if not P.place_beside(room, "bidet", wc, 0.38, 0.55, gap=0.25, sides=("right",), front=0.5):
                 P.place_beside(room, "bidet", wc, 0.38, 0.55, gap=0.25, sides=("left",), front=0.5)
         double = area >= 7.0 and max(inn.w, inn.h) >= 2.4
-        return bool((double and P.place_wall(room, "sink", 1.2, 0.5, sides, gap=0.1, front=0.5)) or
-                    P.place_wall(room, "sink", 0.6, 0.5, sides, gap=0.1, front=0.45) or
-                    P.place_wall(room, "sink", 0.5, 0.4, sides, gap=0.05, front=0.3))
+        return bool((double and P.place_wall(room, "sink", 1.2, 0.5, sink_sides, gap=0.1, front=0.5)) or
+                    P.place_wall(room, "sink", 0.6, 0.5, sink_sides, gap=0.1, front=0.45) or
+                    P.place_wall(room, "sink", 0.5, 0.4, sink_sides, gap=0.05, front=0.3))
 
     tub_ok = shower and main_bath and area >= 5.5 and max(inn.w, inn.h) >= 1.75
     for with_tub in ((True, False) if tub_ok else (False,)):
@@ -785,6 +840,46 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
     return False
 
 
+# chi siede alla scrivania appoggiata al muro `side` guarda verso quel muro: ha alla sua sinistra questo lato
+LEFT_OF_DESK = {"N": "W", "S": "E", "E": "N", "W": "S"}
+
+
+def desk_sides(P: Placer, room: Room) -> List[str]:
+    """Muri per la scrivania, dal migliore: perpendicolare alla finestra con la luce da sinistra (niente
+    ombra della mano che scrive), poi da destra, poi un muro senza finestre; davanti alla finestra per ultimo
+    (abbaglia e lo schermo fa riflessi)."""
+    wins = P.window_spans(room, "N"), P.window_spans(room, "S"), P.window_spans(room, "E"), P.window_spans(room, "W")
+    has = dict(zip("NSEW", (bool(w) for w in wins)))
+    rank = lambda s: (0 if has[LEFT_OF_DESK[s]] else 1 if has[OPP[LEFT_OF_DESK[s]]] else 2) + (3 if has[s] else 0)
+    return sorted("NSEW", key=rank)
+
+
+def free_wall_sides(P: Placer, room: Room) -> List[str]:
+    """Muri dal più lungo al più corto, contando solo i tratti senza porte né finestre (per l'armadio)."""
+    inn = P.inner(room)
+
+    def free(side):
+        span = inn.w if side in "NS" else inn.h
+        taken = sum(b - a for a, b in P.window_spans(room, side)) + sum(b - a for a, b, _ in P.door_spans(room, side))
+        return span - taken - (span if side in P.open_sides(room) else 0)
+    return sorted("NSEW", key=lambda s: -free(s))
+
+
+def _bed_score(P: Placer, room: Room, bed: Item) -> float:
+    """Il letto come lo vuole un progettista: testiera su un muro pieno, non sotto la finestra (spifferi,
+    luce in faccia) né sulla parete della porta, e non in asse con la porta (chi passa vede il letto)."""
+    head = OPP[bed.facing]
+    span = _along(bed.rect, head)
+    sc = 0.0
+    if _near(span, P.window_spans(room, head), 0.1):
+        sc -= 15     # pesa più di un comodino: in una camera piccola meglio un comodino solo che la finestra sopra
+    if any(_near(span, [(a, b)], 0.6) for a, b, _ in P.door_spans(room, head)):
+        sc -= 6      # testiera accanto alla porta: chi entra sbatte contro il letto
+    if any(_near(span, [(a, b)], -0.3) for a, b, _ in P.door_spans(room, bed.facing)):
+        sc -= 2
+    return sc
+
+
 def furnish_bedroom(P: Placer, room: Room):
     """Camera progettata come farebbe un arredatore: si provano le combinazioni di misura del letto
     e parete d'appoggio, e si tiene quella in cui entrano letto, comodini e armadio con i passaggi.
@@ -797,8 +892,8 @@ def furnish_bedroom(P: Placer, room: Room):
         widths = [1.8, 1.6, 1.4] if (room.master and area >= 14 and short >= 3.3) else [1.6, 1.4]
     else:
         widths = [0.9]
-    wins = P.window_sides(room)
-    desk_sides = wins + [s for s in "NSEW" if s not in wins]
+    desks = desk_sides(P, room)
+    wardrobe_walls = "".join(free_wall_sides(P, room))
     # nella suite la cabina armadio sostituisce l'armadio: basta un mobile più piccolo, se entra
     wardrobe_lengths = (1.2,) if room.suite else (2.4, 1.8, 1.2) if double else (1.2, 1.0)
 
@@ -817,16 +912,17 @@ def furnish_bedroom(P: Placer, room: Room):
         wardrobe = None
         for avoid_w in (True, False):   # meglio non davanti a una finestra, ma un armadio serve
             for wl in wardrobe_lengths:
-                wardrobe = P.place_wall(room, "wardrobe", wl, 0.6, "NSEW", gap=0.05, zone_gap=0.3,
+                wardrobe = P.place_wall(room, "wardrobe", wl, 0.6, wardrobe_walls, gap=0.05, zone_gap=0.3,
                                         front=0.65, avoid_windows=avoid_w)
                 if wardrobe:
                     break
             if wardrobe:
                 break
         if commit and ((not double and area >= 8) or area >= 13):
-            P.place_wall(room, "desk", 1.2 if double else 1.0, 0.55, desk_sides, gap=0.1, zone_gap=0.2, front=0.6)
+            P.place_wall(room, "desk", 1.2 if double else 1.0, 0.55, desks, gap=0.1, zone_gap=0.2, front=0.6)
         return (100 if wardrobe else 0) + 10 * len(stands) + (wardrobe.rect.w * wardrobe.rect.h if wardrobe else 0) \
-            + width * 3 + (2 if avoid else 0) + (1 if side in P.sides_far_from_door(room)[:2] else 0) + foot * 5
+            + width * 3 + (2 if avoid else 0) + (1 if side in P.sides_far_from_door(room)[:2] else 0) + foot * 5 \
+            + _bed_score(P, room, bed)
 
     best, best_args = -1.0, None
     orders = ("center",) if double else ("start", "end")
@@ -892,34 +988,86 @@ def _place_armchair(P: Placer, room: Room):
         chair.facing = ("W" if cx > 0 else "E") if abs(cx) > abs(cy) else ("N" if cy > 0 else "S")
 
 
+def _along(rect: Rect, side: str) -> Tuple[float, float]:
+    """Il tratto occupato da un arredo lungo il muro `side`."""
+    return (rect.x, rect.x2) if side in "NS" else (rect.y, rect.y2)
+
+
+def _near(span: Tuple[float, float], spans, pad: float) -> bool:
+    return any(min(span[1], s[1]) - max(span[0], s[0]) > -pad for s in spans)
+
+
+def _media_score(P: Placer, room: Room, tv: Item, sofa: Item) -> Optional[float]:
+    """Quanto è buona una coppia TV / divano, come la valuterebbe un interior designer (None = da scartare)."""
+    tv_side, sofa_side = OPP[tv.facing], OPP[sofa.facing]
+    horiz = tv_side in "NS"
+    # un tavolo tra TV e divano interrompe la visione: combinazione da scartare
+    lo_x, hi_x = sorted((tv.rect.cx, sofa.rect.cx))
+    lo_y, hi_y = sorted((tv.rect.cy, sofa.rect.cy))
+    for it in P.placed[room.id]:
+        if it.type in ("table", "table_round", "kitchen_peninsula") and \
+                lo_x - 0.3 < it.rect.cx < hi_x + 0.3 and lo_y - 0.3 < it.rect.cy < hi_y + 0.3:
+            return None
+    score = 0.0
+    if _near(_along(tv.rect, tv_side), P.window_spans(room, tv_side), 0.8):
+        score -= 6      # finestra accanto alla TV: controluce
+    if _near(_along(sofa.rect, sofa_side), P.window_spans(room, sofa_side), 0.3):
+        score -= 3      # finestra alle spalle del divano: riflessi sullo schermo
+    if not P.window_spans(room, tv_side) and not P.window_spans(room, sofa_side):
+        score += 2      # luce di lato: la soluzione migliore
+    if any(_near(_along(sofa.rect, sofa_side), [(a, b)], 0.6) for a, b, _ in P.door_spans(room, sofa_side)):
+        score -= 4      # chi entra si trova davanti lo schienale del divano
+    # distanza di visione per una TV da 65" (~2,2-3,2 m dagli occhi allo schermo)
+    depth_tv = tv.rect.h if horiz else tv.rect.w
+    depth_sofa = sofa.rect.h if horiz else sofa.rect.w
+    d = abs(tv.rect.cy - sofa.rect.cy if horiz else tv.rect.cx - sofa.rect.cx) - depth_tv / 2 + depth_sofa / 2 - 0.35
+    score -= 2 * (max(0.0, 2.2 - d) + max(0.0, d - 3.2))
+    # divano in asse con la TV
+    score -= abs(tv.rect.cx - sofa.rect.cx if horiz else tv.rect.cy - sofa.rect.cy)
+    if sofa_side in P.open_sides(room) and room.kind != "living_kitchen":
+        score -= 1      # nell'open space con cucina lo schienale fa da separazione: va bene
+    return score
+
+
 def _place_media(P: Placer, room: Room) -> bool:
+    """Zona TV / divano: si provano tutte le coppie di pareti e misure di divano e si tiene la migliore
+    secondo _media_score (luce, porte, distanza di visione, asse), non la prima che entra."""
     inn = P.inner(room)
-    axes = [("WE", inn.w), ("NS", inn.h)]
-    axes.sort(key=lambda a: -a[1])
-    # passata 1: entrambi su muri pieni; passata 2: il divano può dare le spalle a una zona aperta
-    for allow_open_sofa in (False, True):
-        for pair, span in axes:
-            if span < 3.0:
-                continue
-            for tv_side, sofa_side in ((pair[0], pair[1]), (pair[1], pair[0])):
-                for avoid in (True, False):
-                    tv = P.place_wall(room, "tv", 1.6, 0.25, [tv_side], gap=0.05,
-                                      avoid_windows=avoid, zone_gap=0.2)
-                    if not tv:
+    best = None
+    for pair, span in (("WE", inn.w), ("NS", inn.h)):
+        if span < 3.0:
+            continue
+        for tv_side, sofa_side in ((pair[0], pair[1]), (pair[1], pair[0])):
+            for avoid in (True, False):
+                tv = P.place_wall(room, "tv", 1.6, 0.25, [tv_side], gap=0.05, avoid_windows=avoid, zone_gap=0.2)
+                if not tv:
+                    continue
+                target = tv.rect.cx if tv_side in "NS" else tv.rect.cy
+                # il divano può dare le spalle a una zona aperta (sul soggiorno con cucina fa da separazione)
+                for allow_open in (False, True):
+                    if allow_open and sofa_side not in P.open_sides(room):
                         continue
-                    horiz = tv_side in "NS"
-                    target = tv.rect.cx if horiz else tv.rect.cy
                     for typ, along, depth in _sofa_options(P, room):
-                        # distanza di visione: almeno ~2 m tra TV e divano
-                        if span - depth - 0.25 < 2.0:
+                        if span - depth - 0.25 < 2.0:   # distanza di visione minima
                             continue
                         sofa = P.place_wall(room, typ, along, depth, [sofa_side], target=target,
-                                            gap=0.3, zone_gap=0.3, allow_open=allow_open_sofa)
-                        if sofa:
-                            _place_lounge(P, room, sofa)
-                            return True
-                    P.remove(tv)
-    return False
+                                            gap=0.3, zone_gap=0.3, allow_open=allow_open)
+                        if not sofa:
+                            continue
+                        sc = _media_score(P, room, tv, sofa)
+                        P.remove(sofa)
+                        if sc is not None:
+                            sc += along * 0.6 + (1.5 if typ == "sofa_corner" else 0.0)   # più posti, meglio
+                            if best is None or sc > best[0] + 1e-9:
+                                best = (sc, tv, sofa)
+                        break   # per questa coppia di pareti basta il divano più grande che entra
+                P.remove(tv)
+    if best is None:
+        return False
+    _, tv, sofa = best
+    P.placed[room.id].extend([tv, sofa])
+    _place_lounge(P, room, sofa)
+    return True
 
 
 def _place_media_free(P: Placer, room: Room) -> bool:
@@ -945,6 +1093,49 @@ def _place_media_free(P: Placer, room: Room) -> bool:
     return False
 
 
+def counter_layout(length: float) -> Tuple[float, float]:
+    """Centro del piano cottura e del lavello lungo il piano di lavoro, dal suo inizio (come lo disegna
+    il frontend: frigo in testa se il piano è lungo almeno 3 m, fuochi verso il frigo, lavello al 58%)."""
+    f0 = 0.62 if length >= 3 else 0.0
+    usable = length - f0
+    hob = f0 + usable * (0.3 if f0 else 0.18) + 0.3
+    sink = f0 + usable * 0.58 + min(usable * 0.3, 0.8) / 2
+    return hob, sink
+
+
+def _orient_counter(P: Placer, room: Room, counter: Item) -> None:
+    """Fuochi e lavello sul piano di lavoro come li metterebbe un progettista: lavello sotto la finestra,
+    fuochi ad almeno 90 cm dal lavello e mai sotto il vetro (il frigo resta in testa al piano). Le posizioni
+    vanno in counter.parts, nel riferimento del disegno; senza finestra sul muro restano quelle standard."""
+    side = OPP[counter.facing]
+    wins = P.window_spans(room, side)
+    if not wins:
+        return
+    start, end = _along(counter.rect, side)
+    length = end - start
+    f0 = 0.62 if length >= 3 else 0.0
+    lo, hi = f0 + 0.35, length - 0.35
+    rightward = counter.facing in "SW"   # verso in cui cresce la x del disegno, lungo il muro
+    best = None
+    for flip in (False, True):
+        local = lambda world: (world - start) if rightward != flip else (end - world)
+        spans = [tuple(sorted((local(a), local(b)))) for a, b in wins]
+        under = lambda v: any(a - 0.35 < v < b + 0.35 for a, b in spans)
+        wc = min(((a + b) / 2 for a, b in spans), key=lambda c: abs(c - length / 2))
+        sink = min(max(wc, lo + 0.05), hi - 0.05)
+        hobs = [lo + i * 0.05 for i in range(int((hi - lo) / 0.05) + 1)]
+        hobs = [h for h in hobs if abs(h - sink) >= (0.9 if length >= 2.4 else 0.6) and not under(h)]
+        if not hobs:
+            continue
+        hob = min(hobs, key=lambda h: abs(abs(h - sink) - 1.2))   # ~1,2 m tra lavello e fuochi
+        sc = -abs(sink - wc) - 0.2 * abs(abs(hob - sink) - 1.2)
+        if best is None or sc > best[0]:
+            best = (sc, flip, hob, sink)
+    if best:
+        _, counter.flip, hob, sink = best
+        counter.parts = {"hob": round(hob, 3), "sink": round(sink, 3)}
+
+
 def _place_counter(P: Placer, room: Room, prefer: List[str], lengths=(3.6, 3.0, 2.4, 1.8, 1.2)) -> Optional[Item]:
     inn = P.inner(room)
     # davanti al piano servono ~1 m per lavorare e aprire i cassetti; negli spazi minimi si accetta meno
@@ -957,6 +1148,7 @@ def _place_counter(P: Placer, room: Room, prefer: List[str], lengths=(3.6, 3.0, 
                 it = P.place_wall(room, "kitchen_counter", length, 0.6, [side], order="start",
                                   gap=0.1, zone_gap=0.1, front=front)
                 if it:
+                    _orient_counter(P, room, it)
                     return it
     return None
 
@@ -1012,6 +1204,23 @@ def furnish_kitchen(P: Placer, room: Room):
                 break
 
 
+def _view_zone(P: Placer, room: Room) -> Optional[Item]:
+    """Fascia tra TV e divano (dove si guarda): finché c'è, gli altri arredi non ci finiscono dentro."""
+    tv = next((it for it in P.placed[room.id] if it.type == "tv"), None)
+    sofa = next((it for it in P.placed[room.id] if it.type in ("sofa", "sofa_corner")), None)
+    if not tv or not sofa:
+        return None
+    x0, x1 = min(tv.rect.x, sofa.rect.x), max(tv.rect.x2, sofa.rect.x2)
+    y0, y1 = min(tv.rect.y, sofa.rect.y), max(tv.rect.y2, sofa.rect.y2)
+    if tv.facing in "NS":
+        x0, x1 = sofa.rect.x, sofa.rect.x2
+    else:
+        y0, y1 = sofa.rect.y, sofa.rect.y2
+    zone = Item("view", Rect(x0, y0, x1 - x0, y1 - y0), room.id, 0.0)
+    P.placed[room.id].append(zone)
+    return zone
+
+
 def _place_dining(P: Placer, room: Room, near=None) -> bool:
     """Tavolo da pranzo: tondo negli spazi raccolti o quasi quadrati, rettangolare in quelli lunghi."""
     inn = P.inner(room)
@@ -1020,7 +1229,11 @@ def _place_dining(P: Placer, room: Room, near=None) -> bool:
     opts = [("table_round", 1.1, 1.1), ("table", 1.6, 0.9), ("table", 1.2, 0.8), ("table_round", 0.9, 0.9)]
     if not square:
         opts = [opts[1], opts[0], opts[2], opts[3]]
-    return any(P.place_free(room, typ, w, h, near=near, gap=0.85, zone_gap=0.3) for typ, w, h in opts)
+    zone = _view_zone(P, room)
+    ok = any(P.place_free(room, typ, w, h, near=near, gap=0.85, zone_gap=0.3) for typ, w, h in opts)
+    if zone:
+        P.remove(zone)
+    return ok
 
 
 def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
@@ -1079,9 +1292,7 @@ def furnish_sleep_zone(P: Placer, room: Room):
 
 
 def furnish_study(P: Placer, room: Room):
-    wins = P.window_sides(room)
-    sides = wins + [s for s in "NSEW" if s not in wins]
-    P.place_wall(room, "desk", 1.4, 0.7, sides, gap=0.4, zone_gap=0.3)
+    P.place_wall(room, "desk", 1.4, 0.7, desk_sides(P, room), gap=0.4, zone_gap=0.3)
 
 
 def furnish_meeting(P: Placer, room: Room):
@@ -1163,6 +1374,9 @@ def furnish_service(P: Placer, room: Room):
         P.place_wall(room, "console", 1.0, 0.35, "NSEW", gap=0.05, zone_gap=0.3, front=0.9)
 
 
+PATH_KINDS = ("living", "living_kitchen", "zone_day", "dining", "kitchen", "bed", "study")
+
+
 def furnish(lay: Layout):
     P = Placer(lay)
     for r in lay.rooms:                     # prima i bagni (possono invertire il verso porta)
@@ -1171,7 +1385,7 @@ def furnish(lay: Layout):
                 furnish_hotel_bath(P, r)
             else:
                 furnish_bath(P, r, shower=(r.kind == "bath"))
-    for r in lay.rooms:
+    def furnish_room(r: Room):
         k = r.kind
         if k == "bed":              furnish_bedroom(P, r)
         elif k == "hotel_room":     furnish_hotel_room(P, r)
@@ -1192,6 +1406,21 @@ def furnish(lay: Layout):
         elif k == "laundry":        furnish_laundry(P, r)
         elif k == "garage" and r.name: furnish_garage(P, r)   # i pezzi di box attorno alla scala restano liberi
         elif k == "garden":         furnish_garden(P, r)
+
+    for r in lay.rooms:
+        # nei locali di passaggio si prova prima lasciando liberi i percorsi tra le porte; se così manca
+        # qualcosa di essenziale si arreda di nuovo senza (e il percorso resta stretto)
+        doors = sum(1 for d in lay.doors if r.id in (d.room_a, d.room_b) and d.kind not in ("garage", "gate"))
+        if r.kind in PATH_KINDS and doors >= 2:
+            before = len(lay.notes)
+            P.use_paths = True
+            furnish_room(r)
+            P.use_paths = False
+            if len(lay.notes) == before:
+                continue
+            del lay.notes[before:]
+            P.clear(r)
+        furnish_room(r)
     for plist in P.placed.values():
         lay.items.extend(plist)
 
@@ -2357,6 +2586,79 @@ def _reachable(g: Dict[int, set], start: int, blocked: set) -> set:
     return seen
 
 
+def interior_review(lay: Layout) -> Tuple[float, List[str], List[str]]:
+    """Arredo valutato come farebbe un interior designer (penalità, punti di forza, criticità): TV e luce,
+    divano e porte, letto, WC, fuochi e lavello, scrivania, passaggi tra le porte."""
+    P = Placer(lay)
+    P.use_paths = True
+    pen, good, bad = 0.0, [], []
+    by_room: Dict[int, List[Item]] = {}
+    for it in lay.items:
+        by_room.setdefault(it.room_id, []).append(it)
+    tv_ok = sink_ok = paths_ok = True
+    seen_tv = seen_sink = seen_paths = False
+    for room in lay.rooms:
+        its = by_room.get(room.id, [])
+        first = lambda *t: next((i for i in its if i.type in t), None)
+        tv, sofa = first("tv"), first("sofa", "sofa_corner")
+        if tv:
+            seen_tv = True
+            side = OPP[tv.facing]
+            if _near(_along(tv.rect, side), P.window_spans(room, side), 0.8):
+                pen += 4
+                tv_ok = False
+                bad.append(f"{room.name}: la TV ha una finestra accanto, controluce")
+            elif sofa and _near(_along(sofa.rect, OPP[sofa.facing]), P.window_spans(room, OPP[sofa.facing]), 0.3):
+                pen += 1
+                tv_ok = False
+        if sofa and tv:
+            back = OPP[sofa.facing]
+            if any(_near(_along(sofa.rect, back), [(a, b)], 0.6) for a, b, _ in P.door_spans(room, back)):
+                pen += 3
+                bad.append(f"{room.name}: il divano dà le spalle alla porta")
+        for bed in (i for i in its if i.type == "bed"):
+            head = OPP[bed.facing]
+            if _near(_along(bed.rect, head), P.window_spans(room, head), 0.1):
+                pen += 2
+                bad.append(f"{room.name}: testiera del letto sotto la finestra")
+            elif any(_near(_along(bed.rect, head), [(a, b)], 0.6) for a, b, _ in P.door_spans(room, head)):
+                pen += 1
+                bad.append(f"{room.name}: testiera del letto accanto alla porta")
+        for wc in (i for i in its if i.type == "toilet"):
+            if any(_near(_along(wc.rect, wc.facing), [(a, b)], 0.5) for a, b, _ in P.door_spans(room, wc.facing)):
+                pen += 2
+                bad.append(f"{room.name}: il WC è di fronte alla porta")
+        for c in (i for i in its if i.type == "kitchen_counter"):
+            side = OPP[c.facing]
+            wins = P.window_spans(room, side)
+            if not wins:
+                continue
+            seen_sink = True
+            start, end = _along(c.rect, side)
+            length = end - start
+            hob, sink = (c.parts["hob"], c.parts["sink"]) if c.parts else counter_layout(length)
+            at = lambda v: start + (v if (c.facing in "SW") != c.flip else length - v)
+            if _near((at(hob) - 0.35, at(hob) + 0.35), wins, 0.0):
+                pen += 4
+                sink_ok = False
+                bad.append(f"{room.name}: piano cottura sotto la finestra")
+            elif not _near((at(sink) - 0.3, at(sink) + 0.3), wins, 0.0):
+                sink_ok = False
+        if sum(1 for d in lay.doors if room.id in (d.room_a, d.room_b)) >= 2 and room.kind in PATH_KINDS:
+            seen_paths = True
+            if any(i.rect.overlaps(z) for z in P.path_zones(room) for i in its):
+                pen += 2
+                paths_ok = False
+                bad.append(f"{room.name}: arredi sul passaggio tra le porte")
+    if seen_tv and tv_ok:
+        good.append("Zona TV con la luce di lato: niente controluce né riflessi")
+    if seen_sink and sink_ok:
+        good.append("Lavello sotto la finestra, fuochi lontani dal vetro")
+    if seen_paths and paths_ok:
+        good.append("Passaggi liberi tra le porte, nessun arredo d'intralcio")
+    return pen, good, bad
+
+
 def design_review(lay: Layout, issues: List[str], wants: dict, furnished: bool = True) -> dict:
     """Punteggio 0-100 della variante con punti di forza e cose da migliorare.
 
@@ -2468,6 +2770,13 @@ def design_review(lay: Layout, issues: List[str], wants: dict, furnished: bool =
         if r.kind == "living_kitchen" and not {"table", "table_round", "kitchen_peninsula"} & set(t):
             score -= 3
             bad.append(f"{r.name}: manca lo spazio per il tavolo da pranzo")
+
+    # 7b) arredo da interior designer: luce, porte, percorsi (solo a pianta arredata)
+    if furnished:
+        pen, igood, ibad = interior_review(lay)
+        score -= pen
+        good.extend(igood)
+        bad.extend(ibad[:3])
 
     # 8) bisogni richiesti
     suites = [r for r in rooms if r.suite]
@@ -2859,7 +3168,8 @@ def serialize(lay: Layout, palette: dict, seed: int) -> dict:
         "windows": [_export_opening(lay, w, False) for w in lay.windows],
         "furniture": [{"type": i.type, "x": round(i.rect.x, 3), "y": round(i.rect.y, 3),
                        "w": round(i.rect.w, 3), "h": round(i.rect.h, 3), "rot": 0.0,
-                       "facing": i.facing, "room": i.room_id, "flip": i.flip} for i in lay.items],
+                       "facing": i.facing, "room": i.room_id, "flip": i.flip,
+                       **({"parts": i.parts} if i.parts else {})} for i in lay.items],
         "stairs": export_stairs(lay),
         "notes": lay.notes,
     }
