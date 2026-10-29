@@ -39,10 +39,13 @@ except ImportError:  # pragma: no cover - ezdxf è nei requisiti
 WALL_RE = re.compile(r"mur|wall|paret|pared|tramez|tampon|struttur|pilastr|sett[io]|a-wal|cls|calcestr|lateriz|tabique", re.I)
 DOOR_RE = re.compile(r"port[ae]|door|a-door|anta|uscio|puert", re.I)
 WINDOW_RE = re.compile(r"finestr|window|serram|infiss|glaz|vetr|a-win|^fin[_ -]|^f\d|ventan|cristal", re.I)
+# fuori pianta in ogni caso (prospetti, sezioni, tetto, cartiglio): prevalgono anche su «porta» e «finestra»
+HARD_IGNORE_RE = re.compile(r"elev|prospett|seccion|section|sezion|detail|detall|dettagl|tetto|techo|roof|cubiert|"
+                            r"cartigl|title|sheet|marco|tarjeta|cajet|viewport|defpoints", re.I)
+# da ignorare, ma una porta o una finestra con questi nomi resta tale (es. «VENTANA DE ESCALERA»)
 IGNORE_RE = re.compile(r"quot|dim|arred|furn|mobil|muebl|campit|hatch|hacth|tratteg|text|test[io]|scritt|assi|axis|grid|griglia|"
-                       r"sanit|eletti?r|electr|idraul|impiant|cartigl|title|viewport|defpoints|esterno|giardin|vegetaz|ombr|"
-                       r"tetto|techo|roof|cubiert|trav[ei]|viga|beam|npt|sheet|marco|tarjeta|cajet|meset|bancon|"
-                       r"elev|prospett|seccion|section|sezion|detail|detall|dettagl|textur|tierra|terreno|matas|plant|"
+                       r"sanit|eletti?r|electr|idraul|impiant|esterno|giardin|vegetaz|ombr|"
+                       r"trav[ei]|viga|beam|npt|meset|bancon|textur|tierra|terreno|matas|plant|"
                        r"agua|varill|baj[oa]|parapet|vuelo|cascaron|perrill|piso\b|pisos|escaler|scal[ae]\b|stair|ringhier|"
                        r"barand|varanda|column|pilar|tuber|pipe|duct|hvac", re.I)
 
@@ -84,8 +87,8 @@ def _plain(s: str) -> str:
 # 1-2. lettura e ruoli
 # ----------------------------------------------------------------------------
 def _role(layer: str, block: str) -> str:
-    # prima ciò che non è pianta (prospetti, tetto, impianti, arredi…), poi porte, finestre, muri
-    if IGNORE_RE.search(layer or ""):
+    # prima ciò che non è pianta (prospetti, sezioni, tetto…), poi porte e finestre, poi il resto da ignorare, poi i muri
+    if HARD_IGNORE_RE.search(layer or ""):
         return "ignore"
     for name in (block or "", layer or ""):
         if not name:
@@ -94,7 +97,7 @@ def _role(layer: str, block: str) -> str:
             return "door"
         if WINDOW_RE.search(name):
             return "window"
-    if IGNORE_RE.search(block or ""):
+    if IGNORE_RE.search(layer or "") or IGNORE_RE.search(block or "") or HARD_IGNORE_RE.search(block or ""):
         return "ignore"
     if WALL_RE.search(layer or ""):
         return "wall"
@@ -301,6 +304,39 @@ def _split_infill(pieces):
             else:
                 walls.append(p)
     return walls, hints
+
+
+def _cut_windows(walls: Dict[float, list], glass):
+    """Finestre disegnate dentro un muro continuo (il vano chiuso da linee sul layer dei muri, il vetro su un
+    layer di finestre): dove le linee del vetro corrono dentro lo spessore del muro, il muro si apre."""
+    for c, ivs in walls.items():
+        spans = []
+        for gc, a, b in glass:
+            for lo, hi, t in ivs:
+                if abs(gc - c) <= t / 2 + 0.03 and min(b, hi) - max(a, lo) >= 0.3:
+                    spans.append([max(a, lo), min(b, hi)])
+        if not spans:
+            continue
+        spans.sort()
+        merged = [spans[0]]
+        for a, b in spans[1:]:
+            if a <= merged[-1][1] + 0.05:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        out = []
+        for lo, hi, t in ivs:
+            cur = lo
+            for a, b in merged:
+                if b <= cur or a >= hi or b - a < OPEN_MIN:
+                    continue
+                if a - cur > 0.02:
+                    out.append([cur, a, t])
+                cur = max(cur, b)
+            if hi - cur > 0.02:
+                out.append([cur, hi, t])
+        walls[c] = out
+    return walls
 
 
 def _merge(pieces):
@@ -606,6 +642,8 @@ def import_real_dxf(text: str, Layout, Opening, snap):
         segs = [sg for sg in segs if inside(sg[0], sg[1]) or inside(sg[2], sg[3])]
         others = [g for g in groups[1:] if g["names"] >= 2 or g["pieces"] >= groups[0]["pieces"] * 0.4]
     hwalls, vwalls = _merge(hp), _merge(vp)     # asse → tratti [inizio, fine, spessore]
+    whs, wvs, _ = _axis_segments([sg for sg in segs if sg[4] == "window"], k, {"window"})
+    hwalls, vwalls = _cut_windows(hwalls, whs), _cut_windows(vwalls, wvs)
 
     # linee lunghe sul layer dei muri rimaste senza coppia (muri a linea singola, recinzioni, l'altra faccia
     # su un layer di travi…): non diventano muri della pianta, ma separano i locali dall'esterno
