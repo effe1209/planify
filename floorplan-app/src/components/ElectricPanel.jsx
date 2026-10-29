@@ -78,7 +78,7 @@ export default function ElectricPanel({ config, data, floorId, sheet, onStart, o
             </tbody>
           </table>
 
-          <details className="pf-bom" open>
+          <details className="pf-bom">
             <summary>Quadro: circuiti del piano ({fl.circuits.filter((c) => c.key !== 'S').length} di potenza, minimo {fl.minCircuits})</summary>
             <table>
               <thead><tr><th>Circuito</th><th>Protezione e cavo</th><th>Punti</th></tr></thead>

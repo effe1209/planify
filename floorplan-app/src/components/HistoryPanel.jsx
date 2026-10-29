@@ -1,4 +1,4 @@
-import { Star, Trash2, X } from 'lucide-react';
+import { Star, Trash2 } from 'lucide-react';
 import { SHAPE_NAME, TYPE_NAME } from '../constants';
 import { fmtM } from '../lib/utils';
 import PlanSvg from './PlanSvg';
@@ -28,15 +28,15 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
             <span>{entryTitle(e)}</span>
           </button>
           <div className="pf-thumb-actions">
-            <button type="button" className={`pf-btn-icon ${e.saved ? 'is-starred' : ''}`}
+            <button type="button" className="pf-thumb-btn is-delete" onClick={() => onRemove(e.id)}
+              title="Elimina dalla cronologia" aria-label="Elimina dalla cronologia">
+              <Trash2 size={13} strokeWidth={2.2} />
+            </button>
+            <button type="button" className={`pf-thumb-btn is-star ${e.saved ? 'is-on' : ''}`}
               onClick={() => onToggleSaved(e.id)}
               title={e.saved ? 'Togli dalle salvate' : 'Salva: non verrà cancellata'}
               aria-label={e.saved ? 'Togli dalle salvate' : 'Salva planimetria'} aria-pressed={e.saved}>
-              <Star size={12} fill={e.saved ? 'currentColor' : 'none'} />
-            </button>
-            <button type="button" className="pf-btn-icon is-danger" onClick={() => onRemove(e.id)}
-              title="Elimina dalla cronologia" aria-label="Elimina dalla cronologia">
-              <X size={12} />
+              <Star size={13} strokeWidth={2.2} fill={e.saved ? 'currentColor' : 'none'} />
             </button>
           </div>
         </div>
@@ -56,8 +56,8 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
         <>
           <div className="pf-history-head">
             <h2>Cronologia</h2>
-            <button type="button" className="pf-link" onClick={onClear}>
-              <Trash2 size={13} /> Svuota
+            <button type="button" className="pf-clear-btn" onClick={onClear} title="Elimina le planimetrie non salvate">
+              <Trash2 size={13} strokeWidth={2.2} /> Svuota
             </button>
           </div>
           {grid(recent)}
