@@ -11,6 +11,7 @@ import './apple.css';
 import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME } from './constants';
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
+import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
@@ -815,12 +816,44 @@ export default function App() {
     }
   };
 
+  /*
+   * Import PDF: quelli esportati da un CAD li legge il motore come un DXF; le scansioni (o il motore senza la
+   * lettura PDF) si aprono nello schizzo con la pagina come sfondo da ricalcare.
+   */
+  const importPdf = async (file) => {
+    const name = file.name.replace(/\.pdf$/i, '');
+    if (base && engineHas('pdf_import')) {
+      say('Lettura del PDF in corso…');
+      try {
+        const data = await readJson(await postJson(base, '/import-pdf', { pdf_base64: await fileToBase64(file), style: form.style }));
+        openNewPlan(data, { type: 'pdf' }, { name });
+        say('Pianta PDF importata e arredata');
+        return;
+      } catch (err) {
+        if (!/HTTP 422/.test(err.message)) setError(`Il PDF non si legge come disegno CAD (${err.message}): puoi ricalcarlo.`);
+      }
+    }
+    try {
+      const background = await pdfPageImage(file);
+      setSketch({ shapes: [], background: { ...background, name } });
+      say(background.scaleFound
+        ? `PDF senza linee di disegno: ricalca le stanze sopra la pianta (scala 1:${background.scale} letta sul foglio)`
+        : 'PDF senza linee di disegno: ricalca le stanze sopra la pianta, dopo aver controllato la scala');
+    } catch (err) {
+      setError(`Non riesco ad aprire il PDF: ${err.message}`);
+    }
+  };
+
   /* ── Import DXF: prima il motore, poi il parser locale ── */
   const handleDxfFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setError(null);
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      await importPdf(file);
+      return;
+    }
     say('Importazione DXF in corso…');
     try {
       const text = await file.text();
@@ -974,7 +1007,7 @@ export default function App() {
 
   return (
     <div className="pf-app" data-theme={theme}>
-      <input type="file" accept=".dxf" ref={dxfInputRef} onChange={handleDxfFile} hidden />
+      <input type="file" accept=".dxf,.pdf,application/pdf" ref={dxfInputRef} onChange={handleDxfFile} hidden />
 
       <header className="pf-top">
         <div className="pf-brand">
@@ -1263,7 +1296,7 @@ export default function App() {
             <div className="pf-group" role="group" aria-label="Disegno e import">
               <button type="button" className="pf-tool pf-tool-accent" onClick={() => dxfInputRef.current?.click()}
                 title="Carica una pianta dal CAD: muri, porte, finestre e locali vengono ricostruiti dal disegno">
-                <Upload size={15} /> Importa DXF
+                <Upload size={15} /> Importa DXF o PDF
               </button>
               <button type="button" className={`pf-tool ${sketch ? 'is-on' : ''}`}
                 onClick={() => setSketch(sketch ? null : { shapes: [] })}>
@@ -1318,7 +1351,7 @@ export default function App() {
 
           <div className="pf-canvas" ref={stageRef}>
             {sketch ? (
-              <SketchBoard initialShapes={sketch.shapes}
+              <SketchBoard initialShapes={sketch.shapes} background={sketch.background}
                 onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
                 onGenerate={generateFromSketch} />
             ) : plan && view3d ? (
@@ -1361,7 +1394,7 @@ export default function App() {
                     <path d="M92 130a14 14 0 0 1 14-14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 3" />
                   </svg>
                   <h3>Inizia a progettare</h3>
-                  <p>Scegli le misure e clicca <b>«Genera planimetria»</b>, oppure <b>«Importa DXF»</b> da un disegno CAD o <b>«Disegna schizzo»</b>.</p>
+                  <p>Scegli le misure e clicca <b>«Genera planimetria»</b>, oppure <b>«Importa DXF o PDF»</b> da un disegno CAD o <b>«Disegna schizzo»</b>.</p>
                   {!backendUrl && (
                     <button type="button" className="pf-link" onClick={() => setConnOpen(true)}>Configura backend</button>
                   )}

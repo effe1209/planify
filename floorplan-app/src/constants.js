@@ -29,6 +29,7 @@ export const TYPE_NAME = {
   garden: 'Giardino',
   sketch: 'Schizzo',
   dxf: 'Import DXF',
+  pdf: 'Import PDF',
 };
 
 export const STYLES = [
