@@ -21,6 +21,7 @@ import HouseOptions from './components/HouseOptions';
 import HistoryPanel from './components/HistoryPanel';
 import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
+import CompliancePanel from './components/CompliancePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloorBar from './components/FloorBar';
 import FloorsOverview from './components/FloorsOverview';
@@ -1684,6 +1685,7 @@ export default function App() {
               )}
 
               <DesignReport design={plan.design} />
+              <CompliancePanel plan={plan} type={floor.meta?.type} onSelectRoom={setSelectedId} />
 
               {floor.meta?.type === 'apartment' && floor.params?.doubles != null && (
                 <FilterCheck plan={plan} params={floor.params} />

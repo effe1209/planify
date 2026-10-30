@@ -2541,7 +2541,7 @@ def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
         if bw * (L - bh - nd) < need:
             nd = 0.0
         if bw * (L - bh) < need:
-            bw = snap(min(W * 0.45, need / (L - bh) + 0.024))
+            bw = snap(min(W * 0.5, need / (L - bh) + 0.024))
     lay.shape = "l" if nd > 0 else "rect"
     if shape not in ("auto", "rect") and nd == 0:
         lay.notes.append("Con queste misure non è possibile una sagoma irregolare: pianta rettangolare.")
