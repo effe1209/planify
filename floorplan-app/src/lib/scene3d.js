@@ -36,8 +36,10 @@ const WOOD_FLOORS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study
 const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 
 import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
+import { stairSteps } from './stairs3d';
+import { projectStairs } from './stairs';
 
-export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
+export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null } = {}) {
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
@@ -174,6 +176,19 @@ export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
     if (!o.isMesh || o.userData.layer) return;
     o.userData.layer = o.material === M.wall ? 'MURI' : o.material === M.glass ? 'VETRI' : 'ARREDI';
   });
+  // scale: i gradini salgono al piano di sopra (altezza = solaio compreso)
+  const flights = stairs ?? (plan.stairs || []).filter((st) => st.entry);
+  const stepMat = new THREE.MeshStandardMaterial({ color: theme.wood || '#cdb89a', roughness: 0.7 });
+  for (const st of flights) {
+    for (const b of stairSteps(st, WALL_H + SLAB_T)) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(b.x1 - b.x0, b.top, b.z1 - b.z0), stepMat);
+      m.position.set((b.x0 + b.x1) / 2, b.top / 2, (b.z0 + b.z1) / 2);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.userData.layer = 'SCALE';
+      root.add(m);
+    }
+  }
   return root;
 }
 
@@ -197,8 +212,11 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   const lowest = floors[0].level;
   const quota = (level) => level * (FLOOR_H + spread);
   const slabMat = new THREE.MeshStandardMaterial({ color: '#d9d6cf', roughness: 0.9 });
+  const byFloor = projectStairs(project).byFloor;
   for (const f of floors) {
-    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls });
+    // le scale partono dal piano e salgono al successivo: sul piano di sopra non si disegnano
+    const up = (byFloor[f.id] || []).filter((st) => st.engine ? st.upTo : st.role === 'up');
+    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up });
     const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
@@ -209,6 +227,14 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
       if (r.kind === 'stairs' || r.kind === 'garden') continue;
       const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
       const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
+      // il vano della scala che sale dal piano sotto resta aperto
+      for (const st of (byFloor[f.id] || []).filter((q) => !q.engine && q.role === 'down')) {
+        if (st.x >= r.x && st.x + st.w <= r.x + r.w && st.y >= r.y && st.y + st.h <= r.y + r.h) {
+          const hole = new THREE.Path();
+          [[st.x, st.y], [st.x, st.y + st.h], [st.x + st.w, st.y + st.h], [st.x + st.w, st.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
+          shape.holes.push(hole);
+        }
+      }
       const slab = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: SLAB_T, bevelEnabled: false }), slabMat);
       slab.rotation.x = -Math.PI / 2;
       slab.position.y = y - SLAB_T;
