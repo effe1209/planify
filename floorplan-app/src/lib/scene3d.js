@@ -39,7 +39,7 @@ import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
 import { stairSteps } from './stairs3d';
 import { projectStairs } from './stairs';
 
-export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null } = {}) {
+export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [] } = {}) {
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
@@ -67,6 +67,14 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
     // la forma si costruisce con y rovesciata: ruotata di -90° sull'asse x torna in (x, z = y) con la faccia in alto
     const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, -y)));
+    // aperture dei solai (scale che salgono da sotto): il pavimento del piano non le copre
+    for (const v of voids) {
+      if (v.x >= r.x - 0.01 && v.x + v.w <= r.x + r.w + 0.01 && v.y >= r.y - 0.01 && v.y + v.h <= r.y + r.h + 0.01) {
+        const hole = new THREE.Path();
+        [[v.x, v.y], [v.x, v.y + v.h], [v.x + v.w, v.y + v.h], [v.x + v.w, v.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
+        shape.holes.push(hole);
+      }
+    }
     const color = r.kind === 'garden' ? '#b9d6a8' : r.kind === 'garage' ? '#c9ccd1'
       : WOOD_FLOORS.has(r.kind) ? theme.wood : TILE_FLOORS.has(r.kind) ? '#e8ecf0' : r.color || '#f5f5f5';
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat(color));
@@ -216,7 +224,8 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   for (const f of floors) {
     // le scale partono dal piano e salgono al successivo: sul piano di sopra non si disegnano
     const up = (byFloor[f.id] || []).filter((st) => st.engine ? st.upTo : st.role === 'up');
-    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up });
+    const voids = f.level === lowest ? [] : (byFloor[f.id] || []).filter((st) => (st.engine ? st.downTo : st.role === 'down'));
+    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids });
     const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
