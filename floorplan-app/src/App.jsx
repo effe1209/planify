@@ -170,6 +170,9 @@ export default function App() {
 
   const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true, technical: false });
   const [zoom, setZoom] = useState(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });   // spostamento della pianta con la manina
+  const [panning, setPanning] = useState(false);
+  const panOn = useRef(false);
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [flash, setFlash] = useState('');
@@ -179,6 +182,8 @@ export default function App() {
   const svgRef = useRef(null);
   const stageRef = useRef(null);
   const dxfInputRef = useRef(null);
+  const [importing, setImporting] = useState(null);   // messaggio mentre si legge un file importato
+  const [dropping, setDropping] = useState(false);     // un file è sopra la finestra
   const exportRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
   // il menu «Esporta» si chiude cliccando altrove o con Esc
@@ -219,18 +224,75 @@ export default function App() {
     const el = stageRef.current;
     if (!el) return undefined;
     const onWheel = (e) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
+      if (!(e.ctrlKey || e.metaKey)) {
+        // senza Ctrl la rotella (o il trackpad a due dita) sposta la pianta
+        if (!panOn.current) return;
+        e.preventDefault();
+        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+        return;
+      }
       e.preventDefault();
       setZoom((z) => clamp((z ?? fitRef.current) * (e.deltaY < 0 ? 1.1 : 1 / 1.1), 0.2, 3));
     };
+    // manina: trascina con il tasto sinistro sullo sfondo, oppure con il destro/centrale ovunque
+    let drag = null;
+    let moved = false;
+    const onDown = (e) => {
+      if (!panOn.current || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
+      if (e.button === 0) {
+        // il tasto sinistro sposta solo se non si sta afferrando un arredo, un dispositivo o un campo
+        const t = e.target;
+        if (t.closest?.('button, input, select, textarea, a')) return;
+        if (t instanceof Element && window.getComputedStyle(t).cursor === 'grab') return;
+      }
+      drag = { x: e.clientX, y: e.clientY, btn: e.button };
+      moved = false;
+      if (e.button !== 0) e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      if (!moved) { moved = true; setPanning(true); }
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+      setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+    };
+    const onUp = () => {
+      if (!drag) return;
+      drag = null;
+      setPanning(false);
+    };
+    const onClickCapture = (e) => {   // dopo un trascinamento il rilascio non seleziona nulla
+      if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; }
+    };
+    const onContext = (e) => { if (panOn.current) e.preventDefault(); };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('click', onClickCapture, true);
+    el.addEventListener('contextmenu', onContext);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('click', onClickCapture, true);
+      el.removeEventListener('contextmenu', onContext);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
   }, []);
 
   const box = useMemo(() => (plan ? sheetBox(plan, false) : null), [plan]);
   const fit = box && stage.w ? clamp(Math.min((stage.w - 40) / box.w, (stage.h - 40) / box.h), 0.2, 1.6) : 1;
   useEffect(() => { fitRef.current = fit; }, [fit]);
   const z = zoom ?? fit;
+  panOn.current = !!plan && !sketch && !view3d && !(globalView && current?.floors.length > 1);
+  const resetView = () => { setZoom(null); setPan({ x: 0, y: 0 }); };
+  useEffect(() => { setPan({ x: 0, y: 0 }); }, [current?.id, floor?.id]);
 
   const stats = useMemo(() => {
     if (!plan) return null;
@@ -831,7 +893,7 @@ export default function App() {
   const openImportedHouse = (res, name) => {
     const floors = res.floors.map(({ level, program, name: floorLabel, plan: p }) => makeFloor({
       name: floorLabel || floorName({ level, program }), level, plan: p,
-      meta: { style: form.style, type: program === 'garage' ? 'garage' : 'catasto', program },
+      meta: { style: form.style, type: program === 'garage' ? 'garage' : 'catasto', program, catasto: true },
       params: { roomType: program === 'garage' ? 'garage' : 'apartment', rooms: p.rooms.length, style: form.style, shape: 'rect', program },
     }));
     const ground = floors.find((f) => f.level === 0) || floors[0];
@@ -851,8 +913,9 @@ export default function App() {
    */
   const importPdf = async (file) => {
     const name = file.name.replace(/\.pdf$/i, '');
+    let hint = '';
     if (base && engineHas('pdf_import')) {
-      say('Lettura del PDF in corso…');
+      setImporting('Leggo il PDF: muri, porte, finestre e locali…');
       try {
         const data = await readJson(await postJson(base, '/import-pdf', { pdf_base64: await fileToBase64(file), style: form.style }));
         if (data.floors) {
@@ -863,48 +926,94 @@ export default function App() {
         say('Pianta PDF importata e arredata');
         return;
       } catch (err) {
-        if (!/HTTP 422/.test(err.message)) setError(`Il PDF non si legge come disegno CAD (${err.message}): puoi ricalcarlo.`);
+        hint = /HTTP 422/.test(err.message)
+          ? 'Nel PDF non ho trovato linee di disegno (è una scansione).'
+          : `Il motore non ha letto il PDF (${err.message}).`;
       }
+    } else {
+      hint = base ? 'Il motore collegato non legge ancora i PDF.' : 'Per leggere il PDF in automatico serve il motore collegato.';
     }
     try {
+      setImporting('Apro la pagina del PDF da ricalcare…');
       const background = await pdfPageImage(file);
       setSketch({ shapes: [], background: { ...background, name } });
-      say(background.scaleFound
-        ? `PDF senza linee di disegno: ricalca le stanze sopra la pianta (scala 1:${background.scale} letta sul foglio)`
-        : 'PDF senza linee di disegno: ricalca le stanze sopra la pianta, dopo aver controllato la scala');
+      say(`${hint} ${background.scaleFound
+        ? `Ricalca le stanze sopra la pianta: scala 1:${background.scale} letta sul foglio.`
+        : 'Ricalca le stanze sopra la pianta dopo aver controllato la scala.'}`);
     } catch (err) {
       setError(`Non riesco ad aprire il PDF: ${err.message}`);
     }
   };
 
-  /* ── Import DXF: prima il motore, poi il parser locale ── */
-  const handleDxfFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+  /* ── Import DXF/PDF: prima il motore, poi il parser locale ── */
+  const importFile = async (file) => {
     if (!file) return;
     setError(null);
-    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
-      await importPdf(file);
-      return;
-    }
-    say('Importazione DXF in corso…');
+    setImporting(`Apro ${file.name}…`);
     try {
-      const text = await file.text();
-      let data = null;
-      if (base) {
-        try {
-          data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style }));
-        } catch {
-          /* motore non raggiungibile: si prosegue in locale */
-        }
+      if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+        await importPdf(file);
+        return;
       }
-      data ??= parseDxfClientSide(text, form.style);
-      openNewPlan(data, { type: 'dxf' }, { name: file.name.replace(/\.dxf$/i, '') });
-      say('Planimetria DXF importata e arredata');
-    } catch (err) {
-      setError(`Errore durante l'importazione del file DXF: ${err.message}`);
+      if (!/\.dxf$/i.test(file.name)) {
+        setError('Formato non supportato: carica un file DXF o PDF.');
+        return;
+      }
+      setImporting('Leggo il DXF: muri, porte, finestre e locali…');
+      try {
+        const text = await file.text();
+        let data = null;
+        if (base) {
+          try {
+            data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style }));
+          } catch {
+            /* motore non raggiungibile: si prosegue in locale */
+          }
+        }
+        data ??= parseDxfClientSide(text, form.style);
+        openNewPlan(data, { type: 'dxf' }, { name: file.name.replace(/\.dxf$/i, '') });
+        say('Planimetria DXF importata e arredata');
+      } catch (err) {
+        setError(`Errore durante l'importazione del file DXF: ${err.message}`);
+      }
+    } finally {
+      setImporting(null);
     }
   };
+
+  const handleDxfFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    importFile(file);
+  };
+
+  // trascina un DXF o un PDF su qualsiasi punto della pagina per aprirlo
+  const importFileRef = useRef(importFile);
+  importFileRef.current = importFile;
+  useEffect(() => {
+    let depth = 0;
+    const hasFile = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+    const onEnter = (e) => { if (hasFile(e)) { depth += 1; setDropping(true); } };
+    const onLeave = (e) => { if (hasFile(e) && --depth <= 0) { depth = 0; setDropping(false); } };
+    const onOver = (e) => { if (hasFile(e)) e.preventDefault(); };
+    const onDrop = (e) => {
+      if (!hasFile(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setDropping(false);
+      importFileRef.current(e.dataTransfer.files[0]);
+    };
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onEnter);
+      window.removeEventListener('dragleave', onLeave);
+      window.removeEventListener('dragover', onOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
 
   const restore = (entry) => {
     const f0 = activeFloor(entry);
@@ -1117,7 +1226,7 @@ export default function App() {
               <div className="pf-chips">
                 {PRESETS.map((p) => (
                   <button key={p.label} type="button" className="pf-chip"
-                    onClick={() => setForm((f) => ({ ...f, width: p.w, length: p.l, roomType: p.type, rooms: p.rooms, ...defaultBedrooms(p.rooms) }))}>
+                    onClick={() => setForm((f) => ({ ...f, width: p.w, length: p.l, roomType: p.type, rooms: p.rooms, ...(p.style ? { style: p.style } : {}), ...defaultBedrooms(p.rooms) }))}>
                     {p.label}
                   </button>
                 ))}
@@ -1354,7 +1463,7 @@ export default function App() {
             <div className="pf-group" role="group" aria-label="Zoom">
               <button type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z / 1.2, 0.2, 3))}
                 aria-label="Riduci" title="Riduci"><ZoomOut size={15} /></button>
-              <button type="button" className="pf-tool pf-pct" disabled={!plan} onClick={() => setZoom(null)}
+              <button type="button" className="pf-tool pf-pct" disabled={!plan} onClick={resetView}
                 title="Adatta alla finestra"><Scan size={14} className="pf-tl" /> {Math.round(z * 100)}%</button>
               <button type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z * 1.2, 0.2, 3))}
                 aria-label="Ingrandisci" title="Ingrandisci"><ZoomIn size={15} /></button>
@@ -1398,7 +1507,12 @@ export default function App() {
             />
           )}
 
-          <div className="pf-canvas" ref={stageRef}>
+          {(importing || dropping) && (
+            <div className="pf-drop" role="status" aria-live="polite">
+              <div>{dropping ? 'Rilascia il file DXF o PDF per aprirlo' : importing}</div>
+            </div>
+          )}
+          <div className={`pf-canvas ${panOn.current ? 'is-pannable' : ''} ${panning ? 'is-panning' : ''}`} ref={stageRef}>
             {sketch ? (
               <SketchBoard initialShapes={sketch.shapes} background={sketch.background}
                 onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
@@ -1416,7 +1530,8 @@ export default function App() {
               </ErrorBoundary>
             ) : plan ? (
               <ErrorBoundary key={`${current.id}-${floor.id}`}>
-              <div className="pf-sheet" key={`${current.id}-${floor.id}`}>
+              <div className="pf-sheet" key={`${current.id}-${floor.id}`}
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
                 <PlanSvg
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
