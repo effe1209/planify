@@ -109,3 +109,14 @@ test('il nord ruota la freccia sul foglio', async ({ page }) => {
   await page.getByLabel('Rotazione del nord').fill('90');
   await expect(page.locator('.pf-sheet svg g[transform="rotate(90)"]')).toHaveCount(1);
 });
+
+test('prospetti e sezioni si aprono e mostrano sei disegni', async ({ page }) => {
+  const errors = await open(page);
+  await generate(page);
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /Prospetti/ }).click();
+  await expect(page.locator('.pf-sheets-grid svg')).toHaveCount(6);
+  await expect(page.getByRole('img', { name: 'Prospetto sud' })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Sezione longitudinale/ })).toBeVisible();
+  expect(errors).toEqual([]);
+});
