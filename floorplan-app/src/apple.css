@@ -560,3 +560,43 @@
 .pf-sketch-bg-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2, inherit); }
 .pf-sketch-bg-field input[type='number'] { width: 64px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--hairline); background: var(--card); color: inherit; }
 .pf-sketch-bg-field input[type='range'] { width: 110px; }
+
+/* ── Schermi più piccoli ───────────────────────────────────────────────────
+   La colonna centrale si adatta alla sua larghezza (container query), non a quella della finestra: con i
+   pannelli aperti su un portatile è stretta anche se lo schermo è grande. Le etichette lasciano il posto alle
+   sole icone (il nome resta nel suggerimento), le esportazioni vanno nel menu «Esporta» e i piani stanno su
+   una riga che scorre di lato: gli strumenti stanno su una riga e la pianta ha quasi tutta l'altezza. */
+.pf-stage { container-type: inline-size; container-name: stage; }
+.pf-toolbar { gap: 8px; min-height: 0; padding: 8px 12px; position: relative; z-index: 6; }   /* il menu «Esporta» sopra la pianta */
+.pf-toolbar > .pf-group { flex: none; }
+.pf-floorbar { flex-wrap: nowrap; min-width: 0; }
+.pf-floor-seg { flex-wrap: nowrap; min-width: 0; flex: 0 1 auto; overflow-x: auto; scrollbar-width: none; }
+.pf-floor-seg::-webkit-scrollbar { display: none; }
+.pf-floor { flex: none; }
+.pf-floor-tab { white-space: nowrap; }
+.pf-sketch-kinds { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+.pf-sketch-kinds::-webkit-scrollbar { display: none; }
+.pf-sketch-kinds > * { flex: none; }
+
+@container stage (max-width: 1320px) {
+  .pf-toolbar .pf-tl, .pf-floorbar .pf-tl { display: none; }
+  .pf-toolbar .pf-tool { padding-left: 9px; padding-right: 9px; }
+}
+@container stage (max-width: 820px) {
+  .pf-toolbar .pf-tl-keep { display: none; }
+  .pf-floorbar-icon { display: none; }
+  .pf-floor-tab { padding: 0 9px; }
+  .pf-canvas { margin: 0 8px 8px; border-radius: 20px; }
+}
+.pf-export-more { display: none; position: relative; }
+.pf-export-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; min-width: 210px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px; border-radius: 16px; border: 1px solid var(--hairline);
+  background: var(--card); box-shadow: var(--shadow-float);   /* pieno: sopra la pianta il vetro si legge male */
+}
+.pf-export-menu .pf-tool { justify-content: flex-start; min-height: 38px; font-size: 13px; }
+@container stage (max-width: 1640px) {
+  .pf-export-inline { display: none; }
+  .pf-export-more { display: flex; }
+}
+.pf-toolbar > .pf-spacer { min-width: 0; }
