@@ -65,8 +65,8 @@ export default function FloorBar({
       </div>
 
       <div className="pf-floor-add">
-        <button type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu}>
-          <Plus size={14} /> Piano
+        <button type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu} title="Aggiungi un piano">
+          <Plus size={14} /> <span className="pf-tl">Piano</span>
         </button>
         {menu && (
           <div className="pf-floor-menu" role="dialog" aria-label="Aggiungi piano">
@@ -99,8 +99,9 @@ export default function FloorBar({
 
       <div className="pf-spacer" />
       {floors.length > 1 && (
-        <button type="button" className={`pf-tool ${globalView ? 'is-on' : ''}`} onClick={onToggleGlobal} aria-pressed={globalView}>
-          <Layers size={14} /> Vista globale
+        <button type="button" className={`pf-tool ${globalView ? 'is-on' : ''}`} onClick={onToggleGlobal} aria-pressed={globalView}
+          title="Vista globale">
+          <Layers size={14} /> <span className="pf-tl">Vista globale</span>
         </button>
       )}
     </div>
