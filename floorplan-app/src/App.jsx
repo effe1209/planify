@@ -827,6 +827,24 @@ export default function App() {
     }
   };
 
+  /* Planimetria catastale: un progetto con tutti i piani del PDF (il motore li ha già riconosciuti e arredati). */
+  const openImportedHouse = (res, name) => {
+    const floors = res.floors.map(({ level, program, name: floorLabel, plan: p }) => makeFloor({
+      name: floorLabel || floorName({ level, program }), level, plan: p,
+      meta: { style: form.style, type: program === 'garage' ? 'garage' : 'catasto', program },
+      params: { roomType: program === 'garage' ? 'garage' : 'apartment', rooms: p.rooms.length, style: form.style, shape: 'rect', program },
+    }));
+    const ground = floors.find((f) => f.level === 0) || floors[0];
+    if (shared) closeShared();
+    history.add({ name, floors, activeFloor: ground.id });
+    setPendingFloor(null);
+    setGlobalView(false);
+    setSelectedId(null);
+    setHoverId(null);
+    setZoom(null);
+    say(res.notes?.[0] || `Planimetria catastale importata: ${floors.length} piani`);
+  };
+
   /*
    * Import PDF: quelli esportati da un CAD li legge il motore come un DXF; le scansioni (o il motore senza la
    * lettura PDF) si aprono nello schizzo con la pagina come sfondo da ricalcare.
@@ -837,6 +855,10 @@ export default function App() {
       say('Lettura del PDF in corso…');
       try {
         const data = await readJson(await postJson(base, '/import-pdf', { pdf_base64: await fileToBase64(file), style: form.style }));
+        if (data.floors) {
+          openImportedHouse(data, name);
+          return;
+        }
         openNewPlan(data, { type: 'pdf' }, { name });
         say('Pianta PDF importata e arredata');
         return;
@@ -1318,7 +1340,7 @@ export default function App() {
 
             <div className="pf-group" role="group" aria-label="Disegno e import">
               <button type="button" className="pf-tool pf-tool-accent" onClick={() => dxfInputRef.current?.click()}
-                title="Carica una pianta dal CAD: muri, porte, finestre e locali vengono ricostruiti dal disegno">
+                title="Carica una pianta: DXF o PDF dal CAD, oppure il PDF della planimetria catastale (tutti i piani). Muri, porte, finestre e locali vengono ricostruiti dal disegno">
                 <Upload size={15} /> <span className="pf-tl-keep">Importa DXF o PDF</span>
               </button>
               <button type="button" className={`pf-tool ${sketch ? 'is-on' : ''}`}

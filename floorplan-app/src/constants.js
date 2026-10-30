@@ -30,6 +30,7 @@ export const TYPE_NAME = {
   sketch: 'Schizzo',
   dxf: 'Import DXF',
   pdf: 'Import PDF',
+  catasto: 'Planimetria catastale',
 };
 
 export const STYLES = [

@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import catasto_import
 import pdf_import
 import planner
 
@@ -34,7 +35,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house", "street_garage", "pdf_import"]
+            "garden_house", "street_garage", "pdf_import", "catasto_import"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -207,6 +208,7 @@ class HouseFloorPlan(BaseModel):
     level: int
     program: str
     plan: PlanResponse
+    name: Optional[str] = None     # nome del piano (dalle planimetrie catastali: «Piano primo»…)
 
 
 class HouseResponse(BaseModel):
@@ -353,10 +355,11 @@ def import_dxf_endpoint(req: DxfImportRequest):
         raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {e}")
 
 
-@app.post("/import-pdf", response_model=PlanResponse)
+@app.post("/import-pdf", response_model=Union[HouseResponse, PlanResponse])
 def import_pdf_endpoint(req: PdfImportRequest):
-    """PDF esportato da un CAD → planimetria arredata, come un DXF. Le scansioni (senza linee) rispondono 422
-    con raster = true: l'app le apre come sfondo da ricalcare."""
+    """PDF esportato da un CAD → planimetria arredata, come un DXF. Una planimetria catastale scansionata →
+    casa con tutti i piani del PDF (risposta con «floors»). Le altre scansioni rispondono 422 con raster = true:
+    l'app le apre come sfondo da ricalcare."""
     try:
         data = base64.b64decode(req.pdf_base64, validate=False)
     except Exception:  # noqa: BLE001
@@ -366,6 +369,11 @@ def import_pdf_endpoint(req: PdfImportRequest):
     try:
         return pdf_import.import_pdf_data(data, style=req.style or "modern")
     except pdf_import.RasterPdf as e:
-        raise HTTPException(status_code=422, detail={"raster": True, "message": str(e)})
+        try:
+            return catasto_import.import_catasto(data, style=req.style or "modern")
+        except catasto_import.NotCatasto:
+            raise HTTPException(status_code=422, detail={"raster": True, "message": str(e)})
+        except Exception as e2:  # noqa: BLE001
+            raise HTTPException(status_code=422, detail={"raster": True, "message": f"Planimetria catastale non letta: {e2}"})
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nell'importazione PDF: {e}")
