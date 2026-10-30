@@ -51,6 +51,24 @@ def test_floor_names():
         assert C.floor_level(name) == level, name
 
 
+def test_faded_strokes_on_one_axis_are_joined_but_doors_stay_open():
+    mpp = 0.01
+    lines = [(100.0, 0, 200), (101.0, 215, 400), (100.0, 480, 700)]   # buco di 15 cm (si chiude) e di 80 cm (no)
+    out = C._join_collinear(lines, mpp)
+    assert len(out) == 2 and min(o[1] for o in out) == 0 and sorted(o[2] for o in out) == [400, 700], out
+
+
+def test_protruding_unnamed_room_is_a_balcony():
+    import dxf_import as D
+    # rooms: [x0, y0, x1, y1, gruppo, testi, pezzo]
+    rooms = [[0, 0, 5, 4, 1, [], 0], [5, 0, 9, 4, 2, [], 0], [0, 4, 5, 7, 3, [], 0], [5, 4, 9, 7, 4, [], 0],
+             [9, 1, 10.2, 3, 5, [], 0]]          # ha un solo lato contro la casa
+    kept = {r[4] for r in D._drop_balconies(rooms)}
+    assert kept == {1, 2, 3, 4}, kept
+    # il bagno d'angolo ha due lati sull'esterno: resta
+    assert {r[4] for r in D._drop_balconies(rooms[:4])} == {1, 2, 3, 4}
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

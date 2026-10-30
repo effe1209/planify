@@ -893,7 +893,7 @@ export default function App() {
   const openImportedHouse = (res, name) => {
     const floors = res.floors.map(({ level, program, name: floorLabel, plan: p }) => makeFloor({
       name: floorLabel || floorName({ level, program }), level, plan: p,
-      meta: { style: form.style, type: program === 'garage' ? 'garage' : 'catasto', program },
+      meta: { style: form.style, type: program === 'garage' ? 'garage' : 'catasto', program, catasto: true },
       params: { roomType: program === 'garage' ? 'garage' : 'apartment', rooms: p.rooms.length, style: form.style, shape: 'rect', program },
     }));
     const ground = floors.find((f) => f.level === 0) || floors[0];
