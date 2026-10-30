@@ -87,3 +87,32 @@ export function stairSteps(st, height) {
   }
   return out;
 }
+
+/*
+ * Apertura da lasciare nel solaio e nel pavimento del piano di sopra: l'ingombro dei gradini che stanno sotto il
+ * piano (l'ultimo gradino è a filo del pavimento di sopra e fa da pavimento). Il resto del vano, cioè lo spazio
+ * di arrivo e il passaggio accanto alla rampa, resta con il pavimento: da lì si esce dalla scala.
+ * Ritorna rettangoli [{ x, y, w, h }] in coordinate della pianta.
+ */
+export function stairHoles(st, height) {
+  const steps = stairSteps(st, height).filter((b) => b.top < height - 1e-3);
+  if (!steps.length) return [];
+  const rect = (list) => ({
+    x: Math.min(...list.map((b) => b.x0)), y: Math.min(...list.map((b) => b.z0)),
+    w: Math.max(...list.map((b) => b.x1)) - Math.min(...list.map((b) => b.x0)),
+    h: Math.max(...list.map((b) => b.z1)) - Math.min(...list.map((b) => b.z0)),
+  });
+  if (st.entry && st.type === 'l') {
+    // due bracci: il primo e (pianerottolo + secondo), separati dal passaggio accanto alla rampa
+    const ns = st.entry === 'N' || st.entry === 'S';
+    const D = ns ? st.h : st.w;
+    const fw = Math.min(1.0, (ns ? st.w : st.h) / 2);
+    const leg1 = steps.filter((b) => {
+      const along = ns ? (st.entry === 'N' ? b.z0 - st.y : st.y + st.h - b.z1) : (st.entry === 'W' ? b.x0 - st.x : st.x + st.w - b.x1);
+      return along + 1e-6 < D - fw;
+    });
+    const rest = steps.filter((b) => !leg1.includes(b));
+    return [leg1, rest].filter((l) => l.length).map(rect);
+  }
+  return [rect(steps)];
+}
