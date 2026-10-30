@@ -12,7 +12,7 @@ e il programma deve dirlo chiaramente (cosa è a norma, cosa no, quale articolo,
 | Tema | Stato oggi |
 |---|---|
 | Camera doppia ≥ 14 m², singola ≥ 9 m², soggiorno ≥ 14 m² | Imposto in generazione e in `validate` |
-| Bagno principale ≥ 6 m² (scelta di prodotto, non di legge) | Imposto (aggiunto in questa sessione) |
+| Bagno: la norma nazionale non fissa una superficie; il motore usa 4 m² (principale) e 3 m² (altri) come valori di progetto | Imposto in generazione, non nel pannello Conformità |
 | Rapporto aeroilluminante 1/8 | Solo come punteggio in `design_review`, non come vincolo |
 | Porte 90/80 cm, corridoio 1,30 m, muri 20 cm | Costanti fisse |
 | Scale: pedata 27 cm, pianerottolo 1 m | Geometria, nessuna verifica di norma |
@@ -30,7 +30,7 @@ e il programma deve dirlo chiaramente (cosa è a norma, cosa no, quale articolo,
   aerazione e illuminazione naturale pari a 1/8 della superficie del pavimento; servizio igienico con finestra
   o aspirazione forzata; cucina con aerazione propria.
 - Il «bagno ≥ 6 m²» **non è un minimo nazionale**: lo è, al più, in alcuni Regolamenti Edilizi o per i bagni
-  accessibili. Va gestito come parametro del profilo (vedi §3), non come legge.
+  accessibili. Il motore usa 4 m² (principale) e 3 m² (altri) come valori di progetto, senza citarli come legge.
 
 **B. Accessibilità**
 - L. 13/1989 e DM 236/1989: tre livelli (accessibile, visitabile, adattabile). Indicativamente: porte ≥ 80 cm,
@@ -159,7 +159,7 @@ generazione per l'1/8 in tutti gli schemi, altezza dei muri 3D legata al dato de
 ## 7. Decisioni che servono da te
 
 1. Profilo: Opzione 1 (consigliata), 2 o 3?
-2. Il bagno da 6 m² è una regola tua o del tuo Comune? Lo tengo come parametro del profilo «predefinito».
+2. (Risolta) Il bagno non ha un minimo nazionale: il motore usa 4 m² come valore di progetto; il 6 m² era una richiesta, non una norma.
 3. Quale Comune (o quali) vuoi precaricare per primo?
 4. Il programma deve **bloccare** la generazione fuori norma o **segnalare** soltanto?
 5. Da dove parto: Fase 1 per intero, oppure prima il pannello «Conformità» sulle norme già imposte (aree, 1/8, porte)?
