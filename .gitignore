@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 graphify-out/
 .claude/worktrees/
+
+floorplan-app/test-results/
+floorplan-app/playwright-report/
