@@ -610,3 +610,10 @@
   background: color-mix(in srgb, var(--bg, #fff) 55%, transparent); backdrop-filter: blur(6px); }
 .pf-drop > div { padding: 18px 28px; border-radius: 20px; background: var(--card, #fff); border: 1.5px dashed var(--accent, #0a84ff);
   font-weight: 600; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }
+
+/* conformità: voci non conformi in rosso, collegamenti ai locali */
+.pf-design-list li.is-bad { color: #b42318; }
+.pf-compliance .pf-link { all: unset; cursor: pointer; text-decoration: underline dotted; }
+.pf-compliance .pf-ref { opacity: 0.6; }
+
+.pf-compliance-height { margin-bottom: 8px; }
