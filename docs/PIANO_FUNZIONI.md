@@ -63,3 +63,16 @@ avvia quello locale.
 2. Touch/layout (è ciò che oggi blocca l'uso su iPad e telefono).
 3. Nord, poi tetto (il tetto serve a prospetti e sezioni).
 4. Sezioni e prospetti.
+
+## Stato (fatto in questa sessione)
+- Test dell'interfaccia: Playwright (`npm run test:ui`, 27 prove su desktop, iPad e iPhone in orizzontale) e
+  `.github/workflows/ui-tests.yml` a ogni push. La prima volta: `npx playwright install chromium`.
+- Touch: sotto 1180 px i pannelli sono cassetti sopra la pianta (si chiudono dopo la generazione o toccando fuori),
+  pizzico a due dita per lo zoom e spostamento, bersagli da 44 px, barre in una riga su iPhone in orizzontale.
+  Il telefono in verticale non è stato fatto (scelta: solo iPad e iPhone in orizzontale).
+- Nord: angolo 0–359° per progetto, freccia ruotata sul foglio, sole del 3D che lo segue, pannello con il vetro per
+  esposizione.
+- Tetto: pulsante «Tetto» in 3D (acceso di default nella vista casa intera), piano o a due falde, un tetto per ogni
+  ala rettangolare dell'edificio; si accende e spegne senza spostare l'inquadratura.
+- Prospetti e sezioni: scheda «Prospetti» con N/E/S/O e due sezioni (tagli regolabili), quote dei piani, altezza
+  netta dei locali, tetto; esportazione in un SVG. Mancano PDF, DXF e il disegno della linea di taglio sulla pianta.

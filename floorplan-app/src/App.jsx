@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, Armchair, Box, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
+  AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
 } from 'lucide-react';
@@ -23,6 +23,7 @@ import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
 import CompliancePanel from './components/CompliancePanel';
 import NorthPanel from './components/NorthPanel';
+import SheetsView from './components/SheetsView';
 import { ROOF_DEFAULTS, ROOF_TYPES } from './lib/roof';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloorBar from './components/FloorBar';
@@ -560,7 +561,8 @@ export default function App() {
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
   const [view3d, setView3d] = useState(null);   // null = pianta; { low, whole, spread } = vista 3D
-  panOn.current = !!plan && !sketch && !view3d && !(globalView && current?.floors.length > 1);
+  const [sheets, setSheets] = useState(null);   // null = pianta; { roof } = prospetti e sezioni
+  panOn.current = !!plan && !sketch && !view3d && !sheets && !(globalView && current?.floors.length > 1);
   const three = useRef(null);                    // esportazioni della vista 3D aperta (Plan3D onReady)
   const builtFloors = current?.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).length || 0;
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
@@ -1449,8 +1451,15 @@ export default function App() {
 
             <div className="pf-group" role="group" aria-label="Vista 3D">
               <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
-                onClick={() => setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false, roof: globalView && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null })}
+                onClick={() => { setSheets(null); setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false, roof: globalView && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null }); }}
                 title="Vista 3D navigabile"><Box size={15} /> 3D</button>
+              <button type="button" className={`pf-tool ${sheets ? 'is-on' : ''}`} aria-pressed={!!sheets} disabled={!plan}
+                onClick={() => { setView3d(null); setSheets(sheets ? null : { roof: { ...ROOF_DEFAULTS } }); }}
+                title="Prospetti N/E/S/O e sezioni dell'edificio"><Layers size={15} /> <span className="pf-tl">Prospetti</span></button>
+              {sheets && (
+                <button type="button" className={`pf-tool ${sheets.roof ? 'is-on' : ''}`} aria-pressed={!!sheets.roof}
+                  onClick={() => setSheets({ ...sheets, roof: sheets.roof ? null : { ...ROOF_DEFAULTS } })} title="Mostra o nascondi il tetto">Tetto</button>
+              )}
               {view3d && builtFloors > 1 && (
                 <button type="button" className={`pf-tool ${view3d.whole ? 'is-on' : ''}`} aria-pressed={!!view3d.whole}
                   onClick={() => setView3d({ ...view3d, whole: !view3d.whole })} title="Tutti i piani impilati con i solai">
@@ -1565,6 +1574,10 @@ export default function App() {
               <SketchBoard initialShapes={sketch.shapes} background={sketch.background}
                 onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
                 onGenerate={generateFromSketch} />
+            ) : plan && sheets ? (
+              <ErrorBoundary key={`sheets-${current.id}`}>
+                <SheetsView project={current} plan={plan} north={current?.north ?? 0} roof={sheets.roof} />
+              </ErrorBoundary>
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
                 <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
