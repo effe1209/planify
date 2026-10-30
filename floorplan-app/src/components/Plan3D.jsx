@@ -72,6 +72,7 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
         controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
         controls.minDistance = 2;
         controls.maxDistance = ext * 6;
+        window.__planify3d = { THREE, camera, controls, model };   // per i test dell'interfaccia (inquadrature precise)
 
         const resize = () => {
           const w = el.clientWidth || 600;

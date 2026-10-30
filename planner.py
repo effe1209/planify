@@ -944,7 +944,7 @@ def furnish_bedroom(P: Placer, room: Room):
             if wardrobe:
                 break
         if commit and ((not double and area >= 8) or area >= 13):
-            P.place_wall(room, "desk", 1.2 if double else 1.0, 0.55, desks, gap=0.1, zone_gap=0.2, front=0.6)
+            _place_chair(P, room, P.place_wall(room, "desk", 1.2 if double else 1.0, 0.55, desks, gap=0.1, zone_gap=0.2, front=0.6))
         if commit and double and area >= 14:
             P.place_wall(room, "dresser", 1.0, 0.5, wardrobe_walls, gap=0.1, zone_gap=0.3, front=0.6, avoid_windows=True)
         return (100 if wardrobe else 0) + 10 * len(stands) + (wardrobe.rect.w * wardrobe.rect.h if wardrobe else 0) \
@@ -1369,8 +1369,22 @@ def furnish_sleep_zone(P: Placer, room: Room):
         P.lay.notes.append(f"{room.name}: letto non inserito")
 
 
+def _place_chair(P: Placer, room: Room, desk: Optional[Item], size: float = 0.5) -> Optional[Item]:
+    """Sedia da ufficio davanti alla scrivania, rivolta verso di lei; None se non c'è posto libero (porte comprese)."""
+    if desk is None:
+        return None
+    f, a = desk.facing or "S", desk.rect
+    r = {"S": Rect(a.cx - size / 2, a.y2 + 0.02, size, size), "N": Rect(a.cx - size / 2, a.y - 0.02 - size, size, size),
+         "E": Rect(a.x2 + 0.02, a.cy - size / 2, size, size), "W": Rect(a.x - 0.02 - size, a.cy - size / 2, size, size)}[f]
+    if not r.inside(P.inner(room)):
+        return None
+    if any(r.overlaps(it.rect) for it in P.placed[room.id]) or any(r.overlaps(z) for z in P.door_zones(room)):
+        return None
+    return P._put(room, "office_chair", r, 0.0, None, OPP[f])
+
+
 def furnish_study(P: Placer, room: Room):
-    P.place_wall(room, "desk", 1.4, 0.7, desk_sides(P, room), gap=0.4, zone_gap=0.3)
+    _place_chair(P, room, P.place_wall(room, "desk", 1.4, 0.7, desk_sides(P, room), gap=0.4, zone_gap=0.3))
     P.place_wall(room, "bookcase", 1.2, 0.35, free_wall_sides(P, room), gap=0.2, zone_gap=0.3, front=0.6,
                  avoid_windows=True)
 
@@ -1388,7 +1402,7 @@ def furnish_meeting(P: Placer, room: Room):
 def furnish_director(P: Placer, room: Room):
     wins = P.window_sides(room)
     sides = wins + [s for s in "NSEW" if s not in wins]
-    P.place_wall(room, "desk", 1.6, 0.8, sides, gap=0.5, zone_gap=0.3)
+    _place_chair(P, room, P.place_wall(room, "desk", 1.6, 0.8, sides, gap=0.5, zone_gap=0.3))
     if room.rect.w * room.rect.h >= 14:
         P.place_free(room, "table", 1.2, 0.8, gap=0.7, zone_gap=0.3)
 
@@ -1432,7 +1446,7 @@ def furnish_office_open(P: Placer, room: Room):
         P.remove(pantry)                      # in uffici minuscoli le scrivanie hanno la precedenza
         grid = best_grid()
     for r, face in grid:
-        P._put(room, "desk", r, 0.0, None, face)
+        _place_chair(P, room, P._put(room, "desk", r, 0.0, None, face))
     if not grid:
         lay.notes.append(f"{room.name}: nessuna scrivania inserita")
 
@@ -1576,7 +1590,7 @@ def furnish_hotel_room(P: Placer, room: Room):
 
     # Desk near window
     desk_sides = wins + [s for s in "NSEW" if s not in wins]
-    P.place_wall(room, "desk", 1.2, 0.6, desk_sides, gap=0.4, zone_gap=0.2)
+    _place_chair(P, room, P.place_wall(room, "desk", 1.2, 0.6, desk_sides, gap=0.4, zone_gap=0.2))
 
     # Small sofa or armchair near window/TV area
     if r.w * r.h >= 18:
@@ -2805,10 +2819,10 @@ def interior_review(lay: Layout) -> Tuple[float, List[str], List[str]]:
                 pen += 4
                 tv_ok = False
                 bad.append(f"{room.name}: la TV ha una finestra accanto, controluce")
-            elif sofa and _near(_along(sofa.rect, OPP[sofa.facing]), P.window_spans(room, OPP[sofa.facing]), 0.3):
+            elif sofa and sofa.facing in OPP and _near(_along(sofa.rect, OPP[sofa.facing]), P.window_spans(room, OPP[sofa.facing]), 0.3):
                 pen += 1
                 tv_ok = False
-        if sofa and tv:
+        if sofa and tv and sofa.facing in OPP:
             back = OPP[sofa.facing]
             if any(_near(_along(sofa.rect, back), [(a, b)], 0.6) for a, b, _ in P.door_spans(room, back)):
                 pen += 3

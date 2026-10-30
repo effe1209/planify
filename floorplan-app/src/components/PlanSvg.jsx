@@ -317,7 +317,6 @@ const BASE_FURNITURE = {
   },
   desk: (w, h, s, t) => (
     <>
-      <rect x={w / 2 - 0.21 * s} y={h - 0.1 * s} width={0.42 * s} height={0.4 * s} rx={5} fill="#e3e7ee" stroke={F_STROKE} strokeWidth="0.9" />
       <rect width={w} height={h} rx={2} fill={t.wood} stroke={t.woodLine} strokeWidth="1.2" />
       <rect x={w / 2 - 0.2 * s} y={h * 0.12} width={0.4 * s} height={Math.max(2, h * 0.09)} rx={1} fill="#2b3340" />
       <rect x={w / 2 - 0.17 * s} y={h * 0.5} width={0.34 * s} height={Math.max(2, h * 0.12)} rx={1} fill="#fff" stroke={F_SOFT} strokeWidth="0.7" />
@@ -394,6 +393,19 @@ const BASE_FURNITURE = {
       <circle cx={w * 0.3} cy={h * 0.3} r={3} fill="#fff" stroke={F_STROKE} />
     </>
   ),
+  office_chair: (w, h) => {
+    // vista dall'alto, schienale in alto (dal lato opposto alla scrivania): braccioli, seduta tonda e raggiera a cinque razze
+    const c = Math.min(w, h);
+    return (
+      <>
+        <rect x={w * 0.12} y={h * 0.04} width={w * 0.76} height={h * 0.2} rx={4} fill="#3a4250" stroke={F_STROKE} strokeWidth="0.9" />
+        <rect x={w * 0.02} y={h * 0.3} width={w * 0.1} height={h * 0.42} rx={2} fill="#2b3340" />
+        <rect x={w * 0.88} y={h * 0.3} width={w * 0.1} height={h * 0.42} rx={2} fill="#2b3340" />
+        <circle cx={w / 2} cy={h * 0.56} r={c * 0.34} fill="#4b5563" stroke={F_STROKE} strokeWidth="0.9" />
+        <circle cx={w / 2} cy={h * 0.56} r={c * 0.07} fill="#9aa3b0" />
+      </>
+    );
+  },
   nightstand: (w, h, s, t) => (
     <>
       <rect width={w} height={h} rx={2} fill={t.wood} stroke={t.woodLine} strokeWidth="1" />

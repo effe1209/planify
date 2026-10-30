@@ -97,7 +97,8 @@ export const FURNITURE = [
   { id: 'nightstand', type: 'nightstand', label: 'Comodino', w: 0.45, h: 0.4, group: 'Notte' },
   { id: 'wardrobe', type: 'wardrobe', label: 'Armadio 3 ante', w: 1.8, h: 0.6, group: 'Notte' },
   { id: 'wardrobe_small', type: 'wardrobe', label: 'Armadio 2 ante', w: 1.2, h: 0.6, group: 'Notte' },
-  { id: 'desk', type: 'desk', label: 'Scrivania con sedia', w: 1.2, h: 0.6, group: 'Notte' },
+  { id: 'desk', type: 'desk', label: 'Scrivania', w: 1.2, h: 0.6, group: 'Notte' },
+  { id: 'office_chair', type: 'office_chair', label: 'Sedia da ufficio', w: 0.5, h: 0.5, group: 'Notte' },
   { id: 'sofa_2', type: 'sofa', label: 'Divano 2 posti', w: 1.6, h: 0.9, group: 'Giorno' },
   { id: 'sofa_3', type: 'sofa', label: 'Divano 3 posti', w: 2.2, h: 0.9, group: 'Giorno' },
   { id: 'sofa_corner', type: 'sofa_corner', label: 'Divano angolare', w: 2.6, h: 1.7, group: 'Giorno' },
@@ -143,7 +144,7 @@ export const FURNITURE = [
   { id: 'tree', type: 'tree', label: 'Albero', w: 1.4, h: 1.4, group: 'Giardino' },
 ];
 export const FURNITURE_LABEL = {
-  bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', sofa: 'Divano',
+  bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', office_chair: 'Sedia da ufficio', sofa: 'Divano',
   sofa_corner: 'Divano angolare', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
   table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola',
   shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',
