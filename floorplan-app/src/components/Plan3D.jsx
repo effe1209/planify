@@ -6,9 +6,13 @@ import { THEMES } from '../lib/themes';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, project = null, style = 'modern', lowWalls = false, spread = 0, onReady }) {
+export default function Plan3D({ plan, north = 0, roof = null, project = null, style = 'modern', lowWalls = false, spread = 0, onReady }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
+  const sceneRef = useRef(null);   // { THREE, model, buildRoof, roofFloor }: il tetto si cambia senza ricostruire la scena
+  const roofRef = useRef(roof);
+  roofRef.current = roof;
+  const [ready, setReady] = useState(0);
 
   useEffect(() => {
     let disposed = false;
@@ -17,7 +21,8 @@ export default function Plan3D({ plan, project = null, style = 'modern', lowWall
       try {
         const THREE = await import('three');
         const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-        const { buildScene, buildHouse, addGround } = await import('../lib/scene3d');
+        const { buildScene, buildHouse, addGround, buildRoof, roofFloor, WALL_H } = await import('../lib/scene3d');
+        const { sunDirection } = await import('../lib/orientation');
         const { sceneToDxf } = await import('../lib/dxf3d');
         if (disposed || !host.current) return;
         const el = host.current;
@@ -33,12 +38,16 @@ export default function Plan3D({ plan, project = null, style = 'modern', lowWall
           ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, spread })
           : buildScene(THREE, plan, THEMES[style] || THEMES.modern, { lowWalls });
         scene.add(model);
+        sceneRef.current = { THREE, model, buildRoof, roofFloor, WALL_H };
+        setReady((n) => n + 1);
         // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
         const { bb, center, size } = addGround(THREE, scene, model);
         const W = Math.max(1, size.x), L = Math.max(1, size.z), Ht = Math.max(1, bb.max.y);
         scene.add(new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3));
         const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
-        sun.position.set(center.x - W * 0.3 - 6, 14 + Ht, center.z - L * 0.3 - 4);
+        const dir = sunDirection(north);   // il sole segue il nord del progetto (pomeriggio, a sud-ovest)
+        const reach = Math.max(W, L) * 0.6 + 8;
+        sun.position.set(center.x + dir.dx * reach, 14 + Ht, center.z + dir.dz * reach);
         sun.target.position.set(center.x, 0, center.z);
         sun.castShadow = true;
         sun.shadow.mapSize.set(2048, 2048);
@@ -118,7 +127,21 @@ export default function Plan3D({ plan, project = null, style = 'modern', lowWall
     };
     // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, project, style, lowWalls, spread]);
+  }, [plan, project, style, lowWalls, spread, north]);
+
+  // tetto: si toglie e si rimette senza muovere l'inquadratura
+  useEffect(() => {
+    const st = sceneRef.current;
+    if (!st) return;
+    const old = st.model.getObjectByName('tetto');
+    if (old) {
+      st.model.remove(old);
+      old.traverse((o) => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
+    }
+    if (!roof) return;
+    const top = project ? st.roofFloor(project) : { floor: { plan }, y: st.WALL_H };
+    if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), roof));
+  }, [roof, ready, plan, project, spread]);
 
   return (
     <div className="pf-3d" ref={host}>
