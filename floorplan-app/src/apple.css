@@ -600,3 +600,13 @@
   .pf-export-more { display: flex; }
 }
 .pf-toolbar > .pf-spacer { min-width: 0; }
+
+/* manina: la pianta si sposta trascinando lo sfondo */
+.pf-canvas.is-pannable { cursor: grab; touch-action: none; }
+.pf-canvas.is-panning, .pf-canvas.is-panning * { cursor: grabbing !important; user-select: none; }
+
+/* import: messaggio di avanzamento e area di rilascio file */
+.pf-drop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; pointer-events: none;
+  background: color-mix(in srgb, var(--bg, #fff) 55%, transparent); backdrop-filter: blur(6px); }
+.pf-drop > div { padding: 18px 28px; border-radius: 20px; background: var(--card, #fff); border: 1.5px dashed var(--accent, #0a84ff);
+  font-weight: 600; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }

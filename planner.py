@@ -1655,15 +1655,23 @@ ROOM_W = {
 SUITE_STRIP = 1.9   # larghezza della fascia bagno privato + cabina armadio nella suite
 
 
-# Superfici minime abitabili (DM 5/7/1975): camera doppia 14 m², singola 9 m².
-MIN_AREA = {("bed", "double"): 14.0, ("bed", "suite"): 14.0, ("bed", "single"): 9.0}
+# Superfici minime abitabili (DM 5/7/1975): camera doppia 14 m², singola 9 m²; bagno principale 6 m².
+MIN_AREA = {("bed", "double"): 14.0, ("bed", "suite"): 14.0, ("bed", "single"): 9.0,
+            ("bath", "main"): 6.0, ("bath", "service"): 4.0}
+BATH_MAIN_MIN = 6.0     # bagno principale (non padronale, non di servizio)
+BATH_OTHER_MIN = 4.0    # secondi bagni e bagno padronale
 
 
 def _room_w(item, depth: float = 0.0) -> Tuple[float, float, float]:
     """(min, peso, max) della larghezza; con la profondità della fila il minimo garantisce anche la superficie."""
     k, i, size = item
     if k == "bath":
-        return ROOM_W[("bath", "main" if i == 0 else "service")]
+        key = ("bath", "main" if i == 0 else "service")
+        mn, wg, cap = ROOM_W[key]
+        if depth > 0:
+            mn = max(mn, snap(MIN_AREA[key] / depth + 0.024))
+            cap = max(cap, mn + 0.4)
+        return mn, wg, cap
     mn, wg, cap = ROOM_W[(k, "double" if size == "suite" else size)]
     need = MIN_AREA.get((k, size))
     if need and depth > 0:
@@ -2104,7 +2112,7 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
             if notch and notch[0] <= idx < notch[1]:
                 # la rientranza della sagoma non può rendere il locale inabitabile: resta la superficie
                 # minima per il suo uso e almeno 2,7 m di profondità
-                need = {"bath": 3.5, "study": 7.0, "storage": 2.0, "laundry": 3.0}.get(k, MIN_AREA.get((k, size), 9.0))
+                need = {"bath": BATH_MAIN_MIN if i == 0 else BATH_OTHER_MIN, "study": 7.0, "storage": 2.0, "laundry": 3.0}.get(k, MIN_AREA.get((k, size), 9.0))
                 # +15% sul minimo: la stanza deve anche potersi arredare (letto, armadio, passaggi)
                 keep = max(2.7 if k not in ("storage", "laundry") else 1.5, need * 1.15 / max(0.1, x1 - x0))
                 cut = max(0.0, min(notch[2], (y1 - y0) - keep))
@@ -2517,6 +2525,7 @@ def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
     """Open space: zona principale + zona secondaria aperta + bagno chiuso (anche con rientranza a L)."""
     rng = rng or random.Random(0)
     lay = Layout(W, L)
+    lay.room_type = "office" if office else "open-space"
     bw = snap(clamp(W * rng.uniform(0.24, 0.31), 2.6, 3.6))
     bh = snap(min(clamp(L * rng.uniform(0.34, 0.42), 2.6, 3.4), L - 2.4))
     wanted = _resolve_shape(shape, rng, ["l"])
@@ -2690,8 +2699,10 @@ def validate(lay: Layout) -> List[str]:
         area = r.rect.w * r.rect.h
         need = 14.0 if (r.kind == "bed" and r.size != "single") else 9.0 if r.kind == "bed" else \
             14.0 if r.kind in ("living", "living_kitchen") and lay.room_type != "hotel-room" else 0.0
+        if r.kind == "bath" and lay.room_type not in ("hotel-room", "garage", "garden", "open-space"):
+            need = BATH_MAIN_MIN if r.name == "Bagno" else BATH_OTHER_MIN
         if need and area < need - 0.3:
-            issues.append(f"{r.name}: {area:.1f} m², sotto i {need:.0f} m² minimi per questo uso")
+            issues.append(f"{r.name}: {area:.1f} m², sotto i {need:g} m² minimi per questo uso")
     # 4) aperture
     ops = [("porta", d) for d in lay.doors] + [("finestra", w) for w in lay.windows]
     for i, (ka, a) in enumerate(ops):
