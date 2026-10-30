@@ -5,6 +5,8 @@
 import { THEMES } from './themes';
 
 export async function houseImage(project, { width = 1800, height = 1100, lowWalls = false } = {}) {
+  const { sunDirection } = await import('./orientation');
+  const dir = sunDirection(project.north || 0);
   const THREE = await import('three');
   const { buildHouse } = await import('./scene3d');
   const canvas = document.createElement('canvas');
@@ -23,7 +25,7 @@ export async function houseImage(project, { width = 1800, height = 1100, lowWall
     scene.add(new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3));
     const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
     const ext = Math.max(W, L, H);
-    sun.position.set(center.x - W * 0.3 - 6, 14 + H, center.z - L * 0.3 - 4);
+    sun.position.set(center.x + dir.dx * (Math.max(W, L) * 0.6 + 8), 14 + H, center.z + dir.dz * (Math.max(W, L) * 0.6 + 8));
     sun.target.position.set(center.x, 0, center.z);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);

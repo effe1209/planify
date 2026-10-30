@@ -1030,7 +1030,7 @@ export default function PlanSvg({
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
-  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null,
+  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0,
 }) {
   const uid = useId().replace(/:/g, '');
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
@@ -1349,8 +1349,10 @@ export default function PlanSvg({
         <g fontFamily={FONT}>
           <g transform={`translate(${box.w - 46},52)`} stroke={INK} fill="none" strokeWidth="1.1">
             <circle r="15" />
-            <path d="M0 -11 L5 8 L0 4 L-5 8 Z" fill={INK} />
-            <text y="-20" textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} stroke="none">N</text>
+            <g transform={`rotate(${north})`}>
+              <path d="M0 -11 L5 8 L0 4 L-5 8 Z" fill={INK} />
+              <text y="-20" textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} stroke="none">N</text>
+            </g>
           </g>
 
           <g transform={`translate(30,${box.h - 46})`}>

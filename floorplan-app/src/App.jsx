@@ -22,6 +22,8 @@ import HistoryPanel from './components/HistoryPanel';
 import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
 import CompliancePanel from './components/CompliancePanel';
+import NorthPanel from './components/NorthPanel';
+import { ROOF_DEFAULTS, ROOF_TYPES } from './lib/roof';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloorBar from './components/FloorBar';
 import FloorsOverview from './components/FloorsOverview';
@@ -201,13 +203,24 @@ export default function App() {
 
   useEffect(() => { storage.set('planify.theme', theme); }, [theme]);
   // pannelli laterali compattabili (la pianta prende tutto lo spazio); la scelta resta tra una visita e l'altra
+  // sotto i 1180 px (iPad, telefono) sono cassetti sopra la pianta: partono chiusi e si chiudono dopo l'uso
+  const narrow = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px)').matches;
   const [panels, setPanels] = useState(() => ({
-    left: storage.get('planify.panel.left', '1') !== '0', right: storage.get('planify.panel.right', '1') !== '0',
+    left: !narrow() && storage.get('planify.panel.left', '1') !== '0',
+    right: !narrow() && storage.get('planify.panel.right', '1') !== '0',
   }));
   useEffect(() => {
+    if (narrow()) return;   // i cassetti dei schermi piccoli non cambiano la scelta fatta sul computer
     storage.set('planify.panel.left', panels.left ? '1' : '0');
     storage.set('planify.panel.right', panels.right ? '1' : '0');
   }, [panels]);
+  const closeDrawers = () => { if (narrow()) setPanels({ left: false, right: false }); };
+  // generata la pianta, su schermi stretti il cassetto dei comandi si chiude e si vede il risultato
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (wasLoading.current && !isLoading && !error && narrow()) setPanels((p) => ({ ...p, left: false }));
+    wasLoading.current = isLoading;
+  }, [isLoading, error]);
   const togglePanel = (side) => setPanels((p) => ({ ...p, [side]: !p[side] }));
   useEffect(() => { storage.set('planify.backend', backendUrl); }, [backendUrl]);
   useEffect(() => () => clearTimeout(flashTimer.current), []);
@@ -238,7 +251,17 @@ export default function App() {
     // manina: trascina con il tasto sinistro sullo sfondo, oppure con il destro/centrale ovunque
     let drag = null;
     let moved = false;
+    const touches = new Map();   // dita sullo schermo: due dita = pizzico (zoom) e spostamento
+    let pinch = null;
+    const pinchState = () => {
+      const [a, b] = [...touches.values()];
+      return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    };
     const onDown = (e) => {
+      if (panOn.current && e.pointerType === 'touch') {
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (touches.size === 2) { pinch = pinchState(); drag = null; moved = true; setPanning(true); return; }
+      }
       if (!panOn.current || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
       if (e.button === 0) {
         // il tasto sinistro sposta solo se non si sta afferrando un arredo, un dispositivo o un campo
@@ -251,6 +274,14 @@ export default function App() {
       if (e.button !== 0) e.preventDefault();
     };
     const onMove = (e) => {
+      if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && touches.size >= 2) {
+        const now = pinchState();
+        setZoom((z) => clamp((z ?? fitRef.current) * (now.d / pinch.d), 0.2, 3));
+        setPan((p) => ({ x: p.x + now.x - pinch.x, y: p.y + now.y - pinch.y }));
+        pinch = now;
+        return;
+      }
       if (!drag) return;
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
@@ -260,7 +291,10 @@ export default function App() {
       drag.y = e.clientY;
       setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
     };
-    const onUp = () => {
+    const onUp = (e) => {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) pinch = null;
+      if (!drag && touches.size === 0) setPanning(false);
       if (!drag) return;
       drag = null;
       setPanning(false);
@@ -1206,6 +1240,9 @@ export default function App() {
       </header>
 
       <div className={`pf-body${panels.left ? '' : ' is-left-closed'}${panels.right ? '' : ' is-right-closed'}`}>
+        {(panels.left || panels.right) && narrow() && (
+          <button type="button" className="pf-scrim" aria-label="Chiudi i pannelli" onClick={closeDrawers} />
+        )}
         {/* ───────── Pannello comandi sinistro ───────── */}
         <aside className="pf-rail" aria-hidden={!panels.left} inert={!panels.left}>
           <form className="pf-form" onSubmit={(e) => { e.preventDefault(); run(); }}>
@@ -1412,7 +1449,7 @@ export default function App() {
 
             <div className="pf-group" role="group" aria-label="Vista 3D">
               <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
-                onClick={() => setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false })}
+                onClick={() => setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false, roof: globalView && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null })}
                 title="Vista 3D navigabile"><Box size={15} /> 3D</button>
               {view3d && builtFloors > 1 && (
                 <button type="button" className={`pf-tool ${view3d.whole ? 'is-on' : ''}`} aria-pressed={!!view3d.whole}
@@ -1423,6 +1460,16 @@ export default function App() {
               {view3d?.whole && (
                 <button type="button" className={`pf-tool ${view3d.spread ? 'is-on' : ''}`} aria-pressed={!!view3d.spread}
                   onClick={() => setView3d({ ...view3d, spread: !view3d.spread })} title="Piani staccati per vedere dentro">Esploso</button>
+              )}
+              {view3d && (
+                <button type="button" className={`pf-tool ${view3d.roof ? 'is-on' : ''}`} aria-pressed={!!view3d.roof}
+                  onClick={() => setView3d({ ...view3d, roof: view3d.roof ? null : { ...ROOF_DEFAULTS } })} title="Mostra o nascondi il tetto">Tetto</button>
+              )}
+              {view3d?.roof && (
+                <select className="pf-select-sm" aria-label="Tipo di tetto" value={view3d.roof.type}
+                  onChange={(e) => setView3d({ ...view3d, roof: { ...view3d.roof, type: e.target.value } })}>
+                  {ROOF_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
               )}
               {view3d && (
                 <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
@@ -1520,7 +1567,7 @@ export default function App() {
                 onGenerate={generateFromSketch} />
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
-                <Plan3D plan={plan} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
                   spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
               </ErrorBoundary>
             ) : globalView && current?.floors.length > 1 ? (
@@ -1536,7 +1583,7 @@ export default function App() {
                 <PlanSvg
                   plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
-                  typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`}
+                  typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`} north={current?.north ?? 0}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
                   editable={!readOnly && !showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
@@ -1684,6 +1731,8 @@ export default function App() {
                   highlight={coverHighlight} onHighlight={setCoverHighlight} onReport={exportCoverage} />
               )}
 
+              <NorthPanel plan={plan} north={current?.north ?? 0}
+                onNorth={readOnly ? () => {} : (v) => editProject((p) => ({ ...p, north: v }))} />
               <DesignReport design={plan.design} />
               <CompliancePanel plan={plan} type={floor.meta?.type} height={floor.meta?.height} stairs={floorStairs}
                 onHeight={readOnly ? null : (v) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, height: v } })))}
