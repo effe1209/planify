@@ -47,6 +47,7 @@ export const PRESETS = [
   { label: 'Trilocale', w: 10, l: 8, type: 'apartment', rooms: 3 },
   { label: 'Quadrilocale', w: 13, l: 9.5, type: 'apartment', rooms: 4 },
   { label: 'Monolocale', w: 6.5, l: 5.5, type: 'open-space', rooms: 1 },
+  { label: 'Loft', w: 12, l: 8, type: 'open-space', rooms: 1, style: 'industrial' },
   { label: 'Ufficio', w: 14, l: 10, type: 'office', rooms: 3 },
   { label: 'Camera Std', w: 4.2, l: 6.0, type: 'hotel-room', rooms: 1 },
   { label: 'Camera Deluxe', w: 5.0, l: 6.8, type: 'hotel-room', rooms: 1 },

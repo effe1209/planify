@@ -163,6 +163,8 @@ export function projectStairs(project) {
     if (sorted[i + 1] - sorted[i] !== 1) continue;
     const lower = levels.get(sorted[i]);
     const upper = levels.get(sorted[i + 1]);
+    // i piani letti dal catasto sono subalterni diversi: tra l'uno e l'altro non c'è una scala interna
+    if (lower.meta?.catasto && upper.meta?.catasto) continue;
     const linked = engineLink(lower, upper);
     if (linked) {
       addEngine(byFloor, lower, linked, { upTo: upper.name });
