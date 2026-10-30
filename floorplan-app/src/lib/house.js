@@ -25,9 +25,15 @@ export const MAX_HOUSE_LEVEL = 3;
 
 export const GARAGE_FLOOR = { level: -1, program: 'garage', name: 'Piano interrato / garage' };
 
+/* Garage interrato (sotto il piano terra, con la rampa) o al piano strada (la casa parte dal primo piano). */
+export const GARAGE_MODES = [['basement', 'Interrato con rampa'], ['street', 'Al piano strada']];
+
+/* Di quanti livelli salgono i piani abitati: uno con il garage al piano strada. */
+export const houseShift = (form) => (form.houseGarage && form.garageMode === 'street' ? 1 : 0);
+
 export function floorName(f) {
   if (f.name) return f.name;
-  if (f.program === 'garage') return GARAGE_FLOOR.name;
+  if (f.program === 'garage') return f.level === 0 ? 'Piano terra / garage' : GARAGE_FLOOR.name;
   return FLOOR_PRESETS.find((p) => p.level === f.level && !p.type)?.name || `Piano ${f.level}`;
 }
 
@@ -47,12 +53,13 @@ export function suggestProgram(project, level) {
  * poi quelli «Completo»), a turno: prima le matrimoniali, poi le singole. Studio, ripostiglio e lavanderia
  * vanno al piano giorno, la suite al piano notte.
  */
-export function houseFloorsRequest(form) {
+export function houseFloorsRequest(form, { street = true } = {}) {
+  const shift = street ? houseShift(form) : 0;
   const garage = form.houseGarage ? [{
-    level: GARAGE_FLOOR.level, program: 'garage',
+    level: shift ? 0 : GARAGE_FLOOR.level, program: 'garage',
     needs: { laundry: form.garageLaundry, storage: form.garageStorage },
   }] : [];
-  return [...garage, ...programFloors(form)];
+  return [...garage, ...programFloors(form).map((f) => ({ ...f, level: f.level + shift }))];
 }
 
 function programFloors(form) {

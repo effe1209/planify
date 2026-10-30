@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2 } from 'lucide-react';
+import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler } from 'lucide-react';
 import { ROOM_KINDS, ROOM_KIND_NAME, roomColor } from '../constants';
 import * as G from '../lib/geometry';
 import { CORRECTIONS, boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
@@ -32,7 +32,17 @@ function sharedWalls(shapes) {
   return out;
 }
 
-export default function SketchBoard({ initialShapes = [], onGenerate, onClose }) {
+const BG_TOOLS = [
+  { id: 'bg', label: 'Sposta sfondo', Icon: FileImage, hint: 'Trascina la pianta di sfondo per metterla sotto la griglia; poi ricalca le stanze.' },
+  { id: 'cal', label: 'Misura nota', Icon: Ruler, hint: 'Traccia una linea su una misura che conosci (una quota, un muro) e scrivi quanto è lunga: lo sfondo va in scala.' },
+];
+
+/*
+ * background = la pagina di un PDF scansionato da ricalcare ({ url, paper: [l, h] in metri sul foglio, scale }):
+ * si disegna in scala reale sotto la griglia, si sposta con «Sposta sfondo», scala e trasparenza si regolano.
+ */
+export default function SketchBoard({ initialShapes = [], background = null, onGenerate, onClose }) {
+  const [bg, setBg] = useState(() => background && { scale: background.scale || 100, opacity: 0.5, x: 0, y: 0, show: true });
   const [doc, setDoc] = useState({ shapes: initialShapes, past: [] });
   const { shapes } = doc;
   const [tool, setTool] = useState(initialShapes.length ? 'select' : 'box');
@@ -91,6 +101,8 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const tools = background ? [...TOOLS, ...BG_TOOLS] : TOOLS;
+
   const toMeters = (e) => {
     const r = svgRef.current.getBoundingClientRect();
     return [(e.clientX - r.left) / PX, (e.clientY - r.top) / PX];
@@ -115,7 +127,11 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
       /* puntatore non catturabile (es. già rilasciato): si continua senza cattura */
     }
     const p = toMeters(e);
-    if (tool === 'select') {
+    if (tool === 'bg') {
+      setDraft({ type: 'bg', start: p, orig: [bg.x, bg.y] });
+    } else if (tool === 'cal') {
+      setDraft({ type: 'cal', a: p, b: p });
+    } else if (tool === 'select') {
       const hit = [...shapes].reverse().find((s) => G.pointInPolygon(p, s.poly));
       setSelectedId(hit?.id ?? null);
       if (hit) setDraft({ type: 'move', id: hit.id, start: p, orig: hit.poly, poly: hit.poly, guides: null });
@@ -130,6 +146,15 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
   const onPointerMove = (e) => {
     if (!draftRef.current) return;
     const p = toMeters(e);
+    if (draftRef.current.type === 'cal') {
+      setDraft((d) => ({ ...d, b: p }));
+      return;
+    }
+    if (draftRef.current.type === 'bg') {
+      const d = draftRef.current;
+      setBg((b) => ({ ...b, x: d.orig[0] + p[0] - d.start[0], y: d.orig[1] + p[1] - d.start[1] }));
+      return;
+    }
     setDraft((d) => {
       if (d.type === 'box') {
         const { pt, guides } = snapPoint(p, shapes);
@@ -146,7 +171,19 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
   const onPointerUp = () => {
     const d = draftRef.current;
     setDraft(null);
-    if (!d) return;
+    if (!d || d.type === 'bg') return;
+    if (d.type === 'cal') {
+      // misura nota: lo sfondo si riscala attorno al punto di partenza della linea
+      const drawn = G.dist(d.a, d.b);
+      if (drawn < 0.2) return;
+      const real = parseFloat(String(window.prompt(`Quanto è lunga davvero questa misura? (in metri; ora è ${fmt(drawn)} m)`, fmt(drawn)) || '').replace(',', '.'));
+      if (!(real > 0)) return;
+      const f = real / drawn;
+      setBg((b) => ({ ...b, scale: Math.round(b.scale * f * 10) / 10, x: d.a[0] - (d.a[0] - b.x) * f, y: d.a[1] - (d.a[1] - b.y) * f }));
+      say(`Sfondo in scala: ${fmt(drawn)} m → ${fmt(real)} m`, 'ok');
+      setTool('box');
+      return;
+    }
     if (d.type === 'box') {
       if (G.dist(d.a, d.b) < 0.3) return; // semplice clic
       const r = boxToPolygon(d.a, d.b);
@@ -176,13 +213,13 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
   const boxClash = boxPreview ? findOverlap(boxPreview, shapes) : null;
   const shownPoly = (s) => (draft?.type === 'move' && draft.id === s.id ? draft.poly : s.poly);
   const guides = draft?.guides;
-  const activeTool = TOOLS.find((t) => t.id === tool);
+  const activeTool = tools.find((t) => t.id === tool);
 
   return (
     <div className="pf-sketch-wrap">
       <div className="pf-sketch-bar">
         <div className="pf-sketch-tools" role="radiogroup" aria-label="Strumento">
-          {TOOLS.map(({ id, label, Icon }) => (
+          {tools.map(({ id, label, Icon }) => (
             <button key={id} type="button" role="radio" aria-checked={tool === id}
               className={`pf-sketch-tool ${tool === id ? 'is-on' : ''}`}
               onClick={() => { setTool(id); setMsg(null); }}>
@@ -221,7 +258,22 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
           ))}
         </div>
       )}
-      {tool !== 'select' && (
+      {background && bg && (
+        <div className="pf-sketch-kinds pf-sketch-bg" aria-label="Sfondo PDF">
+          <span>Sfondo PDF:</span>
+          <label className="pf-sketch-bg-field">scala 1:
+            <input type="number" min="10" max="1000" step="5" value={bg.scale} aria-label="Scala del disegno"
+              onChange={(e) => setBg((b) => ({ ...b, scale: Math.max(10, Number(e.target.value) || 100) }))} />
+          </label>
+          <label className="pf-sketch-bg-field">trasparenza
+            <input type="range" min="0.1" max="1" step="0.05" value={bg.opacity} aria-label="Trasparenza dello sfondo"
+              onChange={(e) => setBg((b) => ({ ...b, opacity: Number(e.target.value) }))} />
+          </label>
+          <button type="button" className={`pf-kind-chip ${bg.show ? 'is-on' : ''}`} aria-pressed={bg.show}
+            onClick={() => setBg((b) => ({ ...b, show: !b.show }))}>{bg.show ? 'Visibile' : 'Nascosto'}</button>
+        </div>
+      )}
+      {tool !== 'select' && tool !== 'bg' && tool !== 'cal' && (
         <div className="pf-sketch-kinds" role="radiogroup" aria-label="Tipo di stanza da disegnare">
           <span>Nuova stanza:</span>
           {SKETCH_KINDS.map((k) => (
@@ -241,7 +293,7 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={() => setDraft(null)}
-          style={{ cursor: tool === 'select' ? 'default' : 'crosshair' }}
+          style={{ cursor: tool === 'select' ? 'default' : tool === 'bg' ? 'move' : 'crosshair' }}
         >
           <defs>
             <pattern id="sketch-grid-minor" width={PX / 4} height={PX / 4} patternUnits="userSpaceOnUse">
@@ -252,6 +304,10 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
               <path d={`M ${PX} 0 L 0 0 0 ${PX}`} fill="none" stroke="currentColor" strokeOpacity="0.14" />
             </pattern>
           </defs>
+          {background && bg?.show && (
+            <image href={background.url} x={bg.x * PX} y={bg.y * PX} opacity={bg.opacity} preserveAspectRatio="none"
+              width={background.paper[0] * bg.scale * PX} height={background.paper[1] * bg.scale * PX} />
+          )}
           <rect width="100%" height="100%" fill="url(#sketch-grid)" />
 
           {shapes.map((s) => {
@@ -287,6 +343,12 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
               </text>
             </g>
           )}
+          {draft?.type === 'cal' && (
+            <g className="pf-sketch-cal">
+              <line x1={draft.a[0] * PX} y1={draft.a[1] * PX} x2={draft.b[0] * PX} y2={draft.b[1] * PX} stroke="#d92d20" strokeWidth="2" />
+              <text x={draft.b[0] * PX + 8} y={draft.b[1] * PX - 6} className="pf-sketch-label">{fmt(G.dist(draft.a, draft.b))} m</text>
+            </g>
+          )}
           {draft?.type === 'pen' && (
             <polyline points={draft.pts.map(([x, y]) => `${x * PX},${y * PX}`).join(' ')} className="pf-sketch-stroke" />
           )}
@@ -313,7 +375,7 @@ export default function SketchBoard({ initialShapes = [], onGenerate, onClose })
           </div>
         )}
 
-        {shapes.length === 0 && !draft && (
+        {shapes.length === 0 && !draft && !background && (
           <div className="pf-empty pf-sketch-empty">
             <PenTool size={36} color="var(--accent)" />
             <h3>Traccia il tuo spazio</h3>

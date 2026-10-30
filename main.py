@@ -6,6 +6,7 @@ Il motore vero è in planner.py (stessa cartella). Questo file espone solo l'API
 Avvio:   uvicorn main:app --reload
 Debug:   http://127.0.0.1:8000/preview?width=12&length=9&room_type=apartment&num_rooms=4&shape=l&seed=11
 """
+import base64
 import io
 from typing import Any, Dict, Iterator, List, Literal, Optional, Tuple, Union
 
@@ -19,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import pdf_import
 import planner
 
 app = FastAPI(
@@ -32,7 +34,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house"]
+            "garden_house", "street_garage", "pdf_import"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +114,11 @@ HouseFloor.model_rebuild()
 
 class DxfImportRequest(BaseModel):
     dxf_content: str
+    style: Optional[str] = "modern"
+
+
+class PdfImportRequest(BaseModel):
+    pdf_base64: str = Field(..., description="Il file PDF in base64")
     style: Optional[str] = "modern"
 
 
@@ -344,3 +351,21 @@ def import_dxf_endpoint(req: DxfImportRequest):
         return planner.import_dxf_data(req.dxf_content, style=req.style or "modern")
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {e}")
+
+
+@app.post("/import-pdf", response_model=PlanResponse)
+def import_pdf_endpoint(req: PdfImportRequest):
+    """PDF esportato da un CAD → planimetria arredata, come un DXF. Le scansioni (senza linee) rispondono 422
+    con raster = true: l'app le apre come sfondo da ricalcare."""
+    try:
+        data = base64.b64decode(req.pdf_base64, validate=False)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="PDF non valido")
+    if len(data) > 25_000_000:
+        raise HTTPException(status_code=413, detail="PDF troppo grande (massimo 25 MB)")
+    try:
+        return pdf_import.import_pdf_data(data, style=req.style or "modern")
+    except pdf_import.RasterPdf as e:
+        raise HTTPException(status_code=422, detail={"raster": True, "message": str(e)})
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore nell'importazione PDF: {e}")
