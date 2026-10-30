@@ -36,7 +36,7 @@ const WOOD_FLOORS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study
 const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 
 import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
-import { stairSteps } from './stairs3d';
+import { stairHoles, stairSteps } from './stairs3d';
 import { projectStairs } from './stairs';
 
 export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [] } = {}) {
@@ -211,6 +211,12 @@ export const FLOOR_H = WALL_H + SLAB_T;
  * themeFor(floor) dà lo stile di ogni piano. Ogni gruppo di piano porta userData.floor = { id, name, level };
  * house.userData.grade è la quota del terreno.
  */
+/* Aperture di un piano per le scale che salgono dal piano sotto (scale del motore con downTo, del progetto con role down). */
+function floorVoids(stairs) {
+  return (stairs || []).filter((st) => (st.engine ? st.downTo : st.role === 'down'))
+    .flatMap((st) => stairHoles(st, WALL_H + SLAB_T));
+}
+
 export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0 } = {}) {
   const house = new THREE.Group();
   house.userData.grade = 0;
@@ -224,7 +230,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   for (const f of floors) {
     // le scale partono dal piano e salgono al successivo: sul piano di sopra non si disegnano
     const up = (byFloor[f.id] || []).filter((st) => st.engine ? st.upTo : st.role === 'up');
-    const voids = f.level === lowest ? [] : (byFloor[f.id] || []).filter((st) => (st.engine ? st.downTo : st.role === 'down'));
+    const voids = f.level === lowest ? [] : floorVoids(byFloor[f.id]);
     const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids });
     const y = quota(f.level);
     g.position.y = y;
@@ -234,28 +240,17 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     // solaio sotto il piano: un volume per locale, nessuno sopra la scala (il vano resta aperto)
     for (const r of f.plan.rooms) {
       if (r.kind === 'garden') continue;
-      // il vano scala ha il solaio solo attorno all'apertura (la fascia dei muri): senza, in facciata resta un buco
-      const opening = r.kind === 'stairs'
-        ? (byFloor[f.id] || []).find((q) => q.engine && q.downTo && q.x >= r.x - 0.01 && q.x + q.w <= r.x + r.w + 0.01
-          && q.y >= r.y - 0.01 && q.y + q.h <= r.y + r.h + 0.01)
-        : null;
-      if (r.kind === 'stairs' && !opening) continue;
+      // il solaio ha l'apertura dove la scala sale dal piano sotto; sul vano scala resta la fascia attorno e lo spazio di arrivo
+      const holes = floorVoids(byFloor[f.id]).filter((v) => v.x >= r.x - 0.01 && v.x + v.w <= r.x + r.w + 0.01
+        && v.y >= r.y - 0.01 && v.y + v.h <= r.y + r.h + 0.01);
       const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
       const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
-      // il vano della scala che sale dal piano sotto resta aperto
-      if (opening) {
+      for (const v of holes) {
         const hole = new THREE.Path();
-        [[opening.x, opening.y], [opening.x, opening.y + opening.h], [opening.x + opening.w, opening.y + opening.h],
-          [opening.x + opening.w, opening.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
+        [[v.x, v.y], [v.x, v.y + v.h], [v.x + v.w, v.y + v.h], [v.x + v.w, v.y]].forEach(([x, z], k) => (k ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
         shape.holes.push(hole);
       }
-      for (const st of (byFloor[f.id] || []).filter((q) => !q.engine && q.role === 'down')) {
-        if (st.x >= r.x && st.x + st.w <= r.x + r.w && st.y >= r.y && st.y + st.h <= r.y + r.h) {
-          const hole = new THREE.Path();
-          [[st.x, st.y], [st.x, st.y + st.h], [st.x + st.w, st.y + st.h], [st.x + st.w, st.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
-          shape.holes.push(hole);
-        }
-      }
+      if (r.kind === 'stairs' && !holes.length) continue;
       const slab = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: SLAB_T, bevelEnabled: false }), slabMat);
       slab.rotation.x = -Math.PI / 2;
       slab.position.y = y - SLAB_T;
