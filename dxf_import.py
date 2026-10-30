@@ -73,8 +73,9 @@ ROOM_WORDS = [
     (r"studio|ufficio|office|study|estudio|despacho", "study", "Studio"),
     (r"lavander|laundry|washing|lavado|lavanderia", "laundry", "Lavanderia"),
     (r"guardarob|cabina armadi|closet|vestidor|walk.?in|clothing", "closet", "Guardaroba"),
-    (r"ripost|\brip\b|deposito|cantina|storage|dispensa|pantry|despensa|bodega|service room|cuarto de servicio|utility", "storage", "Ripostiglio"),
-    (r"garage|\bbox\b|autorimessa|garaje|cochera|carport", "garage", "Garage"),
+    (r"ripost|\brip\b|deposito|cantina|storage|dispensa|pantry|despensa|bodega|service room|cuarto de servicio|utility|"
+     r"vano tecn|locale tecn|centrale termica|non fruibile", "storage", "Ripostiglio"),
+    (r"garage|\bbox\b|autorimessa|garaje|cochera|carport|\b[gc]?arag", "garage", "Garage"),   # «ARAG»: OCR del catasto
 ]
 OUTSIDE_WORDS = re.compile(r"balcon|terrazz|terraza|terrace|loggia|portico|porche|porch|veranda|giardin|jardin|garden|cortile|patio|"
                            r"esterno|gallery|galeria|marquee|marquesina|deck|piscina|pool", re.I)
@@ -605,8 +606,11 @@ def _drawings(hp, vp, texts_m):
 # ----------------------------------------------------------------------------
 # procedura completa
 # ----------------------------------------------------------------------------
-def import_real_dxf(text: str, Layout, Opening, snap):
-    """DXF di studio → planner.Layout con stanze, porte e finestre (non arredato), o None."""
+def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
+    """DXF di studio → planner.Layout con stanze, porte e finestre (non arredato), o None.
+
+    scan = linee ricavate da una scansione (planimetria catastale): i simboli di porte e finestre si leggono male,
+    quindi ogni varco nei muri fino a 1,4 m chiude il locale (è una porta o una finestra)."""
     if ezdxf is None:
         return None
     data = _read(text)
@@ -711,7 +715,10 @@ def import_real_dxf(text: str, Layout, Opening, snap):
         # senza un indizio (arco, blocco, vetro) chiude i locali solo un varco tra due tratti largo come una porta
         # (spesso il simbolo c'è ma non si aggancia); la fine di un muro dentro un locale o un passaggio più largo
         # (un corridoio che attraversa) restano aperti. Se poi l'esterno entra da lì, li chiude la seconda passata.
-        if (at_end or g1 - g0 > DOOR_LIKE) and \
+        if scan:
+            if g1 - g0 > 1.4:
+                continue
+        elif (at_end or g1 - g0 > DOOR_LIKE) and \
                 _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, False)[0] == "passage":
             continue
         gaps.append((orient, (c, g0, g1, t)))
