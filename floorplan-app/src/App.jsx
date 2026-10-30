@@ -11,6 +11,7 @@ import './apple.css';
 import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME } from './constants';
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
+import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
@@ -50,7 +51,7 @@ import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
 import { engineStair, neighbourCore, neighbourWet, projectStairs, stairNote, stairsFit } from './lib/stairs';
-import { HOUSE_PRESETS, floorName, houseFloorsRequest, suggestProgram } from './lib/house';
+import { HOUSE_PRESETS, floorName, houseFloorsRequest, houseShift, suggestProgram } from './lib/house';
 
 const REQUEST_TIMEOUT_MS = 90000;
 const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
@@ -123,7 +124,7 @@ export default function App() {
     garageLaundry: true, garageStorage: true,
     // casa su più piani (vedi lib/house.js)
     house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto',
-    houseGarage: false,
+    houseGarage: false, garageMode: 'basement',
     floorProgram: 'full',
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -178,6 +179,17 @@ export default function App() {
   const svgRef = useRef(null);
   const stageRef = useRef(null);
   const dxfInputRef = useRef(null);
+  const exportRef = useRef(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  // il menu «Esporta» si chiude cliccando altrove o con Esc
+  useEffect(() => {
+    if (!exportOpen) return undefined;
+    const away = (e) => { if (!exportRef.current?.contains(e.target)) setExportOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setExportOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [exportOpen]);
   const fitRef = useRef(1);
   const [stage, setStage] = useState({ w: 0, h: 0 });
 
@@ -585,6 +597,7 @@ export default function App() {
       rot: 0,
       facing: 'S',
       room: roomId,
+      ...(entry.parts && { parts: entry.parts }),
     };
     editFurniture((list) => [...list, item]);
     say(`${entry.label} aggiunto`);
@@ -598,7 +611,8 @@ export default function App() {
   /* Progetto nuovo con tutti i piani della casa (risposta di /generate-house). */
   const openHouse = (res) => {
     const floors = res.floors.map(({ level, program, plan: p }) => {
-      const spec = form.houseFloors.find((f) => f.level === level) || { level, program };
+      const shift = engineHas('street_garage') ? houseShift(form) : 0;
+      const spec = { ...(form.houseFloors.find((f) => f.level + shift === level) || { program }), level };
       const type = program === 'garage' ? 'garage' : 'apartment';
       return makeFloor({
         name: floorName(spec), level, plan: p,
@@ -718,7 +732,7 @@ export default function App() {
       if (houseMode) {
         const req = {
           width: clamp(w, 3.5, 60), length: clamp(l, 3.5, 60), style: form.style, seed: requestSeed,
-          stair_type: form.stairType, floors: houseFloorsRequest(form),
+          stair_type: form.stairType, floors: houseFloorsRequest(form, { street: engineHas('street_garage') }),
         };
         const house = async () => readJson(await postJson(base, '/generate-house', req, controller.signal));
         let res;
@@ -813,12 +827,44 @@ export default function App() {
     }
   };
 
+  /*
+   * Import PDF: quelli esportati da un CAD li legge il motore come un DXF; le scansioni (o il motore senza la
+   * lettura PDF) si aprono nello schizzo con la pagina come sfondo da ricalcare.
+   */
+  const importPdf = async (file) => {
+    const name = file.name.replace(/\.pdf$/i, '');
+    if (base && engineHas('pdf_import')) {
+      say('Lettura del PDF in corso…');
+      try {
+        const data = await readJson(await postJson(base, '/import-pdf', { pdf_base64: await fileToBase64(file), style: form.style }));
+        openNewPlan(data, { type: 'pdf' }, { name });
+        say('Pianta PDF importata e arredata');
+        return;
+      } catch (err) {
+        if (!/HTTP 422/.test(err.message)) setError(`Il PDF non si legge come disegno CAD (${err.message}): puoi ricalcarlo.`);
+      }
+    }
+    try {
+      const background = await pdfPageImage(file);
+      setSketch({ shapes: [], background: { ...background, name } });
+      say(background.scaleFound
+        ? `PDF senza linee di disegno: ricalca le stanze sopra la pianta (scala 1:${background.scale} letta sul foglio)`
+        : 'PDF senza linee di disegno: ricalca le stanze sopra la pianta, dopo aver controllato la scala');
+    } catch (err) {
+      setError(`Non riesco ad aprire il PDF: ${err.message}`);
+    }
+  };
+
   /* ── Import DXF: prima il motore, poi il parser locale ── */
   const handleDxfFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setError(null);
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      await importPdf(file);
+      return;
+    }
     say('Importazione DXF in corso…');
     try {
       const text = await file.text();
@@ -970,9 +1016,21 @@ export default function App() {
   const area = (parseFloat(form.width) || 0) * (parseFloat(form.length) || 0);
   const toggle = (k) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
+  /* esportazioni: in riga quando c'è spazio, in un menu «Esporta» quando la colonna centrale è stretta */
+  const exportItems = [
+    { key: 'svg', label: 'SVG', Icon: Download, onClick: exportSvg, title: 'Scarica SVG' },
+    { key: 'png', label: 'PNG', Icon: ImageIcon, onClick: exportPng, title: 'Scarica PNG' },
+    { key: 'dxf', label: 'DXF (CAD)', Icon: Briefcase, onClick: exportDxf, accent: true, title: 'Scarica DXF per il CAD' },
+    { key: 'json', label: 'JSON', Icon: FileJson, onClick: exportJson, title: 'Scarica JSON' },
+    { key: 'pdf', label: 'PDF progetto', Icon: FileText, onClick: exportPdf, accent: true,
+      title: 'Esporta progetto PDF: copertina, tutti i piani con i sensori e distinta materiali' },
+    { key: 'share', label: 'Condividi', Icon: Link2, onClick: shareProject,
+      title: 'Copia un link per vedere il progetto in sola lettura (nessun server: il progetto è nel link)' },
+  ];
+
   return (
     <div className="pf-app" data-theme={theme}>
-      <input type="file" accept=".dxf" ref={dxfInputRef} onChange={handleDxfFile} hidden />
+      <input type="file" accept=".dxf,.pdf,application/pdf" ref={dxfInputRef} onChange={handleDxfFile} hidden />
 
       <header className="pf-top">
         <div className="pf-brand">
@@ -1085,7 +1143,7 @@ export default function App() {
                 </p>
               )}
               {form.roomType === 'apartment' && engineHas('stairs') && (pendingFloor ? hasNeighbour(pendingFloor.level) : engineHas('house')) && (
-                <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')}
+                <HouseOptions form={form} setF={setF} pending={pendingFloor} garage={engineHas('garage_stairs')} streetGarage={engineHas('street_garage')}
                   stairFixed={!!pendingFloor && !!neighbourCore(current, pendingFloor.level)} />
               )}
               {form.roomType === 'apartment' ? (
@@ -1200,22 +1258,22 @@ export default function App() {
                 ['technical', PencilRuler, 'Tecnico']]
                 .map(([k, Icon, label]) => (
                   <button key={k} type="button" className={`pf-tool ${layers[k] ? 'is-on' : ''}`} aria-pressed={layers[k]}
-                    onClick={() => toggle(k)}><Icon size={15} /> {label}</button>
+                    onClick={() => toggle(k)} title={label}><Icon size={15} /> <span className="pf-tl">{label}</span></button>
                 ))}
               {devices?.length > 0 && (
                 <button type="button" className={`pf-tool ${layers.alarm ? 'is-on' : ''}`} aria-pressed={layers.alarm}
-                  onClick={() => toggle('alarm')}><ShieldCheck size={15} /> Allarme</button>
+                  onClick={() => toggle('alarm')} title="Allarme"><ShieldCheck size={15} /> <span className="pf-tl">Allarme</span></button>
               )}
               {electricCfg && (
                 <button type="button" className={`pf-tool ${showElectric ? 'is-on' : ''}`} aria-pressed={showElectric}
                   onClick={() => setSheet(showElectric ? 'arch' : 'electric')} title="Tavola dell'impianto elettrico">
-                  <Zap size={15} /> Elettrico
+                  <Zap size={15} /> <span className="pf-tl">Elettrico</span>
                 </button>
               )}
               {plumbingCfg && (
                 <button type="button" className={`pf-tool ${showPlumbing ? 'is-on' : ''}`} aria-pressed={showPlumbing}
                   onClick={() => setSheet(showPlumbing ? 'arch' : 'plumbing')} title="Tavola dell'impianto idraulico">
-                  <Droplets size={15} /> Idraulico
+                  <Droplets size={15} /> <span className="pf-tl">Idraulico</span>
                 </button>
               )}
             </div>
@@ -1241,11 +1299,11 @@ export default function App() {
               {view3d && (
                 <>
                   <button type="button" className="pf-tool" onClick={export3dPng} title="Immagine della vista 3D così come la vedi">
-                    <ImageIcon size={15} /> PNG 3D
+                    <ImageIcon size={15} /> <span className="pf-tl">PNG 3D</span>
                   </button>
                   <button type="button" className="pf-tool" onClick={export3dDxf}
                     title="Modello 3D per il CAD (facce 3D, layer per piano e tipo: muri, vetri, pavimenti, arredi, solai)">
-                    <Download size={15} /> DXF 3D
+                    <Download size={15} /> <span className="pf-tl">DXF 3D</span>
                   </button>
                 </>
               )}
@@ -1261,11 +1319,11 @@ export default function App() {
             <div className="pf-group" role="group" aria-label="Disegno e import">
               <button type="button" className="pf-tool pf-tool-accent" onClick={() => dxfInputRef.current?.click()}
                 title="Carica una pianta dal CAD: muri, porte, finestre e locali vengono ricostruiti dal disegno">
-                <Upload size={15} /> Importa DXF
+                <Upload size={15} /> <span className="pf-tl-keep">Importa DXF o PDF</span>
               </button>
               <button type="button" className={`pf-tool ${sketch ? 'is-on' : ''}`}
-                onClick={() => setSketch(sketch ? null : { shapes: [] })}>
-                <PenTool size={15} /> Disegna schizzo
+                onClick={() => setSketch(sketch ? null : { shapes: [] })} title="Disegna schizzo">
+                <PenTool size={15} /> <span className="pf-tl">Disegna schizzo</span>
               </button>
             </div>
 
@@ -1275,26 +1333,30 @@ export default function App() {
               <button type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z / 1.2, 0.2, 3))}
                 aria-label="Riduci" title="Riduci"><ZoomOut size={15} /></button>
               <button type="button" className="pf-tool pf-pct" disabled={!plan} onClick={() => setZoom(null)}
-                title="Adatta alla finestra"><Scan size={14} /> {Math.round(z * 100)}%</button>
+                title="Adatta alla finestra"><Scan size={14} className="pf-tl" /> {Math.round(z * 100)}%</button>
               <button type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z * 1.2, 0.2, 3))}
                 aria-label="Ingrandisci" title="Ingrandisci"><ZoomIn size={15} /></button>
             </div>
 
-            <div className="pf-group" role="group" aria-label="Esporta">
-              <button type="button" className="pf-tool" disabled={!plan} onClick={exportSvg}><Download size={15} /> SVG</button>
-              <button type="button" className="pf-tool" disabled={!plan} onClick={exportPng}><ImageIcon size={15} /> PNG</button>
-              <button type="button" className="pf-tool pf-tool-accent" disabled={!plan} onClick={exportDxf}>
-                <Briefcase size={15} /> DXF (CAD)
+            <div className="pf-group pf-export-inline" role="group" aria-label="Esporta">
+              {exportItems.map(({ key, label, Icon, onClick, accent, title }) => (
+                <button key={key} type="button" className={`pf-tool ${accent ? 'pf-tool-accent' : ''}`} disabled={!plan}
+                  onClick={onClick} title={title}><Icon size={15} /> <span className="pf-tl">{label}</span></button>
+              ))}
+            </div>
+            <div className="pf-group pf-export-more" ref={exportRef}>
+              <button type="button" className={`pf-tool ${exportOpen ? 'is-on' : ''}`} disabled={!plan} aria-haspopup="menu"
+                aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)} title="Esporta e condividi">
+                <Download size={15} /> <span className="pf-tl-keep">Esporta</span> <ChevronDown size={13} />
               </button>
-              <button type="button" className="pf-tool" disabled={!plan} onClick={exportJson}><FileJson size={15} /> JSON</button>
-              <button type="button" className="pf-tool pf-tool-accent" disabled={!plan} onClick={exportPdf}
-                title="Esporta progetto PDF: copertina, tutti i piani con i sensori e distinta materiali">
-                <FileText size={15} /> PDF progetto
-              </button>
-              <button type="button" className="pf-tool" disabled={!plan} onClick={shareProject}
-                title="Copia un link per vedere il progetto in sola lettura (nessun server: il progetto è nel link)">
-                <Link2 size={15} /> Condividi
-              </button>
+              {exportOpen && (
+                <div className="pf-export-menu" role="menu">
+                  {exportItems.map(({ key, label, Icon, onClick, accent, title }) => (
+                    <button key={key} type="button" role="menuitem" className={`pf-tool ${accent ? 'pf-tool-accent' : ''}`}
+                      title={title} onClick={() => { setExportOpen(false); onClick(); }}><Icon size={15} /> {label}</button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1316,7 +1378,7 @@ export default function App() {
 
           <div className="pf-canvas" ref={stageRef}>
             {sketch ? (
-              <SketchBoard initialShapes={sketch.shapes}
+              <SketchBoard initialShapes={sketch.shapes} background={sketch.background}
                 onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
                 onGenerate={generateFromSketch} />
             ) : plan && view3d ? (
@@ -1359,7 +1421,7 @@ export default function App() {
                     <path d="M92 130a14 14 0 0 1 14-14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 3" />
                   </svg>
                   <h3>Inizia a progettare</h3>
-                  <p>Scegli le misure e clicca <b>«Genera planimetria»</b>, oppure <b>«Importa DXF»</b> da un disegno CAD o <b>«Disegna schizzo»</b>.</p>
+                  <p>Scegli le misure e clicca <b>«Genera planimetria»</b>, oppure <b>«Importa DXF o PDF»</b> da un disegno CAD o <b>«Disegna schizzo»</b>.</p>
                   {!backendUrl && (
                     <button type="button" className="pf-link" onClick={() => setConnOpen(true)}>Configura backend</button>
                   )}

@@ -3,6 +3,8 @@
  * Pianta in metri: x → x, y → z, altezza → y. Muri alti WALL_H con i vani di porte (fino a 2,10 m) e
  * finestre (da 0,90 a 2,10 m, con il vetro); arredi come volumi con altezze reali e i colori dello stile.
  */
+import { frontOf } from './project';
+
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
 const SILL = 0.9;
@@ -15,7 +17,8 @@ const SHAPES = {
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
   kitchen_peninsula: [0.9, 'counter'], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
   shoe_cabinet: [1.0, 'cabinet'], console: [0.8, 'wood'], floor_lamp: [1.6, 'lamp'], plant: [1.0, 'plant'],
-  toilet: [0.45, 'ceramic'], bidet: [0.4, 'ceramic'], sink: [0.85, 'ceramic'], shower: [0.06, 'ceramic'],
+  toilet: [0.45, 'ceramic'], bidet: [0.4, 'ceramic'], sink: [0.85, 'ceramic'], bath_column: [1.8, 'cabinet'],
+  towel_radiator: [1.2, 'ceramic', 0.2], shower: [0.06, 'ceramic'],
   shower_round: [0.06, 'ceramic'], shower_walkin: [0.06, 'ceramic'], bathtub: [0.55, 'ceramic'],
   washer: [0.85, 'ceramic'], dryer: [0.85, 'ceramic'], utility_sink: [0.85, 'ceramic'], minibar: [0.85, 'cabinet'],
   car: [1.45, 'car'], motorbike: [1.1, 'dark'], workbench: [0.9, 'wood'], shelving: [1.8, 'metal'],
@@ -147,6 +150,10 @@ export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
       else if (f === 'N') box(it.x, it.y + it.h - back, it.w, back, 0.42, h - 0.42, material);
       else if (f === 'E') box(it.x, it.y, back, it.h, 0.42, h - 0.42, material);
       else box(it.x + it.w - back, it.y, back, it.h, 0.42, h - 0.42, material);
+    } else if (it.type === 'sink' && it.parts?.cabinet) {
+      // lavabo su mobile: mobile con i cassetti e piano in ceramica
+      box(it.x, it.y, it.w, it.h, 0.15, 0.62, M.cabinet);
+      box(it.x, it.y, it.w, it.h, 0.77, 0.08, M.ceramic);
     } else if (it.type === 'bed') {
       box(it.x, it.y, it.w, it.h, 0, 0.3, M.wood);
       box(it.x + 0.03, it.y + 0.03, it.w - 0.06, it.h - 0.06, 0.3, 0.25, M.duvet);
@@ -172,20 +179,25 @@ export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
 export const FLOOR_H = WALL_H + SLAB_T;
 
 /*
- * Tutta la casa in 3D: i piani del progetto (livelli numerici; l'esterno resta fuori) impilati alla loro quota, con
- * un solaio sotto ogni piano più alto del più basso, aperto sopra la scala. `spread` stacca i piani (vista esplosa).
- * themeFor(floor) dà lo stile di ogni piano. Ogni gruppo di piano porta userData.floor = { id, name, level }.
+ * Tutta la casa in 3D: i piani del progetto impilati alla loro quota (il piano terra a quota 0, l'interrato sotto
+ * terra), con un solaio sotto ogni piano più alto del più basso, aperto sopra la scala. `spread` stacca i piani
+ * (vista esplosa). Il giardino si mette davanti alla facciata d'ingresso, dove lo mette la sua pianta, alla quota
+ * del terreno; con il garage interrato la sua rampa scende fino alla basculante, tra due muri di contenimento.
+ * themeFor(floor) dà lo stile di ogni piano. Ogni gruppo di piano porta userData.floor = { id, name, level };
+ * house.userData.grade è la quota del terreno.
  */
 export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0 } = {}) {
   const house = new THREE.Group();
+  house.userData.grade = 0;
   const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
     .sort((a, b) => a.level - b.level);
   if (!floors.length) return house;
   const lowest = floors[0].level;
+  const quota = (level) => level * (FLOOR_H + spread);
   const slabMat = new THREE.MeshStandardMaterial({ color: '#d9d6cf', roughness: 0.9 });
   for (const f of floors) {
     const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls });
-    const y = (f.level - lowest) * (FLOOR_H + spread);
+    const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
     house.add(g);
@@ -205,5 +217,78 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
       house.add(slab);
     }
   }
+  const garden = project.floors.find((f) => f.level === 'out' && f.plan?.rooms?.length);
+  const front = garden && frontOf(project);
+  if (front) {
+    const garage = floors.find((f) => f.level < front.floor.level && f.plan.doors.some((d) => d.kind === 'garage'));
+    house.add(placeGarden(THREE, garden, front, themeFor(garden), garage ? quota(garage.level) - quota(front.floor.level) : 0));
+  }
   return house;
+}
+
+/*
+ * Il giardino nella pianta del piano terra. Nel giardino la casa sta sul lato nord (y = 0), con la facciata da
+ * plan.house.x; si ruota e si sposta perché quel lato combaci con la facciata d'ingresso vera. `drop` = di quanto
+ * scende la rampa del garage interrato (negativo), 0 se non c'è.
+ */
+function placeGarden(THREE, floor, { facade, W, L }, theme, drop) {
+  const p = floor.plan;
+  const hx = p.house?.x ?? (p.dimensions.width - facade.w) / 2;
+  const ramps = drop < 0 ? p.furniture.filter((it) => it.type === 'ramp') : [];
+  // il prato ha un buco dove c'è la rampa (che parte dalla facciata, y = 0)
+  const rooms = p.rooms.map((r) => {
+    const cut = ramps.find((it) => it.y <= r.y + 0.01 && it.x >= r.x && it.x + it.w <= r.x + r.w);
+    if (!cut || r.poly) return r;
+    return { ...r, poly: [[r.x, r.y], [cut.x, r.y], [cut.x, cut.y + cut.h], [cut.x + cut.w, cut.y + cut.h],
+      [cut.x + cut.w, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]] };
+  });
+  const g = buildScene(THREE, { ...p, rooms, furniture: p.furniture.filter((it) => !ramps.includes(it)) }, theme);
+  const concrete = new THREE.MeshStandardMaterial({ color: '#c9ccd1', roughness: 0.9, side: THREE.DoubleSide });
+  for (const it of ramps) {
+    // piano inclinato dalla quota del terreno (verso la strada) alla quota del garage (alla facciata)
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      it.x, drop, it.y, it.x + it.w, drop, it.y, it.x + it.w, 0, it.y + it.h,
+      it.x, drop, it.y, it.x + it.w, 0, it.y + it.h, it.x, 0, it.y + it.h,
+    ], 3));
+    geo.computeVertexNormals();
+    const ramp = new THREE.Mesh(geo, concrete);
+    ramp.receiveShadow = true;
+    ramp.userData.layer = 'PAVIMENTI';
+    g.add(ramp);
+    for (const x of [it.x - 0.2, it.x + it.w]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3 - drop, it.h), concrete);
+      wall.position.set(x + 0.1, (0.3 + drop) / 2, it.y + it.h / 2);
+      wall.castShadow = wall.receiveShadow = true;
+      wall.userData.layer = 'MURI';
+      g.add(wall);
+    }
+  }
+  const place = {
+    S: [0, -hx, L], N: [Math.PI, W + hx, 0], E: [Math.PI / 2, W, L + hx], W: [-Math.PI / 2, 0, -hx],
+  }[facade.front];
+  g.rotation.y = place[0];
+  g.position.set(place[1], 0, place[2]);
+  g.userData.floor = { id: floor.id, name: floor.name, level: 'out' };
+  return g;
+}
+
+/*
+ * Terreno sotto il modello, alla quota del terreno (model.userData.grade, se c'è): con i piani interrati è
+ * trasparente, così l'interrato si vede attraverso. Ritorna centro e ingombro per luce e inquadratura.
+ */
+export function addGround(THREE, scene, model) {
+  const bb = new THREE.Box3().setFromObject(model);
+  const grade = model.userData.grade ?? bb.min.y;
+  const below = bb.min.y < grade - 0.5;
+  const size = bb.getSize(new THREE.Vector3());
+  const center = bb.getCenter(new THREE.Vector3());
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(size.x + 20, size.z + 20), new THREE.MeshStandardMaterial({
+    color: '#e4e8ee', ...(below && { transparent: true, opacity: 0.5, depthWrite: false }),
+  }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(center.x, grade - 0.01, center.z);
+  ground.receiveShadow = true;
+  scene.add(ground);
+  return { bb, center, size };
 }

@@ -1,13 +1,13 @@
 /*
  * Scena 3D (lib/scene3d.js) → DXF R12 con facce 3D (3DFACE), in metri, Z verso l'alto.
- * Layer per piano e per tipo: «PT_MURI», «P1_ARREDI», «P1_SOLAI»… (senza prefisso per un solo piano).
+ * Layer per piano e per tipo: «PT_MURI», «P1_ARREDI», «P1_SOLAI», «EST_ARREDI» (giardino)… (senza prefisso per un solo piano).
  * Le facce delle scatole (muri, arredi) escono come quadrilateri, il resto (pavimenti, sfere, cilindri) a triangoli.
  */
 const COLORS = { MURI: 7, VETRI: 4, PAVIMENTI: 8, ARREDI: 30, SOLAI: 9 };
 const n3 = (v) => (Math.round(v * 1000) / 1000).toString();
 
 /* Sigla del piano per i layer: PT, P1, P2, S1 (interrato)… */
-const floorTag = (level) => (level === 0 ? 'PT' : level > 0 ? `P${level}` : `S${-level}`);
+const floorTag = (level) => (level === 'out' ? 'EST' : level === 0 ? 'PT' : level > 0 ? `P${level}` : `S${-level}`);
 
 export function sceneToDxf(THREE, root) {
   root.updateMatrixWorld(true);

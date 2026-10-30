@@ -825,12 +825,14 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
                 P.place_beside(room, "bidet", wc, 0.38, 0.55, gap=0.25, sides=("left",), front=0.5)
         double = area >= 7.0 and max(inn.w, inn.h) >= 2.4
         return bool((double and P.place_wall(room, "sink", 1.2, 0.5, sink_sides, gap=0.1, front=0.5)) or
+                    (area >= 4.5 and P.place_wall(room, "sink", 0.8, 0.5, sink_sides, gap=0.1, front=0.5)) or
                     P.place_wall(room, "sink", 0.6, 0.5, sink_sides, gap=0.1, front=0.45) or
                     P.place_wall(room, "sink", 0.5, 0.4, sink_sides, gap=0.05, front=0.3))
 
     tub_ok = shower and main_bath and area >= 5.5 and max(inn.w, inn.h) >= 1.75
     for with_tub in ((True, False) if tub_ok else (False,)):
         if attempt(with_tub):
+            _bath_extras(P, room)
             return True
     # secondo giro: la porta si apre verso l'esterno per liberare spazio
     for d in lay.doors:
@@ -838,9 +840,29 @@ def furnish_bath(P: Placer, room: Room, shower: bool = True) -> bool:
             d.swing_into = d.room_a if d.room_b == room.id else d.room_b
     P.invalidate()
     if attempt(False):
+        _bath_extras(P, room)
         return True
     lay.notes.append(f"{room.name}: spazio insufficiente per tutti i sanitari")
     return False
+
+
+def _bath_extras(P: Placer, room: Room) -> None:
+    """Il bagno arredato, dopo i sanitari e solo nello spazio che resta libero: mobile sotto il lavabo (da 60 cm in
+    su), scaldasalviette vicino a doccia o vasca e una colonna contenitore su un muro libero."""
+    items = P.placed[room.id]
+    sink = next((it for it in items if it.type == "sink"), None)
+    if sink and max(sink.rect.w, sink.rect.h) >= 0.6 - EPS:
+        sink.parts = {"cabinet": 1.0}
+    wash = next((it for it in items if it.type in ("shower", "shower_round", "shower_walkin", "bathtub")), None)
+    if wash:
+        inn = P.inner(room)
+        dist = {"N": wash.rect.y - inn.y, "S": inn.y2 - wash.rect.y2, "W": wash.rect.x - inn.x, "E": inn.x2 - wash.rect.x2}
+        for side in sorted("NSEW", key=lambda k: dist[k]):
+            if P.place_wall(room, "towel_radiator", 0.5, 0.1, side, gap=0.1, front=0.5,
+                            target=wash.rect.cx if side in "NS" else wash.rect.cy):
+                break
+    P.place_wall(room, "bath_column", 0.4, 0.35, P.sides_far_from_door(room), order="end", gap=0.05, front=0.55,
+                 avoid_windows=True)
 
 
 # chi siede alla scrivania appoggiata al muro `side` guarda verso quel muro: ha alla sua sinistra questo lato
@@ -1203,10 +1225,34 @@ def furnish_kitchen(P: Placer, room: Room):
         return
     if want and not peninsula:
         P.lay.notes.append(f"{room.name}: la penisola non entra (servono circa 2 × 2,5 m liberi oltre al piano)")
-    if room.rect.w * room.rect.h >= 8 and not peninsula:
-        for typ, w, h in (("table_round", 1.0, 1.0), ("table", 1.2, 0.8), ("table_round", 0.8, 0.8)):
-            if P.place_free(room, typ, w, h, gap=0.75, zone_gap=0.3):
-                break
+    if not _table_first(P, room, lambda: _kitchen_table(P, room)):
+        P.lay.notes.append(f"{room.name}: il tavolo non entra")
+
+
+def _kitchen_table(P: Placer, room: Room, near=None) -> bool:
+    """Un tavolo in cucina c'è sempre: al centro se c'è spazio, sennò più piccolo, sennò appoggiato a un muro."""
+    for typ, w, h, gap in (("table_round", 1.0, 1.0, 0.75), ("table", 1.2, 0.8, 0.75),
+                           ("table_round", 0.8, 0.8, 0.6), ("table", 1.0, 0.7, 0.6)):
+        if P.place_free(room, typ, w, h, near=near, gap=gap, zone_gap=0.3):
+            return True
+    sides = P.sides_far_from_door(room)
+    return any(P.place_wall(room, "table", w, h, sides + [x for x in "NSEW" if x not in sides], gap=0.1,
+                            front=front, zone_gap=zg)
+               for w, h, front, zg in ((1.2, 0.8, 0.7, 0.3), (0.8, 0.6, 0.6, 0.3), (0.8, 0.6, 0.5, 0.0)))
+
+
+def _table_first(P: Placer, room: Room, place) -> bool:
+    """Il tavolo ha la precedenza sulla penisola: se non entrano tutti e due, la penisola si toglie."""
+    if place():
+        return True
+    pen = [it for it in P.placed[room.id] if it.type == "kitchen_peninsula"]
+    for it in pen:
+        P.remove(it)
+    if pen and place():
+        P.lay.notes.append(f"{room.name}: penisola tolta per far posto al tavolo")
+        return True
+    P.placed[room.id].extend(pen)
+    return False
 
 
 def _view_zone(P: Placer, room: Room) -> Optional[Item]:
@@ -1257,8 +1303,8 @@ def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
             P.lay.notes.append(f"{room.name}: angolo cottura non inserito")
         elif want and not peninsula:
             P.lay.notes.append(f"{room.name}: la penisola non entra con questo soggiorno")
-        if not peninsula:
-            _place_dining(P, room, near=(counter.rect.cx, counter.rect.cy) if counter else None)
+        near = (counter.rect.cx, counter.rect.cy) if counter else None
+        _table_first(P, room, lambda: _place_dining(P, room, near=near) or _kitchen_table(P, room, near=near))
     has_dining = any(r.kind == "dining" and r.group == room.group for r in P.lay.rooms)
     media = _place_media(P, room) or _place_media_free(P, room)
     if not media and with_kitchen:
@@ -1268,7 +1314,17 @@ def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
             P.remove(it)
         media = _place_media(P, room) or _place_media_free(P, room)
         if tables:
-            _place_dining(P, room, near=(counter.rect.cx, counter.rect.cy) if counter else None)
+            near = (counter.rect.cx, counter.rect.cy) if counter else None
+            place = lambda: _place_dining(P, room, near=near) or _kitchen_table(P, room, near=near)  # noqa: E731
+            if not _table_first(P, room, place):
+                # il tavolo conta più del tavolino da salotto
+                for it in [it for it in P.placed[room.id] if it.type == "coffee_table"]:
+                    P.remove(it)
+                    if place():
+                        break
+                    P.placed[room.id].append(it)
+    if with_kitchen and not any(it.type in ("table", "table_round") for it in P.placed[room.id]):
+        P.lay.notes.append(f"{room.name}: il tavolo non entra")
     if not media and area >= 14:
         P.lay.notes.append(f"{room.name}: zona TV/divano non inserita")
     if not with_kitchen and area >= 18 and not has_dining:
@@ -2251,6 +2307,13 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
         boxes.sort(key=lambda r: (not (front(r) and span(r) >= 1.2), -span(r)))
         if boxes:
             lay.add_door(st.id, boxes[0].id, DOOR_W, 0.5, into=st.id)
+        if needs.get("street"):
+            # garage al piano strada: il vano scala è anche l'ingresso della casa, con la porta verso fuori
+            ext = [x for x in ("S", "E", "W", "N") if x in lay.ext_sides(st)]
+            if ext:
+                lay.add_entrance(st.id, ext[0], DOOR_W, 0.5)
+            else:
+                lay.notes.append("Il vano scala non tocca la facciata: si entra in casa passando dal garage.")
     cars = int(clamp((garage.rect.w - 0.4) // 2.8, 1, 3))
     if rooms and L - strip < 6.4 and cars > 1:
         # box poco profondo: il passaggio verso i servizi sul fondo occupa lo spazio di un posto auto
@@ -3209,13 +3272,20 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         raise ValueError("nessun piano richiesto")
     levels = [f.get("level", 0) for f in floors]
     entry = levels.index(0) if 0 in levels else 0
+    # garage al piano strada: la scala la decide il primo piano abitato, il garage la riceve e ha la porta
+    # pedonale verso la strada; la casa si apre dal vano scala
+    street_garage = floors[entry].get("program") == "garage" and any(f.get("program") != "garage" for f in floors)
+    lead = entry
+    if street_garage:
+        lead = min((i for i, f in enumerate(floors) if f.get("program") != "garage"), key=lambda i: abs(i - entry))
     base = int(seed) if seed is not None else random.randrange(1, 1_000_000)
     many = len(floors) > 1
 
     def one(f: dict, s: int, access: str, core: Optional[dict] = None, wet: Optional[list] = None) -> dict:
         prog = f.get("program") if f.get("program") in HOUSE_PROGRAMS else "full"
         if prog == "garage":
-            return generate(width, length, "garage", style=style, seed=s, needs=f.get("needs"), core=core)
+            needs = {**(f.get("needs") or {}), "street": f.get("level", 0) == 0}
+            return generate(width, length, "garage", style=style, seed=s, needs=needs, core=core)
         return generate(width, length, "apartment", style=style, shape="rect", seed=s,
                         double_bedrooms=f.get("double_bedrooms"), single_bedrooms=f.get("single_bedrooms"),
                         bathrooms=f.get("bathrooms"), kitchen=f.get("kitchen") or "auto",
@@ -3223,28 +3293,32 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
                         program=prog, access=access, stair_type=stair_type, core=core, wet=wet)
 
     # dal piano d'ingresso verso l'esterno: ogni piano ha già generato quello accanto, verso l'ingresso
-    order = sorted((i for i in range(len(floors)) if i != entry), key=lambda i: (abs(i - entry), i))
+    order = sorted((i for i in range(len(floors)) if i != lead), key=lambda i: (abs(i - lead), i))
 
     best = None
     for attempt in range(4):
         s = base + attempt * 7919
-        ground = one(floors[entry], s, "both" if many else "street")
-        plans = {entry: ground}
+        ground = one(floors[lead], s, "stairs" if street_garage else "both" if many else "street")
+        plans = {lead: ground}
         aligned = not many or bool(ground.get("stairs"))
         if aligned and many:
             core = ground["stairs"][0]["core"]
             for i in order:
-                near = plans[i - 1 if i > entry else i + 1]
+                near = plans[i - 1 if i > lead else i + 1]
                 p = one(floors[i], s + 101 * (i + 1), "stairs", core, wet_areas(near))
                 plans[i] = p
                 st = p.get("stairs") or []
                 aligned = aligned and bool(st) and all(abs(st[0]["core"][k] - core[k]) < 1e-3 for k in "xywh")
         score = sum(p["design"]["score"] for p in plans.values()) / len(plans)
-        if best is None or (aligned, score) > (best[0], best[1]):
-            best = (aligned, score, plans, s)
-        if aligned:
+        # garage al piano strada: meglio se la porta di casa è sulla stessa facciata della basculante
+        front = not street_garage or (entry in plans and any(
+            d.get("entrance") and not d.get("kind") and d["rot"] == 0 and d["y"] > length / 2
+            for d in plans[entry]["doors"]))
+        if best is None or (aligned, front, score) > best[:3]:
+            best = (aligned, front, score, plans, s)
+        if aligned and front:
             break
-    aligned, _, plans, s = best
+    aligned, _, _, plans, s = best
     notes = [] if aligned else ["La scala non si allinea su tutti i piani: prova misure più ampie o meno locali."]
     out = []
     for i, f in enumerate(floors):
