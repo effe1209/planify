@@ -302,6 +302,22 @@ class Placer {
     return item;
   }
 
+  /* Sedia da ufficio davanti alla scrivania, rivolta verso di lei; null se non c'è posto. */
+  chairFor(desk, size = 0.5) {
+    if (!desk) return null;
+    const a = desk.rect;
+    const rect = {
+      S: { x: a.x + a.w / 2 - size / 2, y: a.y + a.h + 0.02, w: size, h: size },
+      N: { x: a.x + a.w / 2 - size / 2, y: a.y - 0.02 - size, w: size, h: size },
+      E: { x: a.x + a.w + 0.02, y: a.y + a.h / 2 - size / 2, w: size, h: size },
+      W: { x: a.x - 0.02 - size, y: a.y + a.h / 2 - size / 2, w: size, h: size },
+    }[desk.facing];
+    if (!rect || !this.free(rect, rect, 0, false, desk)) return null;
+    const item = { type: 'office_chair', rect, keep: rect, facing: OPP[desk.facing], gap: 0 };
+    this.items.push(item);
+    return item;
+  }
+
   /* Il disegno va specchiato se il muro laterale più vicino sta alla destra dell'arredo. */
   sideWallOnRight(it) {
     const c = G.rectCenter(it.rect);
@@ -504,7 +520,7 @@ function furnishRoom(P, room, notes, opts) {
       if (!P.place({ ...wardrobe, sizes: single ? [[1.2, 0.6], [1.0, 0.6]] : [[2.4, 0.6], [1.8, 0.6], [1.2, 0.6]], avoidWindows: true })) {
         P.place({ ...wardrobe, sizes: [[1.2, 0.6]] });
       }
-      if (room.area >= (single ? 8 : 13)) P.place({ type: 'desk', sizes: [[1.2, 0.6], [1.0, 0.55]], front: 0.6, gap: 0.3, score: nearWindow });
+      if (room.area >= (single ? 8 : 13)) P.chairFor(P.place({ type: 'desk', sizes: [[1.2, 0.6], [1.0, 0.55]], front: 0.6, gap: 0.3, score: nearWindow }));
       break;
     }
     case 'living_kitchen': {
@@ -561,7 +577,9 @@ function furnishRoom(P, room, notes, opts) {
       break;
     }
     case 'study': {
-      if (!P.place({ type: 'desk', sizes: [[1.4, 0.7], [1.2, 0.6]], front: 0.7, gap: 0.3, score: nearWindow })) missing('scrivania');
+      const desk = P.place({ type: 'desk', sizes: [[1.4, 0.7], [1.2, 0.6]], front: 0.7, gap: 0.3, score: nearWindow });
+      if (!desk) missing('scrivania');
+      else P.chairFor(desk);
       break;
     }
     default:

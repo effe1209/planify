@@ -76,3 +76,12 @@ avvia quello locale.
   ala rettangolare dell'edificio; si accende e spegne senza spostare l'inquadratura.
 - Prospetti e sezioni: scheda «Prospetti» con N/E/S/O e due sezioni (tagli regolabili), quote dei piani, altezza
   netta dei locali, tetto; esportazione in un SVG. Mancano PDF, DXF e il disegno della linea di taglio sulla pianta.
+
+## Arredi 3D come oggetti e DXF a blocchi
+- Letto, armadio, cassettiera, scaffali, libreria, auto, moto, WC, bidet, lavabo, doccia, vasca e sedia da ufficio sono
+  gruppi di pezzi con nome (`lib/furniture3d.js`), non più scatole. Gli altri arredi restano volumi.
+- La sedia da ufficio (nuovo arredo `office_chair`) viene messa dal motore davanti a ogni scrivania (camere, studio,
+  direzione, open space, camere d'hotel) e dallo schizzo; nelle piante senza posto libero non entra.
+- Il DXF 3D esporta questi arredi come BLOCCHI (LETTO_160X200, AUTO_190X450, WC_40X70…) inseriti con la rotazione giusta
+  invece di facce sparse: in AutoCAD o BricsCAD sono oggetti che si selezionano, si spostano e si contano. Il DWG non si
+  scrive direttamente (formato proprietario): si apre il DXF e si salva come DWG.

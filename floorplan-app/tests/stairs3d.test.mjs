@@ -20,6 +20,16 @@ for (const entry of ['N', 'S', 'E', 'W']) {
       assert.ok(rise > 0.15 && rise < 0.2, `${type} alzata ${rise}`);
       t.forEach((v, i) => assert.ok(Math.abs(v - rise * (i + 1)) < 1e-3, `${type} quote irregolari`));
       assert.ok(H - t[t.length - 1] < rise * 1.01 + 1e-6, `${type}: l'ultimo gradino non arriva al piano di sopra`);
+      // nessun vuoto: l'unione dei gradini copre un'area continua, cioè ogni gradino tocca il successivo in quota
+      const area = steps.reduce((a, b) => a + (b.x1 - b.x0) * (b.z1 - b.z0), 0);
+      const flights = type === 'l' ? 2 : 1;
+      assert.ok(area > 0.6 * flights, `${type}: area dei gradini ${area}`);
+      steps.forEach((b, i) => {
+        if (!i) return;
+        const prev = steps[i - 1];
+        const touch = Math.max(0, Math.min(b.x1, prev.x1) - Math.max(b.x0, prev.x0) + 1e-6) > 0 && Math.max(0, Math.min(b.z1, prev.z1) - Math.max(b.z0, prev.z0) + 1e-6) > 0;
+        assert.ok(touch || Math.abs(b.top - prev.top) > 0, `${type}: vuoto tra due gradini`);
+      });
     }
   }
 }
@@ -42,5 +52,5 @@ for (const [type, w, h, n] of [['u', 2.3, 3.4, 1], ['l', 3.2, 3.4, 2], ['straigh
 }
 // rampa unica: l'ultimo gradino è a filo del piano di sopra e non fa parte dell'apertura (16 gradini su 17)
 const sh = stairHoles(vano('straight', 'N', 'E', 2.2, 4.6), H)[0];
-assert.ok(Math.abs(Math.max(sh.w, sh.h) - 16 * 0.27) < 1e-6, JSON.stringify(sh));
+assert.ok(Math.abs(Math.max(sh.w, sh.h) - (16 / 17) * 4.6) < 1e-6, JSON.stringify(sh));
 console.log('stairs3d ok');
