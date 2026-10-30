@@ -1225,10 +1225,34 @@ def furnish_kitchen(P: Placer, room: Room):
         return
     if want and not peninsula:
         P.lay.notes.append(f"{room.name}: la penisola non entra (servono circa 2 × 2,5 m liberi oltre al piano)")
-    if room.rect.w * room.rect.h >= 8 and not peninsula:
-        for typ, w, h in (("table_round", 1.0, 1.0), ("table", 1.2, 0.8), ("table_round", 0.8, 0.8)):
-            if P.place_free(room, typ, w, h, gap=0.75, zone_gap=0.3):
-                break
+    if not _table_first(P, room, lambda: _kitchen_table(P, room)):
+        P.lay.notes.append(f"{room.name}: il tavolo non entra")
+
+
+def _kitchen_table(P: Placer, room: Room, near=None) -> bool:
+    """Un tavolo in cucina c'è sempre: al centro se c'è spazio, sennò più piccolo, sennò appoggiato a un muro."""
+    for typ, w, h, gap in (("table_round", 1.0, 1.0, 0.75), ("table", 1.2, 0.8, 0.75),
+                           ("table_round", 0.8, 0.8, 0.6), ("table", 1.0, 0.7, 0.6)):
+        if P.place_free(room, typ, w, h, near=near, gap=gap, zone_gap=0.3):
+            return True
+    sides = P.sides_far_from_door(room)
+    return any(P.place_wall(room, "table", w, h, sides + [x for x in "NSEW" if x not in sides], gap=0.1,
+                            front=front, zone_gap=zg)
+               for w, h, front, zg in ((1.2, 0.8, 0.7, 0.3), (0.8, 0.6, 0.6, 0.3), (0.8, 0.6, 0.5, 0.0)))
+
+
+def _table_first(P: Placer, room: Room, place) -> bool:
+    """Il tavolo ha la precedenza sulla penisola: se non entrano tutti e due, la penisola si toglie."""
+    if place():
+        return True
+    pen = [it for it in P.placed[room.id] if it.type == "kitchen_peninsula"]
+    for it in pen:
+        P.remove(it)
+    if pen and place():
+        P.lay.notes.append(f"{room.name}: penisola tolta per far posto al tavolo")
+        return True
+    P.placed[room.id].extend(pen)
+    return False
 
 
 def _view_zone(P: Placer, room: Room) -> Optional[Item]:
@@ -1279,8 +1303,8 @@ def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
             P.lay.notes.append(f"{room.name}: angolo cottura non inserito")
         elif want and not peninsula:
             P.lay.notes.append(f"{room.name}: la penisola non entra con questo soggiorno")
-        if not peninsula:
-            _place_dining(P, room, near=(counter.rect.cx, counter.rect.cy) if counter else None)
+        near = (counter.rect.cx, counter.rect.cy) if counter else None
+        _table_first(P, room, lambda: _place_dining(P, room, near=near) or _kitchen_table(P, room, near=near))
     has_dining = any(r.kind == "dining" and r.group == room.group for r in P.lay.rooms)
     media = _place_media(P, room) or _place_media_free(P, room)
     if not media and with_kitchen:
@@ -1290,7 +1314,17 @@ def furnish_living(P: Placer, room: Room, with_kitchen: bool = False):
             P.remove(it)
         media = _place_media(P, room) or _place_media_free(P, room)
         if tables:
-            _place_dining(P, room, near=(counter.rect.cx, counter.rect.cy) if counter else None)
+            near = (counter.rect.cx, counter.rect.cy) if counter else None
+            place = lambda: _place_dining(P, room, near=near) or _kitchen_table(P, room, near=near)  # noqa: E731
+            if not _table_first(P, room, place):
+                # il tavolo conta più del tavolino da salotto
+                for it in [it for it in P.placed[room.id] if it.type == "coffee_table"]:
+                    P.remove(it)
+                    if place():
+                        break
+                    P.placed[room.id].append(it)
+    if with_kitchen and not any(it.type in ("table", "table_round") for it in P.placed[room.id]):
+        P.lay.notes.append(f"{room.name}: il tavolo non entra")
     if not media and area >= 14:
         P.lay.notes.append(f"{room.name}: zona TV/divano non inserita")
     if not with_kitchen and area >= 18 and not has_dining:
