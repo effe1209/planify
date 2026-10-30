@@ -15,13 +15,51 @@
  */
 import { pointInPolygon } from './geometry';
 
-/* rampa unica 1,0 × 3,6 m oppure a U (due rampe e pianerottolo) 2,0 × 2,6 m */
+/*
+ * Lunghezze delle rampe disegnate: bastano a salire un piano (3,0 m da pavimento a pavimento) con alzate di
+ * circa 17,5 cm e pedate di 27 cm (regola 2a + p = 62-64 cm): 17 alzate a rampa unica, 18 a U, 17 a L.
+ * rampa unica 1,0 × 4,6 m oppure a U (due rampe e pianerottolo) 2,0 × 3,2 m
+ */
+export const STRAIGHT_RUN = 4.6;
+export const U_RUN = 3.2;
+export const L_LEG = 2.4;
 const TYPES = [
-  { type: 'straight', run: 3.6, width: 1.0, cost: 0 },
-  { type: 'u', run: 2.6, width: 2.0, cost: 0.4 },
+  { type: 'straight', run: STRAIGHT_RUN, width: 1.0, cost: 0 },
+  { type: 'u', run: U_RUN, width: 2.0, cost: 0.4 },
 ];
 export const TREAD = 0.27;
 export const LANDING = 1.0;
+
+/*
+ * Alzate (numero di gradini da salire) e larghezza della rampa di una scala, ricavate dal disegno:
+ * stessa geometria di PlanSvg (Stair per le scale del progetto, EngineStair per quelle del motore).
+ */
+export function stairGeometry(st) {
+  if (st.entry) {   // scala del motore: D = profondità lungo l'ingresso, A = larghezza
+    const ns = st.entry === 'N' || st.entry === 'S';
+    const D = ns ? st.h : st.w;
+    const A = ns ? st.w : st.h;
+    const fw = Math.min(1.0, A / 2);
+    if (st.type === 'u') {
+      const n = Math.floor((Math.min(U_RUN, D) - LANDING) / TREAD + 1e-6);
+      return { risers: 2 * n + 2, width: fw };
+    }
+    if (st.type === 'l') {
+      const n1 = Math.floor(Math.min(L_LEG, D - fw) / TREAD + 1e-6);
+      const n2 = Math.floor((A - fw) / TREAD + 1e-6);
+      return { risers: n1 + n2 + 2, width: fw };
+    }
+    return { risers: Math.floor(Math.min(STRAIGHT_RUN, D) / TREAD + 1e-6), width: fw };
+  }
+  const horiz = st.up === 'E' || st.up === 'W';
+  const run = horiz ? st.w : st.h;
+  const wid = horiz ? st.h : st.w;
+  if (st.type === 'u') {
+    const n = Math.floor((run - LANDING) / TREAD + 1e-6);
+    return { risers: 2 * n + 2, width: (wid - 0.1) / 2 };
+  }
+  return { risers: Math.floor(run / TREAD + 1e-6), width: wid };
+}
 /* dove una scala sta bene: costo più basso = posto migliore */
 const KIND_COST = {
   entry: 0, corridor: 0, living: 1, living_kitchen: 1.3, dining: 1.3, office_open: 1.3,

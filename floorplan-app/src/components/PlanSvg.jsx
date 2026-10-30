@@ -6,7 +6,7 @@ import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
 import { aimDevice, placeDevice, sensorModel } from '../lib/coverage';
-import { coveredByStairs, LANDING, TREAD } from '../lib/stairs';
+import { coveredByStairs, L_LEG, LANDING, STRAIGHT_RUN, TREAD, U_RUN } from '../lib/stairs';
 import ElectricLayer from './ElectricLayer';
 import { FURNITURE_ART } from '../lib/furnitureArt';
 import Rug from './Rug';
@@ -691,7 +691,7 @@ function EngineStair({ st, s }) {
   if (st.type === 'u') {
     const gap = 0.1 * s;
     const half = (A - gap) / 2;
-    const x0 = Math.max(0, D - 2.6 * s);
+    const x0 = Math.max(0, D - U_RUN * s);
     const fEnd = D - land;
     const cutX = x0 + (fEnd - x0) * 0.55;
     parts.push(<rect key="o" x={x0} y={0} width={D - x0} height={A} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />);
@@ -708,7 +708,7 @@ function EngineStair({ st, s }) {
     zig = [cutX, half];
   } else if (st.type === 'l') {
     const fEnd = D - fw;
-    const x0 = Math.max(0, fEnd - 2.2 * s);
+    const x0 = Math.max(0, fEnd - L_LEG * s);
     const cutX = x0 + (fEnd - x0) * 0.55;
     parts.push(<path key="o" d={`M ${x0} 0 H ${D} V ${A} H ${fEnd} V ${fw} H ${x0} Z`} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />);
     parts.push(across(fEnd, 0, fw, cut));
@@ -719,7 +719,7 @@ function EngineStair({ st, s }) {
     end = [D - fw / 2, A - 0.2 * s, 0, 1];
     zig = [cutX, fw];
   } else {
-    const len = Math.min(3.6 * s, D);
+    const len = Math.min(STRAIGHT_RUN * s, D);
     const x0 = Math.max(0, Math.min(0.3 * s, D - len));
     const cutX = x0 + len * 0.55;
     parts.push(<rect key="o" x={x0} y={0} width={len} height={fw} fill="#f6f3ec" stroke={INK} strokeWidth="1.2" />);

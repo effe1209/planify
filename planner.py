@@ -29,7 +29,7 @@ DAY_MIN = 3.8          # larghezza minima zona giorno
 # Vano scala nelle file accanto al disimpegno: (larghezza del vano lungo la fila, profondità minima della fila).
 # Si parte e si arriva sempre dal lato del disimpegno: a U le due rampe tornano indietro; a L e a rampa
 # unica al piano di sopra si torna al disimpegno lungo il passaggio accanto alla rampa.
-STAIR_SLOT = {"u": (2.3, 3.0), "l": (2.5, 3.4), "straight": (2.2, 3.8)}
+STAIR_SLOT = {"u": (2.3, 3.4), "l": (3.2, 3.4), "straight": (2.2, 4.6)}   # 17-18 alzate da 17,5 cm in 3,0 m
 STAIR_PICK = (("u", 0.5), ("l", 0.25), ("straight", 0.25))
 
 # Convenzione per le aperture verticali (rot=90). Il frontend ruota l'elemento
@@ -2223,6 +2223,9 @@ def layout_apartment(W: float, L: float, doubles: int, singles: int, baths: Opti
             wd = DOOR_W_BATH if room.kind in ("bath", "wc", "storage", "laundry") else DOOR_W
             lay.add_door(room.id, circulation_for(room).id, wd, 0.15, into=room.id)
         ww = {"bed": 1.5, "bath": 0.7, "wc": 0.6, "study": 1.3, "laundry": 0.6, "stairs": 0.9}.get(room.kind)
+        if ww and room.kind in ("bed", "study"):
+            # rapporto aeroilluminante: la finestra cresce con la stanza (1/8 del pavimento)
+            ww = max(ww, snap(room.rect.w * room.rect.h / 8 / WINDOW_H + 0.2))
         if ww:
             lay.add_windows(room.id, side, ww, 2)
     for bed, bath, closet, side in suites:
