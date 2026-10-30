@@ -1,4 +1,5 @@
-"""Norme di progettazione: camera doppia ≥ 14 m², singola ≥ 9 m², bagno principale ≥ 6 m².
+"""Norme di progettazione: camera doppia ≥ 14 m², singola ≥ 9 m² (DM 5/7/1975); bagno principale ≥ 4 m² (valore di progetto,
+la norma nazionale non fissa una superficie).
 
 Avvio:  python3 tests/test_norms.py
 """
@@ -19,7 +20,7 @@ def test_minimum_areas_are_respected():
             for r in plan["rooms"]:
                 area = r["w"] * r["h"]
                 if r["kind"] == "bath" and r["name"] == "Bagno":
-                    assert area >= 5.7, (w, l, n, seed, r["name"], area)
+                    assert area >= 3.7, (w, l, n, seed, r["name"], area)
                 if r["kind"] == "bed":
                     assert area >= (8.7 if r.get("size") == "single" else 13.7), (w, l, n, seed, r["name"], area)
     print("ok test_minimum_areas_are_respected")

@@ -1655,11 +1655,13 @@ ROOM_W = {
 SUITE_STRIP = 1.9   # larghezza della fascia bagno privato + cabina armadio nella suite
 
 
-# Superfici minime abitabili (DM 5/7/1975): camera doppia 14 m², singola 9 m²; bagno principale 6 m².
+# Superfici minime abitabili (DM 5/7/1975): camera doppia 14 m², singola 9 m². Per il bagno la norma nazionale non
+# fissa una superficie (chiede un servizio completo e aerato): 4 m² per il principale e 3 m² per gli altri sono
+# valori di progetto, dove entrano vasca o doccia, lavabo e wc con i passaggi. Un Regolamento Edilizio può chiedere di più.
 MIN_AREA = {("bed", "double"): 14.0, ("bed", "suite"): 14.0, ("bed", "single"): 9.0,
-            ("bath", "main"): 6.0, ("bath", "service"): 4.0}
-BATH_MAIN_MIN = 6.0     # bagno principale (non padronale, non di servizio)
-BATH_OTHER_MIN = 4.0    # secondi bagni e bagno padronale
+            ("bath", "main"): 4.0, ("bath", "service"): 3.0}
+BATH_MAIN_MIN = 4.0     # bagno principale (non padronale, non di servizio): valore di progetto
+BATH_OTHER_MIN = 3.0    # secondi bagni e bagno padronale: valore di progetto
 
 
 def _room_w(item, depth: float = 0.0) -> Tuple[float, float, float]:
