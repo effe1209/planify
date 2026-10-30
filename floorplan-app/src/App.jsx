@@ -244,7 +244,7 @@ export default function App() {
         // il tasto sinistro sposta solo se non si sta afferrando un arredo, un dispositivo o un campo
         const t = e.target;
         if (t.closest?.('button, input, select, textarea, a')) return;
-        if (t instanceof Element && window.getComputedStyle(t).cursor === 'grab') return;
+        if (t.closest?.('[style*="cursor"]')) return;   // gli arredi e i dispositivi trascinabili hanno il cursore nello stile
       }
       drag = { x: e.clientX, y: e.clientY, btn: e.button };
       moved = false;
@@ -291,7 +291,6 @@ export default function App() {
   const fit = box && stage.w ? clamp(Math.min((stage.w - 40) / box.w, (stage.h - 40) / box.h), 0.2, 1.6) : 1;
   useEffect(() => { fitRef.current = fit; }, [fit]);
   const z = zoom ?? fit;
-  panOn.current = !!plan && !sketch && !view3d && !(globalView && current?.floors.length > 1);
   const resetView = () => { setZoom(null); setPan({ x: 0, y: 0 }); };
   useEffect(() => { setPan({ x: 0, y: 0 }); }, [current?.id, floor?.id]);
 
@@ -527,6 +526,7 @@ export default function App() {
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
   const [view3d, setView3d] = useState(null);   // null = pianta; { low, whole, spread } = vista 3D
+  panOn.current = !!plan && !sketch && !view3d && !(globalView && current?.floors.length > 1);
   const three = useRef(null);                    // esportazioni della vista 3D aperta (Plan3D onReady)
   const builtFloors = current?.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).length || 0;
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
