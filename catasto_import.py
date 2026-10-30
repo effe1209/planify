@@ -228,7 +228,27 @@ def _axis_lines(b, mpp, horizontal):
         else:                                 # tratto pieno (muro campito): i due bordi
             out.append((a + 0.5, *lo))
             out.append((a + la - 0.5, *lo))
-    return out, o
+    return _join_collinear(out, mpp), o
+
+
+def _join_collinear(lines, mpp, gap=0.25, tol=0.04):
+    """Tratti sbiaditi: quelli sullo stesso asse (entro 4 cm) separati da meno di 25 cm diventano uno solo.
+    Un'apertura vera (porta, finestra) è più larga, quindi non si chiude."""
+    kgap, ktol = gap / mpp, tol / mpp
+    out = []
+    for p, a, c in sorted(lines):
+        merged = False
+        for j in range(len(out) - 1, -1, -1):
+            q, qa, qc = out[j]
+            if p - q > ktol:
+                break
+            if a - qc <= kgap and c >= qa - kgap:
+                out[j] = ((q + p) / 2, min(qa, a), max(qc, c))
+                merged = True
+                break
+        if not merged:
+            out.append((p, a, c))
+    return out
 
 
 def _arcs(b, lines_mask, mpp):
@@ -399,8 +419,31 @@ def _relabel(text: str, plan: dict, room: dict, label: str, style: str) -> Optio
 # ----------------------------------------------------------------------------
 # 4. progetto
 # ----------------------------------------------------------------------------
+def _guess_types(text: str, plan: dict, style: str) -> dict:
+    """Piano senza nomi: si stimano dal tipo di casa. Senza bagno il locale più piccolo tra 2,5 e 8 m² lo è;
+    senza camera il più grande dei rimanenti (non il soggiorno) lo diventa."""
+    def rooms(*kinds):
+        return [r for r in plan["rooms"] if r["name"] and (not kinds or r["kind"] in kinds)]
+    kinds = {r["kind"] for r in plan["rooms"]}
+    for label, kind, pick in (
+        ("Bagno", "bath", lambda: min((r for r in rooms() if 2.5 <= r["area"] <= 8 and r["kind"] not in ("living", "living_kitchen")),
+                                       key=lambda r: r["area"], default=None)),
+        ("Camera Matrimoniale", "bed", lambda: max((r for r in rooms() if 9 <= r["area"] <= 22 and r["kind"] not in
+                                                    ("living", "living_kitchen", "kitchen", "bath")),
+                                                   key=lambda r: r["area"], default=None)),
+    ):
+        if kind in kinds:
+            continue
+        room = pick()
+        if room is not None:
+            plan = _relabel(text, plan, room, label, style) or plan
+            kinds = {r["kind"] for r in plan["rooms"]}
+    return plan
+
+
 def import_catasto(data: bytes, style: str = "modern") -> dict:
     """PDF catastale → {"floors": [{level, program, name, plan}], "notes"}; NotCatasto se non lo è."""
+    import dxf_import
     import planner
     pages = read_pages(data)
     if not is_catasto(pages):
@@ -431,6 +474,8 @@ def import_catasto(data: bytes, style: str = "modern") -> dict:
             if program == "full" and not any(r["kind"] in ("living", "living_kitchen", "kitchen") for r in plan["rooms"]):
                 # il catasto quasi non scrive i nomi: il locale più grande è la zona giorno
                 plan = _relabel(text, plan, big, "Soggiorno", style) or plan
+            if program == "full" and not any(dxf_import._name_room([t], 10)[2] for t in info.get("texts", ())):
+                plan = _guess_types(text, plan, style)
             plan["notes"] = [n.replace("dal DXF", "dalla planimetria catastale") for n in plan["notes"]]
             if abs(info["angle"]) > 0.05:
                 plan["notes"].append(f"Scansione raddrizzata di {abs(info['angle']):.1f}°.".replace(".", ",", 1))

@@ -606,6 +606,48 @@ def _drawings(hp, vp, texts_m):
 # ----------------------------------------------------------------------------
 # procedura completa
 # ----------------------------------------------------------------------------
+def _drop_balconies(rooms):
+    """Scansioni: un locale piccolo e senza nome che sporge dall'involucro (tre lati o più sull'esterno, fuori
+    dal perimetro degli altri locali) è un balcone o una terrazza, non una stanza. I pezzi dello stesso gruppo cadono con lui."""
+    def exposed(r):
+        sides = [(r[0], r[1], r[0], r[3], "v"), (r[2], r[1], r[2], r[3], "v"),
+                 (r[0], r[1], r[2], r[1], "h"), (r[0], r[3], r[2], r[3], "h")]
+        total = free = 0.0
+        for ax0, ay0, ax1, ay1, o in sides:
+            length = (ay1 - ay0) if o == "v" else (ax1 - ax0)
+            total += length
+            covered = 0.0
+            for q in rooms:
+                if q is r:
+                    continue
+                if o == "v":
+                    line = ax0
+                    if min(abs(q[0] - line), abs(q[2] - line)) <= 0.25:
+                        covered += max(0.0, min(ay1, q[3]) - max(ay0, q[1]))
+                else:
+                    line = ay0
+                    if min(abs(q[1] - line), abs(q[3] - line)) <= 0.25:
+                        covered += max(0.0, min(ax1, q[2]) - max(ax0, q[0]))
+            free += max(0.0, length - covered)
+        return free / total if total else 0.0
+
+    def protrudes(r):
+        others = [q for q in rooms if q[4] != r[4]]
+        return bool(others) and (r[0] < min(q[0] for q in others) - 0.1 or r[2] > max(q[2] for q in others) + 0.1 or
+                                 r[1] < min(q[1] for q in others) - 0.1 or r[3] > max(q[3] for q in others) + 0.1)
+
+    groups = {r[4] for r in rooms}
+    if len(groups) < 3:
+        return rooms
+    drop = set()
+    for r in rooms:
+        area = (r[2] - r[0]) * (r[3] - r[1])
+        if r[6] == 0 and area <= 14 and not any(re.search(p, _plain(t)) for t in r[5] for p, _, _ in ROOM_WORDS) \
+                and exposed(r) >= 0.65 and protrudes(r):
+            drop.add(r[4])
+    return [r for r in rooms if r[4] not in drop] if drop and len(drop) < len(groups) else rooms
+
+
 def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     """DXF di studio → planner.Layout con stanze, porte e finestre (non arredato), o None.
 
@@ -856,6 +898,9 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
                 if abs(r[idx] - v) <= 0.03:
                     r[idx] = v
                     break
+
+    if scan:
+        rooms = _drop_balconies(rooms)
 
     # Layout del motore: origine in alto a sinistra, y verso il basso
     RX0 = min(r[0] for r in rooms)
