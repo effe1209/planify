@@ -224,10 +224,22 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     if (f.level === lowest) continue;
     // solaio sotto il piano: un volume per locale, nessuno sopra la scala (il vano resta aperto)
     for (const r of f.plan.rooms) {
-      if (r.kind === 'stairs' || r.kind === 'garden') continue;
+      if (r.kind === 'garden') continue;
+      // il vano scala ha il solaio solo attorno all'apertura (la fascia dei muri): senza, in facciata resta un buco
+      const opening = r.kind === 'stairs'
+        ? (byFloor[f.id] || []).find((q) => q.engine && q.downTo && q.x >= r.x - 0.01 && q.x + q.w <= r.x + r.w + 0.01
+          && q.y >= r.y - 0.01 && q.y + q.h <= r.y + r.h + 0.01)
+        : null;
+      if (r.kind === 'stairs' && !opening) continue;
       const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
       const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
       // il vano della scala che sale dal piano sotto resta aperto
+      if (opening) {
+        const hole = new THREE.Path();
+        [[opening.x, opening.y], [opening.x, opening.y + opening.h], [opening.x + opening.w, opening.y + opening.h],
+          [opening.x + opening.w, opening.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
+        shape.holes.push(hole);
+      }
       for (const st of (byFloor[f.id] || []).filter((q) => !q.engine && q.role === 'down')) {
         if (st.x >= r.x && st.x + st.w <= r.x + r.w && st.y >= r.y && st.y + st.h <= r.y + r.h) {
           const hole = new THREE.Path();
