@@ -37,6 +37,7 @@ const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 
 import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
 import { stairHoles, stairSteps } from './stairs3d';
+import { buildObject } from './furniture3d';
 import { projectStairs } from './stairs';
 
 export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [] } = {}) {
@@ -121,6 +122,12 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
 
   // arredi
   for (const it of plan.furniture) {
+    // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
+    const obj = buildObject(THREE, it, M, mat);
+    if (obj) {
+      root.add(obj);
+      continue;
+    }
     const [h, m, lift = 0] = SHAPES[it.type] || [0.6, 'cabinet'];
     const material = M[m] || M.cabinet;
     if (it.type === 'plant' || it.type === 'tree') {
@@ -162,19 +169,6 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       else if (f === 'N') box(it.x, it.y + it.h - back, it.w, back, 0.42, h - 0.42, material);
       else if (f === 'E') box(it.x, it.y, back, it.h, 0.42, h - 0.42, material);
       else box(it.x + it.w - back, it.y, back, it.h, 0.42, h - 0.42, material);
-    } else if (it.type === 'sink' && it.parts?.cabinet) {
-      // lavabo su mobile: mobile con i cassetti e piano in ceramica
-      box(it.x, it.y, it.w, it.h, 0.15, 0.62, M.cabinet);
-      box(it.x, it.y, it.w, it.h, 0.77, 0.08, M.ceramic);
-    } else if (it.type === 'bed') {
-      box(it.x, it.y, it.w, it.h, 0, 0.3, M.wood);
-      box(it.x + 0.03, it.y + 0.03, it.w - 0.06, it.h - 0.06, 0.3, 0.25, M.duvet);
-      const f = it.facing || 'S';
-      const hb = 0.08;
-      if (f === 'S') box(it.x, it.y, it.w, hb, 0, 1.0, M.wood);
-      else if (f === 'N') box(it.x, it.y + it.h - hb, it.w, hb, 0, 1.0, M.wood);
-      else if (f === 'E') box(it.x, it.y, hb, it.h, 0, 1.0, M.wood);
-      else box(it.x + it.w - hb, it.y, hb, it.h, 0, 1.0, M.wood);
     } else {
       box(it.x, it.y, it.w, it.h, lift, h, material);
     }

@@ -45,25 +45,29 @@ export function stairSteps(st, height) {
       const x0 = Math.max(0, D - U_RUN);
       const fEnd = D - LANDING;
       const n = Math.floor((fEnd - x0) / TREAD + 1e-6);
+      const t = (fEnd - x0) / n;   // la pedata si adatta alla rampa: nessun vuoto tra i gradini e il pianerottolo
       r = height / (2 * n + 2);
-      for (let k = 1; k <= n; k++) box(x0 + (k - 1) * TREAD, x0 + k * TREAD, 0, half, k * r);
+      for (let k = 1; k <= n; k++) box(x0 + (k - 1) * t, x0 + k * t, 0, half, k * r);
       box(fEnd, D, 0, A, (n + 1) * r);
-      for (let k = 1; k <= n; k++) box(fEnd - k * TREAD, fEnd - (k - 1) * TREAD, half + gap, A, (n + 1 + k) * r);
+      for (let k = 1; k <= n; k++) box(fEnd - k * t, fEnd - (k - 1) * t, half + gap, A, (n + 1 + k) * r);
     } else if (st.type === 'l') {
       const fEnd = D - fw;
       const x0 = Math.max(0, fEnd - L_LEG);
       const n1 = Math.floor(Math.min(L_LEG, fEnd) / TREAD + 1e-6);
       const n2 = Math.floor((A - fw) / TREAD + 1e-6);
+      const t1 = (fEnd - x0) / n1;
+      const t2 = (A - fw) / n2;
       r = height / (n1 + n2 + 2);
-      for (let k = 1; k <= n1; k++) box(x0 + (k - 1) * TREAD, x0 + k * TREAD, 0, fw, k * r);
+      for (let k = 1; k <= n1; k++) box(x0 + (k - 1) * t1, x0 + k * t1, 0, fw, k * r);
       box(fEnd, D, 0, fw, (n1 + 1) * r);
-      for (let k = 1; k <= n2; k++) box(fEnd, D, fw + (k - 1) * TREAD, fw + k * TREAD, (n1 + 1 + k) * r);
+      for (let k = 1; k <= n2; k++) box(fEnd, D, fw + (k - 1) * t2, fw + k * t2, (n1 + 1 + k) * r);
     } else {
       const len = Math.min(STRAIGHT_RUN, D);
       const x0 = Math.max(0, Math.min(0.3, D - len));
       const n = Math.max(1, Math.floor(len / TREAD + 1e-6));
+      const t = len / n;
       r = height / n;
-      for (let k = 1; k <= n; k++) box(x0 + (k - 1) * TREAD, x0 + k * TREAD, 0, fw, k * r);
+      for (let k = 1; k <= n; k++) box(x0 + (k - 1) * t, x0 + k * t, 0, fw, k * r);
     }
     return out;
   }
@@ -76,14 +80,16 @@ export function stairSteps(st, height) {
     const half = (wid - gap) / 2;
     const flight = run - LANDING;
     const n = Math.floor(flight / TREAD + 1e-6);
+    const t = flight / n;
     r = height / (2 * n + 2);
-    for (let k = 1; k <= n; k++) box((k - 1) * TREAD, k * TREAD, 0, half, k * r);
+    for (let k = 1; k <= n; k++) box((k - 1) * t, k * t, 0, half, k * r);
     box(flight, run, 0, wid, (n + 1) * r);
-    for (let k = 1; k <= n; k++) box(flight - k * TREAD, flight - (k - 1) * TREAD, half + gap, wid, (n + 1 + k) * r);
+    for (let k = 1; k <= n; k++) box(flight - k * t, flight - (k - 1) * t, half + gap, wid, (n + 1 + k) * r);
   } else {
     const n = Math.max(1, Math.floor(run / TREAD + 1e-6));
+    const t = run / n;
     r = height / n;
-    for (let k = 1; k <= n; k++) box((k - 1) * TREAD, k * TREAD, 0, wid, k * r);
+    for (let k = 1; k <= n; k++) box((k - 1) * t, k * t, 0, wid, k * r);
   }
   return out;
 }
