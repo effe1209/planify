@@ -60,8 +60,23 @@ def test_bedroom_windows_follow_the_room_size():
     print("ok test_bedroom_windows_follow_the_room_size")
 
 
+def test_every_desk_in_a_home_or_hotel_has_an_office_chair_facing_it():
+    for w, l, n, t in [(13, 9.5, 4, "apartment"), (14, 10, 5, "apartment"), (4.2, 6.0, 1, "hotel-room"), (6, 8, 1, "hotel-room")]:
+        for seed in range(4):
+            plan = planner.generate(w, l, t, num_rooms=n, seed=seed)
+            desks = [f for f in plan["furniture"] if f["type"] == "desk"]
+            chairs = [f for f in plan["furniture"] if f["type"] == "office_chair"]
+            assert len(chairs) == len(desks), (w, l, t, seed, len(desks), len(chairs))
+            for c in chairs:
+                near = [d for d in desks if abs((c["x"] + c["w"] / 2) - (d["x"] + d["w"] / 2)) < d["w"] / 2 + 0.6
+                        and abs((c["y"] + c["h"] / 2) - (d["y"] + d["h"] / 2)) < d["h"] / 2 + 0.6]
+                assert near, (w, l, t, seed, c)
+    print("ok test_every_desk_in_a_home_or_hotel_has_an_office_chair_facing_it")
+
+
 if __name__ == "__main__":
     test_minimum_areas_are_respected()
     test_loft_has_a_bathroom_below_the_apartment_minimum()
     test_stair_slots_climb_a_floor_with_comfortable_risers()
     test_bedroom_windows_follow_the_room_size()
+    test_every_desk_in_a_home_or_hotel_has_an_office_chair_facing_it()
