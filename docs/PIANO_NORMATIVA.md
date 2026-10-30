@@ -144,8 +144,17 @@ Fatto:
   risultano senza violazioni.
 - Il monolocale ora garantisce la camera da 9 m² quando lo spazio lo permette (sotto ~40 m² resta la segnalazione).
 
-Da fare (Fase 1–2 restanti): altezze interne per piano, scale (alzata/pedata/parapetti), garage (rampe, stalli),
-verifica degli articoli citati sul testo in vigore, vincolo in generazione per l'1/8, relazione PDF.
+Fase 2 completata (tranne i parapetti):
+- Altezza interna per piano (campo nel pannello, 2,70 m predefinita): 2,70 m nei locali abitabili, 2,40 m in corridoi,
+  bagni e ripostigli. Non cambia ancora l'altezza dei muri nel 3D.
+- Scale: larghezza rampa ≥ 80 cm, alzata sul dislivello di un piano (comoda fino a 18 cm, oltre 20 cm non accettabile),
+  regola 2a + p = 62-64 cm. Le scale disegnate sono state allungate (rampa unica 4,6 m, a U 3,2 m, a L con bracci da
+  2,4 m) perché con 27 cm di pedata servono 17-18 gradini per salire 3,0 m.
+- Garage e rampe: pendenza ≤ 20%, larghezza rampa ≥ 3 m, posto auto 2,5 × 5 m per ogni auto (verificare le fonti).
+- Il motore ora dimensiona le finestre delle camere sull'1/8 del pavimento.
+
+Da fare: parapetti (altezza ≥ 1 m, non nel modello), verifica degli articoli citati sul testo in vigore, vincolo in
+generazione per l'1/8 in tutti gli schemi, altezza dei muri 3D legata al dato del piano, relazione PDF.
 
 ## 7. Decisioni che servono da te
 

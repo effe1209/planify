@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
-import { checkCompliance } from '../lib/compliance';
+import { DEFAULT_HEIGHT, checkCompliance } from '../lib/compliance';
 
 /* Verifica della pianta rispetto alla normativa nazionale: ogni voce cita la fonte; un clic porta al locale. */
-export default function CompliancePanel({ plan, type, onSelectRoom }) {
-  const res = useMemo(() => checkCompliance(plan, { type }), [plan, type]);
+export default function CompliancePanel({ plan, type, height, stairs, onHeight, onSelectRoom }) {
+  const h = height ?? DEFAULT_HEIGHT;
+  const res = useMemo(() => checkCompliance(plan, { type, height: h, stairs }), [plan, type, h, stairs]);
   if (!plan) return null;
   const tone = res.fail ? 'is-weak' : res.warn ? 'is-good' : 'is-great';
   const title = res.fail
@@ -19,6 +20,16 @@ export default function CompliancePanel({ plan, type, onSelectRoom }) {
           <span>{res.warn > 0 && res.fail > 0 ? `${res.warn} ${res.warn === 1 ? 'attenzione' : 'attenzioni'} · ` : ''}Norma nazionale (DM 5/7/1975, DM 236/1989)</span>
         </div>
       </div>
+      {onHeight && (
+        <label className="pf-field pf-compliance-height">
+          <span>Altezza interna del piano</span>
+          <div>
+            <input type="number" step="0.05" min="2" max="6" value={h}
+              onChange={(e) => { const v = parseFloat(e.target.value); if (v >= 2 && v <= 6) onHeight(v); }} />
+            <em>m</em>
+          </div>
+        </label>
+      )}
       {res.items.length > 0 && (
         <ul className="pf-design-list">
           {res.items.map((it, i) => (
@@ -41,7 +52,7 @@ export default function CompliancePanel({ plan, type, onSelectRoom }) {
       )}
       <p className="pf-hint">
         Verifica automatica sulla sola norma nazionale: il Regolamento Edilizio del tuo Comune può chiedere di più.
-        Altezze, parapetti, distanze e impianti non sono ancora controllati. Non sostituisce il progetto di un tecnico abilitato.
+        Parapetti, distanze, impianti e soffitti inclinati non sono ancora controllati. Non sostituisce il progetto di un tecnico abilitato.
       </p>
     </section>
   );

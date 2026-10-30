@@ -1685,7 +1685,9 @@ export default function App() {
               )}
 
               <DesignReport design={plan.design} />
-              <CompliancePanel plan={plan} type={floor.meta?.type} onSelectRoom={setSelectedId} />
+              <CompliancePanel plan={plan} type={floor.meta?.type} height={floor.meta?.height} stairs={floorStairs}
+                onHeight={readOnly ? null : (v) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, height: v } })))}
+                onSelectRoom={setSelectedId} />
 
               {floor.meta?.type === 'apartment' && floor.params?.doubles != null && (
                 <FilterCheck plan={plan} params={floor.params} />

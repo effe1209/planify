@@ -615,3 +615,5 @@
 .pf-design-list li.is-bad { color: #b42318; }
 .pf-compliance .pf-link { all: unset; cursor: pointer; text-decoration: underline dotted; }
 .pf-compliance .pf-ref { opacity: 0.6; }
+
+.pf-compliance-height { margin-bottom: 8px; }
