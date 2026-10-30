@@ -35,6 +35,8 @@ export function furnitureZ(type) {
 const WOOD_FLOORS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study', 'entry', 'corridor', 'closet', 'hotel_room', 'stairs']);
 const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 
+import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
+
 export function buildScene(THREE, plan, theme, { lowWalls = false } = {}) {
   const root = new THREE.Group();
   const s = plan.scale;
@@ -291,4 +293,46 @@ export function addGround(THREE, scene, model) {
   ground.receiveShadow = true;
   scene.add(ground);
   return { bb, center, size };
+}
+
+/*
+ * Tetto di un piano, alla quota `y` (la sommità dei muri). Gruppo «tetto»: userData.layer = 'TETTO', si accende e si
+ * spegne con `visible`. type = 'gable' (due falde, un'ala per ogni parte rettangolare dell'edificio) | 'flat'.
+ */
+export function buildRoof(THREE, plan, y, opts = {}) {
+  const { type, slope, overhang } = { ...ROOF_DEFAULTS, ...opts };
+  const g = new THREE.Group();
+  g.name = 'tetto';
+  g.position.y = y;
+  const tile = new THREE.MeshStandardMaterial({ color: '#a8604a', roughness: 0.8, side: THREE.DoubleSide });
+  const slab = new THREE.MeshStandardMaterial({ color: '#c9ccd1', roughness: 0.9 });
+  for (const w of roofWings(plan)) {
+    if (type === 'flat') {
+      const o = overhang / 2;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(w.x1 - w.x0 + 2 * o, 0.25, w.y1 - w.y0 + 2 * o), slab);
+      box.position.set((w.x0 + w.x1) / 2, 0.125, (w.y0 + w.y1) / 2);
+      box.castShadow = box.receiveShadow = true;
+      box.userData.layer = 'TETTO';
+      g.add(box);
+      continue;
+    }
+    const { tris } = gableTriangles(w, { slope, overhang });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(2), 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, tile);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.layer = 'TETTO';
+    g.add(mesh);
+  }
+  return g;
+}
+
+/* Il piano più alto con locali abitati (il garage interrato e il giardino non hanno tetto): [{ floor, y }]. */
+export function roofFloor(project) {
+  const floors = project.floors.filter((f) => typeof f.level === 'number' && f.level >= 0 && f.plan?.rooms?.length
+    && !f.plan.rooms.every((r) => r.kind === 'garden' || r.kind === 'garage'));
+  if (!floors.length) return null;
+  const top = floors.reduce((a, f) => (f.level > a.level ? f : a));
+  return { floor: top, y: top.level * FLOOR_H + WALL_H };
 }
