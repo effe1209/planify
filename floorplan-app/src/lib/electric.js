@@ -549,7 +549,10 @@ function planFloor(project, floor, level, stairRole, main) {
   // giardino: paletti lungo il camminamento e una presa stagna verso la casa
   if (garden) {
     const r = plan.rooms[0];
-    for (const f of plan.furniture.filter((x) => x.type === 'path')) {
+    // paletti lungo il camminamento pedonale; lungo il vialetto carrabile solo se non c'è un camminamento a sé (altrimenti sono doppi)
+    const paths = plan.furniture.filter((x) => x.type === 'path');
+    const walks = paths.filter((x) => Math.min(x.w, x.h) < 2);
+    for (const f of walks.length ? walks : paths) {
       const steps = Math.max(1, Math.round(Math.max(f.w, f.h) / 4));
       // il paletto non sta contro recinzione, siepi, cancelli (e i loro pilastri), alberi o gazebo: se a destra del percorso è
       // occupato passa a sinistra, altrimenti salta quel punto
@@ -562,7 +565,7 @@ function planFloor(project, floor, level, stairRole, main) {
         const cands = vert
           ? [{ x: f.x + f.w + 0.3, y: f.y + along }, { x: f.x - 0.3, y: f.y + along }]
           : [{ x: f.x + (f.w * k) / steps, y: f.y + f.h + 0.3 }, { x: f.x + (f.w * k) / steps, y: f.y - 0.3 }];
-        const q = cands.find(free);
+        const q = cands.find((c) => free(c) && c.y >= r.y + 0.9);   // niente paletti addossi alla facciata della casa (lato nord)
         if (q) add('light_garden', r, q);
       }
     }
