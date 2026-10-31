@@ -344,15 +344,33 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       break;
     }
-    case 'shower':
-    case 'shower_round':
     case 'shower_walkin': {
+      // walk-in: piatto in pietra a filo pavimento con canale di scarico, un pannello di vetro fisso lungo il lato,
+      // soffione a pioggia su braccio, miscelatore, asta con doccetta e nicchia nel muro di fondo (-z)
+      const stone = m('stone_tray', '#cfc7ba', { roughness: 0.85 });
+      const niche = m('niche', '#b9b1a3', { roughness: 0.9 });
+      bx(W, 0.02, D, 0, 0, 0, stone);
+      bx(W - 0.16, 0.008, 0.045, 0, 0.02, -D / 2 + 0.1, chrome);                       // canale di scarico
+      bx(0.012, 2.0, D - 0.04, W / 2 - 0.006, 0.02, 0.0, glass);                       // vetro fisso
+      bx(0.024, 0.024, D - 0.04, W / 2 - 0.012, 2.02, 0.0, chrome);                    // profilo superiore
+      const hx = -W / 4;
+      bx(0.016, 0.016, 0.42, hx, 2.1, -D / 2 + 0.21, chrome);                          // braccio del soffione
+      cy(0.15, 0.15, 0.014, hx, 2.085, -D / 2 + 0.4, chrome, 32);                      // soffione a pioggia
+      bx(0.08, 0.08, 0.018, W / 4, 1.0, -D / 2 + 0.009, chrome);                       // placca del miscelatore
+      cy(0.026, 0.026, 0.03, W / 4, 1.0, -D / 2 + 0.03, chrome, 16).rotation.x = Math.PI / 2;
+      cy(0.008, 0.008, 0.8, W / 4 + 0.22, 1.0, -D / 2 + 0.03, chrome, 8);              // asta
+      bx(0.04, 0.12, 0.04, W / 4 + 0.22, 1.35, -D / 2 + 0.06, chrome);                 // doccetta
+      bx(0.34, 0.24, 0.012, -W / 2 + 0.3, 1.05, -D / 2 + 0.006, niche);                // nicchia portaoggetti
+      break;
+    }
+    case 'shower':
+    case 'shower_round': {
       // piatto, pannelli di vetro sui lati aperti e soffione sul lato muro
       bx(W, 0.06, D, 0, 0, 0, ceramic);
       bx(W - 0.14, 0.012, D - 0.14, 0, 0.062, 0, m('drain', '#dde3ea'));
       cy(0.03, 0.03, 0.012, 0, 0.07, 0, chrome, 12);
       bx(0.012, 2.0, D, W / 2 - 0.006, 0.06, 0, glass);
-      if (it.type !== 'shower_walkin') bx(W, 2.0, 0.012, 0, 0.06, D / 2 - 0.006, glass);
+      bx(W, 2.0, 0.012, 0, 0.06, D / 2 - 0.006, glass);
       bx(0.03, 2.0, 0.03, W / 2 - 0.015, 0.06, D / 2 - 0.015, chrome);
       cy(0.012, 0.012, 1.9, -W / 2 + 0.06, 0.06, -D / 2 + 0.06, chrome, 8);
       cy(0.1, 0.1, 0.015, -W / 2 + 0.14, 1.98, -D / 2 + 0.14, chrome, 20);

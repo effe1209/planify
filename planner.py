@@ -30,6 +30,7 @@ DAY_MIN = 3.8          # larghezza minima zona giorno
 # Si parte e si arriva sempre dal lato del disimpegno: a U le due rampe tornano indietro; a L e a rampa
 # unica al piano di sopra si torna al disimpegno lungo il passaggio accanto alla rampa.
 STAIR_SLOT = {"u": (2.3, 3.4), "l": (3.2, 3.4), "straight": (2.2, 4.6)}   # 17-18 alzate da 17,5 cm in 3,0 m
+U_RUN = 3.2            # lunghezza delle rampe della scala a U (come lib/stairs.js)
 STAIR_PICK = (("u", 0.5), ("l", 0.25), ("straight", 0.25))
 
 # Convenzione per le aperture verticali (rot=90). Il frontend ruota l'elemento
@@ -285,10 +286,10 @@ class Layout:
         return d
 
     def add_entrance(self, room_id: int, side: str, width: float = DOOR_W, at: float = 0.5,
-                     kind: str = "") -> Opening:
+                     kind: str = "", margin: Optional[float] = None) -> Opening:
         room = self.room(room_id)
         orient, line, lo, hi = self._side_geom(room, side)
-        margin = 0.35 if kind != "garage" else 0.25
+        margin = margin if margin is not None else 0.35 if kind != "garage" else 0.25
         if hi - lo - 2 * margin < width:
             # lato corto (es. l'atrio largo 1,30 m): si stringono i margini prima di stringere la porta
             margin = max(0.1, (hi - lo - width) / 2)
@@ -1472,7 +1473,75 @@ def furnish_service(P: Placer, room: Room):
 PATH_KINDS = ("living", "living_kitchen", "zone_day", "dining", "kitchen", "bed", "study")
 
 
+def ensure_access(lay: Layout) -> None:
+    """Ogni locale deve potersi raggiungere da una porta: i gruppi di locali non collegati all'ingresso (nessuna porta, oppure
+    porta omessa perché il muro era troppo corto) si collegano a un locale accanto, preferendo disimpegni e ingressi."""
+    if lay.room_type == "garden":
+        return
+    rooms = [r for r in lay.rooms if r.kind != "garden"]
+    if len(rooms) < 2:
+        return
+    par = {r.group: r.group for r in rooms}
+
+    def find(g):
+        while par[g] != g:
+            par[g] = par[par[g]]
+            g = par[g]
+        return g
+
+    def link(a, b):
+        par[find(a)] = find(b)
+    for d in lay.doors:
+        if d.room_b is not None:
+            link(lay.room(d.room_a).group, lay.room(d.room_b).group)
+    start = [lay.room(d.room_a).group for d in lay.doors if d.room_b is None] or \
+        [r.group for r in rooms if r.kind == "stairs"] or [rooms[0].group]
+    pref = {"corridor": 0, "entry": 0, "stairs": 1, "living": 2, "living_kitchen": 2, "zone_day": 2, "garage": 2, "kitchen": 3,
+            "dining": 3, "study": 4, "bed": 5, "bath": 9, "wc": 9}
+    for _ in range(len(rooms)):
+        root = find(start[0])
+        for s0 in start[1:]:
+            link(s0, start[0])
+        lost = [r for r in rooms if find(r.group) != find(start[0])]
+        if not lost:
+            return
+        best = None
+        for a in lost:
+            for b in rooms:
+                if find(b.group) != find(start[0]) or b is a:
+                    continue
+                if a.kind in ("bath", "wc") and b.kind in ("bed", "bath", "wc"):
+                    continue
+                e = shared_edge(a.rect, b.rect)
+                if e is None or e[3] - e[2] < 1.1:
+                    continue
+                key = (pref.get(b.kind, 6), -(e[3] - e[2]))
+                if best is None or key < best[0]:
+                    best = (key, a, b)
+        if best is None:
+            break
+        _k, a, b = best
+        w = DOOR_W_BATH if a.kind in ("bath", "wc") else DOOR_W
+        e = shared_edge(a.rect, b.rect)
+        done = False
+        for at in (0.5, 0.2, 0.8):
+            start_pos = clamp(snap(e[2] + 0.15 + (e[3] - e[2] - 0.3 - w) * at), e[2] + 0.15, e[3] - 0.15 - w)
+            if not lay._conflict(e[0], e[1], start_pos, start_pos + w):
+                lay.add_door(a.id, b.id, w, at, into=a.id)
+                link(a.group, b.group)
+                lay.notes[:] = [n for n in lay.notes if not (n.startswith(("Nessun muro in comune", "Muro troppo corto")) and a.name in n)]
+                lay.notes.append(f"{a.name}: aggiunta una porta verso {b.name}, altrimenti non si poteva entrare.")
+                done = True
+                break
+        if not done:
+            break
+    for r in rooms:
+        if find(r.group) != find(start[0]):
+            lay.notes.append(f"{r.name} non ha accesso: nessuna porta raggiungibile.")
+
+
 def furnish(lay: Layout):
+    ensure_access(lay)
     P = Placer(lay)
     for r in lay.rooms:                     # prima i bagni (possono invertire il verso porta)
         if r.kind in ("bath", "wc"):
@@ -2262,6 +2331,44 @@ def _garage_pieces(W: float, y0: float, L: float, core: Optional[Rect]) -> List[
     return [p for p in pieces if p[2] - p[0] > 0.3 and p[3] - p[1] > 0.3]
 
 
+def _stair_free(kind: str, entry: str, hand: str, geo: Rect, side: str) -> Optional[Tuple[float, float]]:
+    """Tratto libero (da, a), in metri lungo il muro `side` del vano, davanti al quale non ci sono gradini; None se il muro
+    è occupato dalla rampa. `entry` è l'estremo da cui si parte, `hand` il muro lungo cui corre la prima rampa."""
+    ns = entry in "NS"
+    D, A = (geo.h, geo.w) if ns else (geo.w, geo.h)
+    fw = min(1.0, A / 2)
+    ends = ("N", "S") if ns else ("E", "W")
+    whole = (geo.x, geo.x2) if side in "NS" else (geo.y, geo.y2)
+    if side in ends:
+        if kind == "u":
+            return whole if side == entry and D - U_RUN >= 1.1 else None
+        if kind == "l" and side != entry:
+            return None      # il secondo braccio dell'L chiude l'estremo opposto
+        # rampa lungo il muro `hand`: libera la fascia dalla parte opposta
+        if ns:
+            return (geo.x, geo.x2 - fw) if hand == "E" else (geo.x + fw, geo.x2)
+        return (geo.y, geo.y2 - fw) if hand == "S" else (geo.y + fw, geo.y2)
+    if kind != "u" and side == hand:
+        return None
+    # muro lungo, parallelo alla rampa: libero dal lato d'ingresso fino dove cominciano i gradini
+    free_len = D - U_RUN if kind == "u" else D - fw - 0.1 if kind == "l" else D
+    lo, hi = (geo.y, geo.y2) if ns else (geo.x, geo.x2)
+    return (lo, lo + free_len) if entry in ("N", "W") else (hi - free_len, hi)
+
+
+def _fit_door(lo: float, hi: float, free: Optional[Tuple[float, float]], width: float, margin: float):
+    """(inizio porta, frazione `at` per add_door) se una porta larga `width` sta nel tratto libero del muro [lo, hi]."""
+    if free is None:
+        return None
+    a, b = max(lo + margin, free[0] + 0.05), min(hi - margin, free[1] - 0.05)
+    if b - a < width - 1e-6:
+        return None
+    start = snap((a + b - width) / 2)
+    start = clamp(start, a, b - width)
+    avail = hi - lo - 2 * margin
+    return start, (0.0 if avail <= width else clamp((start - (lo + margin)) / (avail - width), 0.0, 1.0))
+
+
 def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
                   needs: Optional[dict] = None, stair: Optional[dict] = None) -> Optional[Layout]:
     """Garage / piano interrato: box auto con basculante sulla facciata sud (lato W) e, sul fondo,
@@ -2326,37 +2433,59 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
         st = lay.add_room("Scala", "stairs", sr.x, sr.y, sr.x2, sr.y2)
         st.stair = {"type": stair["type"], "entry": stair["entry"], "hand": stair["hand"],
                     "core": Rect(core.x, core.y, core.w, core.h)}
-        # porta verso il box: dal lato da cui parte la scala se lì c'è il box, altrimenti dal lato più lungo
+        # porte del vano scala (verso il box e, al piano strada, verso fuori): si sceglie come orientare la rampa (da che lato
+        # parte, lungo quale muro corre) perché ogni porta dia sul passaggio libero e non sui gradini
         boxes = [r for r in lay.rooms if r.kind == "garage" and shared_edge(st.rect, r.rect)]
         front = {"N": lambda r: r.rect.y2 <= sr.y + EPS, "S": lambda r: r.rect.y >= sr.y2 - EPS,
                  "W": lambda r: r.rect.x2 <= sr.x + EPS, "E": lambda r: r.rect.x >= sr.x2 - EPS}[stair["entry"]]
         span = lambda r: (lambda e: e[3] - e[2])(shared_edge(st.rect, r.rect))
         boxes.sort(key=lambda r: (not (front(r) and span(r) >= 1.2), -span(r)))
-        if boxes:
-            lay.add_door(st.id, boxes[0].id, DOOR_W, 0.5, into=st.id)
-        if needs.get("street"):
-            # garage al piano strada: il vano scala è anche l'ingresso della casa, con la porta verso fuori
-            ext = [x for x in ("S", "E", "W", "N") if x in lay.ext_sides(st)]
-            if ext:
-                # la rampa occupa una fascia lungo il muro `hand`: la porta si apre sul passaggio libero accanto, mai davanti ai gradini
-                entry, hand = stair["entry"], stair["hand"]
-                ends = ("E", "W") if entry in "EW" else ("N", "S")
-                if stair["type"] == "l":
-                    ends = (entry,)    # il secondo braccio dell'L chiude l'estremo opposto
-                # vale la facciata (S) per prima: su un lato lungo basta che la rampa non corra lungo quel muro; su un estremo la
-                # porta va nella fascia libera accanto alla rampa
-                run_ends = ("E", "W") if entry in "EW" else ("N", "S")
-                long_ok = [x for x in ext if x not in run_ends and x != hand]
-                sides = [x for x in ext if x in ends or x in long_ok]
-                side = sides[0] if sides else ext[0]
-                if side in ends:
-                    at = 0.0 if hand in ("S", "E") else 1.0
+        geo = Rect(core.x + 0.1, core.y + 0.1, core.w - 0.2, core.h - 0.2)
+        ns = stair["entry"] in "NS"
+        ends = ("N", "S") if ns else ("E", "W")
+        hands = ("E", "W") if ns else ("N", "S")
+        combos = [(e, h) for e in ends for h in hands]
+        combos.sort(key=lambda c: (c[0] != stair["entry"], c[1] != stair["hand"]))   # prima l'orientamento già deciso
+        ext = [x for x in ("S", "E", "W", "N") if x in lay.ext_sides(st)] if needs.get("street") else []
+        choice = None
+        for box in boxes or [None]:
+            e_box = shared_edge(st.rect, box.rect) if box else None
+            if e_box:
+                bside = ("E" if abs(e_box[1] - st.rect.x2) < 1e-3 else "W") if e_box[0] == "v" else \
+                    ("S" if abs(e_box[1] - st.rect.y2) < 1e-3 else "N")
+            for side in (ext or [None]):
+                for entry, hand in combos:
+                    free_b = _stair_free(stair["type"], entry, hand, geo, bside) if e_box else None
+                    if e_box and not _fit_door(e_box[2], e_box[3], free_b, DOOR_W, 0.15):
+                        continue
+                    if side:
+                        _o, line, lo, hi = lay._side_geom(st, side)
+                        if not _fit_door(lo, hi, _stair_free(stair["type"], entry, hand, geo, side), DOOR_W, 0.1):
+                            continue
+                    choice = (box, e_box, side, entry, hand)
+                    break
+                if choice:
+                    break
+            if choice:
+                break
+        if choice:
+            box, e_box, side, entry, hand = choice
+            st.stair["entry"], st.stair["hand"] = entry, hand
+            if e_box:
+                at = _fit_door(e_box[2], e_box[3], _stair_free(stair["type"], entry, hand, geo, bside), DOOR_W, 0.15)
+                lay.add_door(st.id, box.id, DOOR_W, at[1], into=st.id)
+            if side:
+                _o, line, lo, hi = lay._side_geom(st, side)
+                lay.add_entrance(st.id, side, DOOR_W, _fit_door(lo, hi, _stair_free(stair["type"], entry, hand, geo, side), DOOR_W, 0.1)[1], margin=0.1)
+        else:
+            if boxes:
+                lay.add_door(st.id, boxes[0].id, DOOR_W, 0.5, into=st.id)
+            if needs.get("street"):
+                if ext:
+                    lay.add_entrance(st.id, ext[0], DOOR_W, 0.5)
                 else:
-                    at = 1.0 if entry in ("E", "S") else 0.0
-                lay.add_entrance(st.id, side, DOOR_W, at)
-            else:
-                lay.notes.append("Il vano scala non tocca la facciata: si entra in casa passando dal garage.")
-    cars = int(clamp((garage.rect.w - 0.4) // 2.8, 1, 3))
+                    lay.notes.append("Il vano scala non tocca la facciata: si entra in casa passando dal garage.")
+    cars = int(clamp((garage.rect.w - 1.2) // 2.7, 1, 3))   # 1,9 m di auto + 0,8 m per le portiere, condivisi tra i posti
     if rooms and L - strip < 6.4 and cars > 1:
         # box poco profondo: il passaggio verso i servizi sul fondo occupa lo spazio di un posto auto
         cars -= 1
@@ -2522,10 +2651,17 @@ def furnish_garage(P: Placer, room: Room) -> None:
     cars = P.lay.options.get("cars", 1)
     inn = P.inner(room)
     bay = inn.w / cars
+    side = max(0.0, (inn.w - cars * 1.9) / (cars + 1))   # spazi uguali tra i muri e le auto
+    # ogni auto è centrata nel suo posto (con più auto il blocco è centrato sulla basculante) e tiene lo spazio per le portiere
+    y = inn.y + max(0.0, min(0.9, inn.h - 4.5 - 0.6))   # davanti resta almeno 0,6 m per la basculante, dietro per le porte di servizio
     for i in range(cars):
-        target = inn.x + bay * (i + 0.5)
-        if not (P.place_wall(room, "car", 1.9, 4.5, ["N"], target=target, gap=0.4, zone_gap=0.1) or
-                P.place_free(room, "car", 1.9, 4.5, near=(target, inn.cy), gap=0.4, step=0.1)):
+        cx = inn.x + side + (1.9 + side) * i + 0.95
+        r = Rect(cx - 0.95, y, 1.9, 4.5)
+        if inn.h >= 4.5 - EPS and inn.w >= 1.9 and not any(r.overlaps(it.rect) for it in P.placed[room.id]) \
+                and not any(r.overlaps(z) for z in P.door_zones(room)):
+            P._put(room, "car", r, 0.4, None, "S")
+        elif not (P.place_wall(room, "car", 1.9, 4.5, ["N"], target=cx, gap=0.4, zone_gap=0.1) or
+                  P.place_free(room, "car", 1.9, 4.5, near=(cx, inn.cy), gap=0.4, step=0.1)):
             P.lay.notes.append(f"{room.name}: posto auto {i + 1} troppo stretto per un'auto")
     P.place_wall(room, "workbench", 1.8, 0.6, "EW", gap=0.3, front=0.6)
     P.place_wall(room, "shelving_heavy", 2.0, 0.5, "EWN", gap=0.2, front=0.5)
@@ -3376,6 +3512,13 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         if aligned and front and (not street_garage or attempt >= 1):
             break
     aligned, _, _, plans, s = best
+    # il garage orienta la rampa perché le sue porte diano sul passaggio libero: tutti i piani adottano lo stesso verso
+    master = next((p["stairs"][0] for i, p in plans.items() if floors[i].get("program") == "garage" and p.get("stairs")), None)
+    if master:
+        for p in plans.values():
+            for st in (p.get("stairs") or [])[:1]:
+                for d in (st, st.get("core") or {}):
+                    d["entry"], d["hand"] = master["entry"], master["hand"]
     notes = [] if aligned else ["La scala non si allinea su tutti i piani: prova misure più ampie o meno locali."]
     if street_garage and plans.get(lead, {}).get("stairs") and plans[lead]["stairs"][0]["type"] == "u":
         notes.append("Con queste misure la scala è a U: la porta di casa dà sul pianerottolo. Con più spazio la scala diventa "
