@@ -579,16 +579,28 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       break;
     }
     case 'vacuum': {
-      // aspirapolvere a traino: corpo cilindrico su ruote, tubo flessibile e bocchetta
-      const body = m('vacbody', '#cf3a2f', { roughness: 0.4 });
-      const r = Math.min(W, D) * 0.34;
-      cy(r, r, 0.22, 0, 0.08, 0.02, body, 24);
-      cy(r * 0.9, r * 0.9, 0.04, 0, 0.3, 0.02, M.dark, 24);
-      for (const sx of [-1, 1]) wheel(0.045, 0.03, sx * (r + 0.01), 0.045, 0.06, M.dark);
-      const hose = cy(0.018, 0.018, 0.5, 0, 0.3, -r * 0.3, M.dark, 10);
-      hose.rotation.x = 0.5;
-      cy(0.012, 0.012, 0.28, 0, 0.55, -r - 0.05, chrome, 8).rotation.x = 0.2;
-      bx(0.22, 0.02, 0.07, 0, 0.0, -D / 2 + 0.04, M.dark);
+      // scopa elettrica Dyson V15 senza fili, in piedi sulla sua base a pavimento: testina piatta, tubo in nichel,
+      // bidone trasparente con anello giallo, corpo motore, batteria e impugnatura con grilletto
+      const nickel = m('dysonnickel', '#b7bcc4', { metalness: 0.85, roughness: 0.25 });
+      const yellow = m('dysonyellow', '#f2c400', { roughness: 0.4 });
+      const dark = m('dysonblack', '#1c1f24', { roughness: 0.45 });
+      const bin = m('dysonbin', '#d9eef7', { transparent: true, opacity: 0.4, roughness: 0.05 });
+      const R = Math.min(W, D) / 2;
+      cy(R * 0.9, R * 0.92, 0.025, 0, 0, 0, dark, 28);                   // base a pavimento
+      bx(0.07, 0.09, 0.05, 0, 0.025, -R * 0.45, dark);                    // colonna della base
+      const head = bx(0.26, 0.045, 0.13, 0, 0.03, R * 0.15, dark);        // testina
+      bx(0.24, 0.012, 0.1, 0, 0.074, R * 0.15, nickel);
+      bx(0.26, 0.01, 0.014, 0, 0.034, R * 0.15 + 0.07, yellow);           // bordo della testina
+      head.rotation.x = -0.06;
+      cy(0.022, 0.026, 0.68, 0, 0.07, -R * 0.12, nickel, 16);              // tubo
+      cy(0.032, 0.032, 0.04, 0, 0.7, -R * 0.12, dark, 16);                // raccordo
+      cy(0.05, 0.05, 0.2, 0, 0.78, -R * 0.12, bin, 20);                   // bidone trasparente
+      cy(0.052, 0.052, 0.03, 0, 0.96, -R * 0.12, yellow, 20);             // anello giallo
+      cy(0.045, 0.045, 0.2, 0, 0.99, -R * 0.12, nickel, 18);              // corpo motore
+      bx(0.07, 0.1, 0.1, 0, 1.17, -R * 0.12, dark);                       // batteria
+      const grip = bx(0.035, 0.22, 0.035, 0, 1.0, -R * 0.12 - 0.1, dark); // impugnatura
+      grip.rotation.x = 0.35;
+      bx(0.02, 0.07, 0.025, 0, 1.0, -R * 0.12 - 0.04, yellow);            // grilletto
       break;
     }
     case 'nightstand': {
@@ -617,6 +629,42 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         for (let i = 0; i < 3; i++) {
           bx(0.36, 0.17, 0.014, px, 0.1 + i * 0.2, D / 2 - 0.025, wood);
           pull(px, 0.18 + i * 0.2, D / 2 - 0.025, false);
+        }
+      }
+      // postazione: MacBook aperto su un supporto in alluminio, con la sua tastiera e il suo mouse, rivolti verso la sedia (+z)
+      {
+        const ty = 0.75;
+        const alu = m('macalu', '#c9ced6', { metalness: 0.85, roughness: 0.3 });
+        const keys = m('mackeys', '#2a2d33', { roughness: 0.6 });
+        const screen = m('macscreen', '#07090c', { roughness: 0.08, metalness: 0.3 });
+        const white = m('machite', '#f3f4f6', { roughness: 0.35 });
+        const px = W >= 1.0 ? -0.1 * W : 0;                    // il MacBook un po' a sinistra del centro
+        const pz = -D * 0.18;                                    // verso il fondo della scrivania
+        for (const sx of [-1, 1]) bx(0.02, 0.1, 0.18, px + sx * 0.12, ty, pz - 0.01, alu);   // supporto
+        const base = bx(0.31, 0.012, 0.22, px, ty + 0.1, pz, alu);
+        bx(0.27, 0.003, 0.09, px, ty + 0.112, pz - 0.03, keys);   // tastiera
+        bx(0.11, 0.002, 0.07, px, ty + 0.1125, pz + 0.07, m('mactrack', '#d6dbe2', { metalness: 0.5, roughness: 0.3 }));   // trackpad
+        base.rotation.x = -0.14;
+        const lid = new THREE.Group();
+        const shell = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.215, 0.008), alu);
+        shell.position.set(0, 0.1075, 0);
+        const display = new THREE.Mesh(new THREE.BoxGeometry(0.295, 0.2, 0.002), screen);
+        display.position.set(0, 0.1075, 0.0045);
+        const logo = new THREE.Mesh(new THREE.CircleGeometry(0.014, 16), m('maclogo', '#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.5 }));
+        logo.position.set(0, 0.1075, -0.0045);
+        logo.rotation.y = Math.PI;
+        lid.add(shell, display, logo);
+        lid.traverse((c) => { if (c.isMesh) c.castShadow = true; });
+        lid.position.set(px, ty + 0.1, pz - 0.105);
+        lid.rotation.x = -0.28;
+        g.add(lid);
+        // tastiera esterna e mouse davanti, sulla stessa linea della sedia
+        const kz = D / 2 - 0.12;
+        bx(0.28, 0.008, 0.115, px, ty, kz, alu);
+        bx(0.262, 0.004, 0.1, px, ty + 0.008, kz, white);
+        if (W >= 0.9) {
+          const mouse = ball(0.5, px + 0.24, ty + 0.011, kz, white, 0.058, 0.04, 0.11);
+          mouse.name = 'mouse';
         }
       }
       break;

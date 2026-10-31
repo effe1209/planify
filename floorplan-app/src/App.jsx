@@ -561,6 +561,15 @@ export default function App() {
   // arredo selezionato sulla pianta: indice, valido solo per il piano su cui è stato scelto
   const [selection, setSelection] = useState(null);
   const [view3d, setView3d] = useState(null);   // null = pianta; { low, whole, spread } = vista 3D
+  // sensori, impianto e luci nel 3D: i dati calcolati e cosa mostrare
+  const overlayShow = useMemo(
+    () => ({ sensors: !!view3d?.sensors, electric: !!view3d?.electric, cables: !!view3d?.cables, cones: !!view3d?.cones, lights: !!view3d?.lightsOn }),
+    [view3d?.sensors, view3d?.electric, view3d?.cables, view3d?.cones, view3d?.lightsOn],
+  );
+  const overlay3d = useMemo(
+    () => (view3d ? { devices: devices || [], electric: electricPlan, floorId: floor?.id, show: overlayShow, lightsOn: !!view3d.lightsOn } : null),
+    [!!view3d, devices, electricPlan, floor?.id, overlayShow, view3d?.lightsOn], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const [sheets, setSheets] = useState(null);   // null = pianta; { roof } = prospetti e sezioni
   panOn.current = !!plan && !sketch && !view3d && !sheets && !(globalView && current?.floors.length > 1);
   const three = useRef(null);                    // esportazioni della vista 3D aperta (Plan3D onReady)
@@ -1451,7 +1460,7 @@ export default function App() {
 
             <div className="pf-group" role="group" aria-label="Vista 3D">
               <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
-                onClick={() => { setSheets(null); setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false, roof: globalView && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null }); }}
+                onClick={() => { setSheets(null); setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false, roof: globalView && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null, sensors: !!devices?.length, electric: !!electricPlan, cables: false, cones: false, lightsOn: false }); }}
                 title="Vista 3D navigabile"><Box size={15} /> 3D</button>
               <button type="button" className={`pf-tool ${sheets ? 'is-on' : ''}`} aria-pressed={!!sheets} disabled={!plan}
                 onClick={() => { setView3d(null); setSheets(sheets ? null : { roof: { ...ROOF_DEFAULTS } }); }}
@@ -1479,6 +1488,26 @@ export default function App() {
                   onChange={(e) => setView3d({ ...view3d, roof: { ...view3d.roof, type: e.target.value } })}>
                   {ROOF_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </select>
+              )}
+              {view3d && !!devices?.length && (
+                <>
+                  <button type="button" className={`pf-tool ${view3d.sensors ? 'is-on' : ''}`} aria-pressed={!!view3d.sensors}
+                    onClick={() => setView3d({ ...view3d, sensors: !view3d.sensors })} title="Sensori Ajax nel 3D">Sensori</button>
+                  <button type="button" className={`pf-tool ${view3d.cones ? 'is-on' : ''}`} aria-pressed={!!view3d.cones}
+                    onClick={() => setView3d({ ...view3d, cones: !view3d.cones })} title="Coni di rilevazione dei sensori">Copertura</button>
+                </>
+              )}
+              {view3d && !!electricPlan && (
+                <>
+                  <button type="button" className={`pf-tool ${view3d.electric ? 'is-on' : ''}`} aria-pressed={!!view3d.electric}
+                    onClick={() => setView3d({ ...view3d, electric: !view3d.electric })} title="Prese, comandi, quadri e punti luce dell'impianto elettrico">Impianto</button>
+                  {view3d.electric && (
+                    <button type="button" className={`pf-tool ${view3d.cables ? 'is-on' : ''}`} aria-pressed={!!view3d.cables}
+                      onClick={() => setView3d({ ...view3d, cables: !view3d.cables })} title="Collegamenti comando-luce e quadro-cassette">Cavi</button>
+                  )}
+                  <button type="button" className={`pf-tool ${view3d.lightsOn ? 'is-on' : ''}`} aria-pressed={!!view3d.lightsOn}
+                    onClick={() => setView3d({ ...view3d, lightsOn: !view3d.lightsOn, electric: true })} title="Accende i punti luce: la scena si abbassa come di sera">Luci accese</button>
+                </>
               )}
               {view3d && (
                 <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
@@ -1580,7 +1609,7 @@ export default function App() {
               </ErrorBoundary>
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
-                <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
                   spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
               </ErrorBoundary>
             ) : globalView && current?.floors.length > 1 ? (
