@@ -2338,7 +2338,22 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
             # garage al piano strada: il vano scala è anche l'ingresso della casa, con la porta verso fuori
             ext = [x for x in ("S", "E", "W", "N") if x in lay.ext_sides(st)]
             if ext:
-                lay.add_entrance(st.id, ext[0], DOOR_W, 0.5)
+                # la rampa occupa una fascia lungo il muro `hand`: la porta si apre sul passaggio libero accanto, mai davanti ai gradini
+                entry, hand = stair["entry"], stair["hand"]
+                ends = ("E", "W") if entry in "EW" else ("N", "S")
+                if stair["type"] == "l":
+                    ends = (entry,)    # il secondo braccio dell'L chiude l'estremo opposto
+                # vale la facciata (S) per prima: su un lato lungo basta che la rampa non corra lungo quel muro; su un estremo la
+                # porta va nella fascia libera accanto alla rampa
+                run_ends = ("E", "W") if entry in "EW" else ("N", "S")
+                long_ok = [x for x in ext if x not in run_ends and x != hand]
+                sides = [x for x in ext if x in ends or x in long_ok]
+                side = sides[0] if sides else ext[0]
+                if side in ends:
+                    at = 0.0 if hand in ("S", "E") else 1.0
+                else:
+                    at = 1.0 if entry in ("E", "S") else 0.0
+                lay.add_entrance(st.id, side, DOOR_W, at)
             else:
                 lay.notes.append("Il vano scala non tocca la facciata: si entra in casa passando dal garage.")
     cars = int(clamp((garage.rect.w - 0.4) // 2.8, 1, 3))
@@ -3328,12 +3343,13 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
 
     best = None
     for attempt in range(4):
-        s = base + attempt * 7919
+        # garage al piano strada: scala a L e dritta si provano sulla stessa distribuzione, per confrontarle
+        s = base + (max(0, attempt - 1) if street_garage else attempt) * 7919
         # garage al piano strada: la porta di casa sta sul lato opposto a dove parte la scala, quindi serve una rampa
         # con il passaggio accanto (dritta o a L); a U la porta darebbe sul pianerottolo a metà altezza
         pick = None
         if street_garage and stair_type in ("auto", "u"):
-            pick = ("straight", "straight", "l", None)[attempt]   # l'ultima prova senza vincoli: la U se è l'unica che entra
+            pick = ("l", "straight", "l", None)[attempt]   # l'ultima prova senza vincoli: la U se è l'unica che entra
         ground = one(floors[lead], s, "stairs" if street_garage else "both" if many else "street", st_type=pick)
         plans = {lead: ground}
         aligned = not many or bool(ground.get("stairs"))
@@ -3346,13 +3362,18 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
                 st = p.get("stairs") or []
                 aligned = aligned and bool(st) and all(abs(st[0]["core"][k] - core[k]) < 1e-3 for k in "xywh")
         score = sum(p["design"]["score"] for p in plans.values()) / len(plans)
+        if street_garage:
+            # il punteggio si appiattisce a 100: tra scala dritta e a L conta lo spazio di circolazione e le stanze a nastro
+            score -= _waste(ground)
+            if (ground.get("stairs") or [{}])[0].get("type") == "u":
+                score -= 8     # la porta di casa darebbe sul pianerottolo a metà altezza
         # garage al piano strada: meglio se la porta di casa è sulla stessa facciata della basculante
         front = not street_garage or (entry in plans and any(
             d.get("entrance") and not d.get("kind") and d["rot"] == 0 and d["y"] > length / 2
             for d in plans[entry]["doors"]))
         if best is None or (aligned, front, score) > best[:3]:
             best = (aligned, front, score, plans, s)
-        if aligned and front:
+        if aligned and front and (not street_garage or attempt >= 1):
             break
     aligned, _, _, plans, s = best
     notes = [] if aligned else ["La scala non si allinea su tutti i piani: prova misure più ampie o meno locali."]
@@ -3366,6 +3387,16 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
             p = one(f, s + 101 * (i + 1), "stairs")
         out.append({"level": levels[i], "program": f.get("program") or "full", "plan": p})
     return {"floors": out, "seed": s, "notes": notes}
+
+
+def _waste(plan: dict) -> float:
+    """Spazio sprecato di un piano: % occupata da disimpegni, ingressi e vano scala, più una penalità per le stanze a nastro."""
+    rs = [r for r in plan["rooms"] if r["kind"] != "garden"]
+    area = sum(r["w"] * r["h"] for r in rs) or 1.0
+    circ = sum(r["w"] * r["h"] for r in rs if r["kind"] in ("corridor", "entry", "stairs"))
+    ribbon = max((max(r["w"], r["h"]) / max(0.1, min(r["w"], r["h"])) for r in rs
+                  if r["kind"] in ("bed", "bath", "living", "kitchen", "living_kitchen")), default=0.0)
+    return 100 * circ / area + 8 * max(0.0, ribbon - 1.8)
 
 
 def serialize(lay: Layout, palette: dict, seed: int) -> dict:

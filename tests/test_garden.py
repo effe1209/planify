@@ -79,6 +79,37 @@ def test_street_level_garage_has_the_front_door_on_the_stair():
     assert garage["stairs"][0]["core"] == first["stairs"][0]["core"]
 
 
+def test_front_door_does_not_open_onto_the_stair_run():
+    """La porta di casa sul vano scala dà sul passaggio accanto alla rampa dritta, non sui gradini."""
+    for W, L in ((10, 12), (9, 12), (11, 13), (12, 14), (8, 12)):
+        for seed in (1, 2, 3):
+            h = planner.generate_house(W, L, [{"level": 0, "program": "garage"}, {"level": 1, "program": "full"}], seed=seed)
+            g = h["floors"][0]["plan"]
+            st = (g.get("stairs") or [None])[0]
+            door = [d for d in g["doors"] if d.get("entrance") and not d.get("kind")]
+            if not st or st["type"] != "straight" or not door:
+                continue
+            c, d = st["core"], door[0]
+            horiz = st["entry"] in "EW"
+            run = min(4.6, c["w"] if horiz else c["h"])
+            # rampa: striscia larga 1 m lungo il muro `hand`, lunga `run` dal lato d'ingresso
+            if horiz:
+                x0 = c["x"] + c["w"] - run if st["entry"] == "E" else c["x"]
+                y0 = c["y"] + c["h"] - 1.0 if st["hand"] == "S" else c["y"]
+                ramp = (x0, y0, x0 + run, y0 + 1.0)
+            else:
+                y0 = c["y"] + c["h"] - run if st["entry"] == "S" else c["y"]
+                x0 = c["x"] + c["w"] - 1.0 if st["hand"] == "E" else c["x"]
+                ramp = (x0, y0, x0 + 1.0, y0 + run)
+            a, b = d["y"], d["y"] + d["w"]
+            if d["rot"] == 90:   # porta su un muro verticale: occupa l'intervallo y
+                touches = a < ramp[3] - 0.08 and b > ramp[1] + 0.08 and ramp[0] - 0.1 <= d["x"] <= ramp[2] + 0.1
+                assert not touches, (W, L, seed)
+            else:                # porta su un muro orizzontale: occupa l'intervallo x
+                touches = d["x"] < ramp[2] - 0.08 and d["x"] + d["w"] > ramp[0] + 0.08 and ramp[1] - 0.1 <= d["y"] <= ramp[3] + 0.1
+                assert not touches, (W, L, seed)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
