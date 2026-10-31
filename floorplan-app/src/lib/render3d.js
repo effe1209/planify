@@ -28,6 +28,8 @@ export async function houseImage(project, { width = 1800, height = 1100, lowWall
     sun.position.set(center.x + dir.dx * (Math.max(W, L) * 0.6 + 8), 14 + H, center.z + dir.dz * (Math.max(W, L) * 0.6 + 8));
     sun.target.position.set(center.x, 0, center.z);
     sun.castShadow = true;
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.03;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + H * 2 });
     scene.add(sun, sun.target);
