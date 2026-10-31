@@ -6,13 +6,42 @@ import { THEMES } from '../lib/themes';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, north = 0, roof = null, project = null, style = 'modern', lowWalls = false, spread = 0, onReady }) {
+export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, style = 'modern', lowWalls = false, spread = 0, onReady }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
   const sceneRef = useRef(null);   // { THREE, model, buildRoof, roofFloor }: il tetto si cambia senza ricostruire la scena
   const roofRef = useRef(roof);
   roofRef.current = roof;
   const [ready, setReady] = useState(0);
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
+  const builtRef = useRef(null);   // gruppi di sensori, impianto e luci attualmente nella scena
+
+  /* Mostra o nasconde sensori, impianto, cavi, coni e luci; a luci accese la scena si abbassa come di sera. */
+  const applyShow = (st, built, show, on) => {
+    if (!built) return;
+    built.sensors.visible = !!show?.sensors;
+    built.electric.visible = !!show?.electric;
+    built.cables.visible = !!show?.electric && !!show?.cables;
+    built.cones.visible = !!show?.cones;
+    built.lights.visible = !!show?.electric || !!show?.lights;
+    st.setLights(built, !!on);
+    if (st.hemi) st.hemi.intensity = on ? 0.5 : 1.3;
+    if (st.sun) st.sun.intensity = on ? 0.4 : 1.6;
+  };
+  /* Costruisce i gruppi del progetto e li aggiunge a `target` (la scena o una copia per il DXF). */
+  const attach = (st, target, spreadBy) => {
+    const ov = overlayRef.current;
+    if (!ov || !st) return null;
+    const floors = project
+      ? project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
+        .map((f) => ({ floor: f, y: f.level * (st.FLOOR_H + (spreadBy || 0)), plan: f.plan }))
+      : [{ floor: { id: ov.floorId }, y: 0, plan }];
+    const built = st.buildOverlays(st.THREE, { floors, devices: ov.devices || [], electric: ov.electric, theme: THEMES[style] || THEMES.modern });
+    for (const g of [built.sensors, built.electric, built.cables, built.cones, built.lights]) target.add(g);
+    applyShow(st, built, ov.show, ov.lightsOn);
+    return built;
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -21,7 +50,8 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
       try {
         const THREE = await import('three');
         const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-        const { buildScene, buildHouse, addGround, buildRoof, roofFloor, WALL_H } = await import('../lib/scene3d');
+        const { buildScene, buildHouse, addGround, buildRoof, roofFloor, WALL_H, FLOOR_H } = await import('../lib/scene3d');
+        const { buildOverlays, setLights } = await import('../lib/overlays3d');
         const { sunDirection } = await import('../lib/orientation');
         const { sceneToDxf } = await import('../lib/dxf3d');
         if (disposed || !host.current) return;
@@ -38,12 +68,13 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
           ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, spread })
           : buildScene(THREE, plan, THEMES[style] || THEMES.modern, { lowWalls });
         scene.add(model);
-        sceneRef.current = { THREE, model, buildRoof, roofFloor, WALL_H };
+        sceneRef.current = { THREE, model, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null };
         setReady((n) => n + 1);
         // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
         const { bb, center, size } = addGround(THREE, scene, model);
         const W = Math.max(1, size.x), L = Math.max(1, size.z), Ht = Math.max(1, bb.max.y);
-        scene.add(new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3));
+        const hemi = new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3);
+        scene.add(hemi);
         const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
         const dir = sunDirection(north);   // il sole segue il nord del progetto (pomeriggio, a sud-ovest)
         const reach = Math.max(W, L) * 0.6 + 8;
@@ -54,6 +85,8 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
         const ext = Math.max(W, L, Ht);
         Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + Ht * 2 });
         scene.add(sun, sun.target);
+        sceneRef.current.hemi = hemi;
+        sceneRef.current.sun = sun;
 
         const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
         // inquadratura a tre quarti dall'alto, abbastanza lontana da far entrare tutta la pianta
@@ -102,9 +135,14 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
             return renderer.domElement.toDataURL('image/png');
           },
           // il DXF ha sempre le quote vere e i muri interi, anche se la vista è esplosa o con i muri bassi
-          dxf: () => sceneToDxf(THREE, !spread && !lowWalls ? model : project
-            ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern)
-            : buildScene(THREE, plan, THEMES[style] || THEMES.modern)),
+          dxf: () => {
+            if (!spread && !lowWalls) return sceneToDxf(THREE, model);
+            const fresh = project
+              ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern)
+              : buildScene(THREE, plan, THEMES[style] || THEMES.modern);
+            attach(sceneRef.current, fresh, 0);   // sensori e impianto visibili vanno nel DXF anche con la vista esplosa o i muri bassi
+            return sceneToDxf(THREE, fresh);
+          },
         });
         cleanup = () => {
           onReady?.(null);
@@ -144,6 +182,27 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
     const roofStyle = project ? (top?.floor.meta?.style || style) : style;
     if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle }));
   }, [roof, ready, plan, project, spread, style]);
+
+  // sensori, impianto e luci: si ricostruiscono quando cambiano i dati e si accendono con gli interruttori
+  const overlayKey = overlay ? `${overlay.devices?.length || 0}|${overlay.electric ? 1 : 0}|${overlay.floorId}` : '';
+  useEffect(() => {
+    const st = sceneRef.current;
+    if (!st) return undefined;
+    const old = builtRef.current;
+    if (old) for (const g of [old.sensors, old.electric, old.cables, old.cones, old.lights]) {
+      st.model.remove(g);
+      g.traverse((o) => { o.geometry?.dispose(); });
+    }
+    builtRef.current = attach(st, st.model, spread || 0);
+    return undefined;
+    // attach legge overlay e project dall'ultimo render: si ricostruisce solo quando cambiano i dati veri
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, plan, project, spread, style, overlay?.devices, overlay?.electric, overlayKey]);
+  useEffect(() => {
+    const st = sceneRef.current;
+    if (st && builtRef.current) applyShow(st, builtRef.current, overlay?.show, overlay?.lightsOn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlay?.show, overlay?.lightsOn, ready]);
 
   return (
     <div className="pf-3d" ref={host}>

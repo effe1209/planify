@@ -120,3 +120,26 @@ test('prospetti e sezioni si aprono e mostrano sei disegni', async ({ page }) =>
   await expect(page.getByRole('img', { name: /Sezione longitudinale/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('sensori, impianto e luci compaiono nel 3D quando sono calcolati', async ({ page }) => {
+  const errors = await open(page);
+  await generate(page);
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const details = page.getByRole('button', { name: 'Mostra il pannello dei dettagli' });
+  if (await details.count()) await details.click();
+  await page.getByRole('button', { name: /Disposizione ottimale allarme/ }).click();
+  await page.getByRole('button', { name: /Progetta impianto elettrico/ }).click();
+  const scrim = page.getByRole('button', { name: 'Chiudi i pannelli' });
+  if (await scrim.count()) await scrim.click({ position: { x: 5, y: 5 } });   // iPad e telefono: il cassetto copre la barra degli strumenti
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  const sensors = page.getByRole('button', { name: 'Sensori', exact: true });
+  const grid = page.getByRole('button', { name: 'Impianto', exact: true });
+  const lights = page.getByRole('button', { name: 'Luci accese' });
+  await expect(sensors).toHaveAttribute('aria-pressed', 'true');
+  await expect(grid).toHaveAttribute('aria-pressed', 'true');
+  await lights.click();
+  await expect(lights).toHaveAttribute('aria-pressed', 'true');
+  await sensors.click();
+  await expect(sensors).toHaveAttribute('aria-pressed', 'false');
+  expect(errors).toEqual([]);
+});
