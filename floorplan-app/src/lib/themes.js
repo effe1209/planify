@@ -43,5 +43,5 @@ export const THEMES = {
     chair: '#e3d2b2', duvet: '#efe7f0', cabinet: '#e8dcc6', rug: '#e2d4bf', rugLine: '#b49766', pot: '#d9c8a8', floor: 'herringbone', floorInk: '#6e5025' },
 };
 for (const [k, f] of Object.entries(FORMS)) {
-  THEMES[k] = { ...THEMES[k], ...f, ...(f.leather && { fabric: f.leather, fabricArm: '#865a3a', fabricSoft: '#b07f58' }) };
+  THEMES[k] = { id: k, ...THEMES[k], ...f, ...(f.leather && { fabric: f.leather, fabricArm: '#865a3a', fabricSoft: '#b07f58' }) };
 }

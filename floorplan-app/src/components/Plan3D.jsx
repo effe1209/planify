@@ -141,8 +141,9 @@ export default function Plan3D({ plan, north = 0, roof = null, project = null, s
     }
     if (!roof) return;
     const top = project ? st.roofFloor(project) : { floor: { plan }, y: st.WALL_H };
-    if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), roof));
-  }, [roof, ready, plan, project, spread]);
+    const roofStyle = project ? (top?.floor.meta?.style || style) : style;
+    if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle }));
+  }, [roof, ready, plan, project, spread, style]);
 
   return (
     <div className="pf-3d" ref={host}>
