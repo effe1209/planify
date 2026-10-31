@@ -319,8 +319,11 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   const stepMat = new THREE.MeshStandardMaterial({ color: theme.wood || '#cdb89a', roughness: 0.7 });
   for (const st of flights) {
     for (const b of stairSteps(st, WALL_H + SLAB_T)) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(b.x1 - b.x0, b.top, b.z1 - b.z0), stepMat);
-      m.position.set((b.x0 + b.x1) / 2, b.top / 2, (b.z0 + b.z1) / 2);
+      // i gradini bassi poggiano a terra; sopra 1 m la rampa è sospesa (gradino con spessore, aperta sotto), così chi sale dal
+      // piano sotto passa sotto la rampa del piano di sopra e non dentro un blocco pieno
+      const th = b.top > 1.0 ? 0.2 : b.top;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(b.x1 - b.x0, th, b.z1 - b.z0), stepMat);
+      m.position.set((b.x0 + b.x1) / 2, b.top - th / 2, (b.z0 + b.z1) / 2);
       m.castShadow = true;
       m.receiveShadow = true;
       m.userData.layer = 'SCALE';
