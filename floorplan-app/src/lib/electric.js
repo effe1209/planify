@@ -551,9 +551,19 @@ function planFloor(project, floor, level, stairRole, main) {
     const r = plan.rooms[0];
     for (const f of plan.furniture.filter((x) => x.type === 'path')) {
       const steps = Math.max(1, Math.round(Math.max(f.w, f.h) / 4));
+      // il paletto non sta contro recinzione, siepi, cancelli (e i loro pilastri), alberi o gazebo: se a destra del percorso è
+      // occupato passa a sinistra, altrimenti salta quel punto
+      const blockers = plan.furniture.filter((x) => ['fence', 'hedge', 'gate_pedestrian', 'gate_driveway', 'tree', 'gazebo'].includes(x.type))
+        .map((x) => { const m = x.type.startsWith('gate') ? 0.7 : 0.35; return { x0: x.x - m, x1: x.x + x.w + m, y0: x.y - m, y1: x.y + x.h + m }; });
+      const free = (q) => !blockers.some((b) => q.x > b.x0 && q.x < b.x1 && q.y > b.y0 && q.y < b.y1);
       for (let k = 0; k <= steps; k++) {
         const vert = f.h >= f.w;
-        add('light_garden', r, vert ? { x: f.x + f.w + 0.3, y: f.y + (f.h * k) / steps } : { x: f.x + (f.w * k) / steps, y: f.y + f.h + 0.3 });
+        const along = (f.h * k) / steps;
+        const cands = vert
+          ? [{ x: f.x + f.w + 0.3, y: f.y + along }, { x: f.x - 0.3, y: f.y + along }]
+          : [{ x: f.x + (f.w * k) / steps, y: f.y + f.h + 0.3 }, { x: f.x + (f.w * k) / steps, y: f.y - 0.3 }];
+        const q = cands.find(free);
+        if (q) add('light_garden', r, q);
       }
     }
     add('socket_ip', r, { x: r.x + r.w / 2, y: r.y + 0.4, nx: 0, ny: 1 });
