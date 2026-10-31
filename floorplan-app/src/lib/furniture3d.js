@@ -11,6 +11,9 @@ export const OBJECT_NAMES = {
   bed: 'LETTO', wardrobe: 'ARMADIO', dresser: 'CASSETTIERA', shelving: 'SCAFFALE', shelving_heavy: 'SCAFFALE_PESANTE',
   bookcase: 'LIBRERIA', car: 'AUTO', motorbike: 'MOTO', toilet: 'WC', bidet: 'BIDET', sink: 'LAVABO', shower: 'DOCCIA',
   shower_round: 'DOCCIA_ANGOLARE', shower_walkin: 'DOCCIA_WALKIN', bathtub: 'VASCA', office_chair: 'SEDIA_UFFICIO',
+  tv: 'TV', sofa: 'DIVANO', sofa_corner: 'DIVANO_ANGOLARE', armchair: 'POLTRONA', sideboard: 'MADIA', plant: 'PIANTA', tree: 'ALBERO',
+  hedge: 'SIEPE', fence: 'RECINZIONE', path: 'PASSO_PEDONALE', gate_pedestrian: 'CANCELLO_PEDONALE', gate_driveway: 'CANCELLO_CARRAIO',
+  washer: 'LAVATRICE', dryer: 'ASCIUGATRICE', vacuum: 'ASPIRAPOLVERE',
 };
 
 const YAW = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };
@@ -31,7 +34,7 @@ export const hasObject = (type) => type in OBJECT_NAMES;
  * Costruisce l'arredo `it` come gruppo posizionato e ruotato nella pianta. `M` = materiali della scena, `mat(color,
  * extra)` ne crea di nuovi. Ritorna null per i tipi senza modello (si disegnano come volumi).
  */
-export function buildObject(THREE, it, M, mat) {
+export function buildObject(THREE, it, M, mat, theme = {}) {
   if (!hasObject(it.type)) return null;
   const [W, D] = localSize(it);
   const g = new THREE.Group();
@@ -296,6 +299,199 @@ export function buildObject(THREE, it, M, mat) {
         cy(0.012, 0.012, 0.1, 0, 0.55, -D / 2 + 0.12, chrome, 10);
         bx(0.018, 0.018, 0.1, 0, 0.64, -D / 2 + 0.17, chrome);
       }
+      break;
+    }
+    case 'tv': {
+      // schermo piatto su staffa a muro (-z), con cornice, schermo scuro e barra audio sotto
+      const sw = Math.min(W - 0.04, 1.9);
+      const sh = Math.min(0.95, sw * 0.5625);
+      const screen = m('screen', '#0b0f14', { roughness: 0.12, metalness: 0.3 });
+      bx(sw, sh, 0.04, 0, 0.62, -D / 2 + 0.06, M.dark);
+      bx(sw - 0.04, sh - 0.04, 0.008, 0, 0.64, -D / 2 + 0.084, screen);
+      bx(0.18, 0.14, 0.04, 0, 0.62 + sh / 2 - 0.07, -D / 2 + 0.02, M.metal);
+      bx(sw * 0.55, 0.06, 0.07, 0, 0.5, -D / 2 + 0.07, M.dark);
+      break;
+    }
+    case 'sofa':
+    case 'sofa_corner':
+    case 'armchair': {
+      // basamento con gambe, braccioli, sedute e schienali a cuscini, cuscini decorativi. Schienale verso -z
+      const arm = it.type === 'armchair' ? 0.14 : 0.16;
+      const backT = 0.2;
+      const corner = it.type === 'sofa_corner';
+      const mainD = corner ? Math.min(0.95, D) : D;
+      const flip = corner && it.flip ? -1 : 1;
+      const zb = -D / 2;                       // retro
+      const mainZ = zb + mainD / 2;
+      const legs = m('sofalegs', '#3b332c');
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.05, 0.1, 0.05, sx * (W / 2 - 0.08), 0, sz * (D / 2 - 0.08), legs);
+      bx(W - 2 * arm, 0.22, mainD - 0.04, 0, 0.1, mainZ, M.fabric);
+      const n = it.type === 'armchair' ? 1 : Math.max(2, Math.round((W - 2 * arm) / 0.75));
+      const sw = (W - 2 * arm) / n;
+      for (let i = 0; i < n; i++) {
+        const x = -W / 2 + arm + sw * (i + 0.5);
+        bx(sw - 0.012, 0.15, mainD - backT - 0.02, x, 0.3, zb + backT + (mainD - backT) / 2, M.fabric);
+        const bk = bx(sw - 0.012, 0.42, backT - 0.04, x, 0.4, zb + backT / 2 + 0.02, M.fabric);
+        bk.rotation.x = -0.1;
+      }
+      for (const sx of [-1, 1]) bx(arm, 0.6, mainD, sx * (W / 2 - arm / 2), 0.1, mainZ, M.fabric);
+      bx(W, 0.2, 0.06, 0, 0.5, zb + 0.03, M.fabric);                    // fascia dietro lo schienale
+      if (corner) {
+        // penisola: seduta lunga sul lato della chaise, senza schienale
+        const cw = Math.min(0.95, W - 2 * arm);
+        const cx = flip * (W / 2 - arm - cw / 2);
+        const cd = D - mainD;
+        bx(cw, 0.22, cd, cx, 0.1, zb + mainD + cd / 2, M.fabric);
+        bx(cw - 0.012, 0.15, cd - 0.012, cx, 0.3, zb + mainD + cd / 2, M.fabric);
+      }
+      const pil = m('pillow', theme.accent || '#c9b79c');
+      if (it.type !== 'armchair') {
+        for (const sx of [-1, 1]) bx(0.34, 0.34, 0.1, sx * (W / 2 - arm - 0.28), 0.46, zb + backT + 0.1, pil).rotation.y = sx * 0.3;
+      }
+      break;
+    }
+    case 'sideboard': {
+      // madia: zoccolo su gambe sottili, due o tre ante con maniglie, piano in legno
+      const doors = Math.max(2, Math.round(Math.max(W, D) / 0.6));
+      const front = W >= D;
+      const span = front ? W : D;
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.04, 0.16, 0.04, sx * (W / 2 - 0.06), 0, sz * (D / 2 - 0.06), wood);
+      bx(W, 0.6, D, 0, 0.16, 0, M.cabinet);
+      for (let i = 0; i < doors; i++) {
+        const o = -span / 2 + (span * (i + 0.5)) / doors;
+        const fw = span / doors - 0.02;
+        if (front) {
+          bx(fw, 0.54, 0.015, o, 0.19, D / 2 + 0.006, wood);
+          bx(0.012, 0.14, 0.02, o + (i % 2 ? fw / 2 - 0.04 : -fw / 2 + 0.04), 0.42, D / 2 + 0.02, chrome);
+        } else {
+          bx(0.015, 0.54, fw, W / 2 + 0.006, 0.19, o, wood);
+          bx(0.02, 0.14, 0.012, W / 2 + 0.02, 0.42, o + (i % 2 ? fw / 2 - 0.04 : -fw / 2 + 0.04), chrome);
+        }
+      }
+      bx(W + 0.03, 0.04, D + 0.03, 0, 0.76, 0, wood);
+      break;
+    }
+    case 'plant': {
+      // vaso in ceramica con terra, steli e foglie a ciuffi
+      const r = Math.min(W, D) / 2;
+      const pot = m('pot', theme.pot || '#e2d6c2');
+      cy(r * 0.62, r * 0.46, 0.34, 0, 0, 0, pot, 20);
+      cy(r * 0.56, r * 0.56, 0.02, 0, 0.33, 0, m('soil', '#3d2f24'), 20);
+      const leaf = M.plant;
+      const dark = m('leaf2', '#4f7d48');
+      for (let i = 0; i < 7; i++) {
+        const a = (i * 2 * Math.PI) / 7;
+        const rr = r * (0.25 + 0.2 * (i % 2));
+        const h = 0.55 + 0.12 * (i % 3);
+        const stem = cy(0.01, 0.015, h, Math.cos(a) * rr * 0.4, 0.34, Math.sin(a) * rr * 0.4, dark, 6);
+        stem.rotation.z = Math.cos(a) * 0.25;
+        stem.rotation.x = -Math.sin(a) * 0.25;
+        ball(0.14 + 0.03 * (i % 3), Math.cos(a) * rr, 0.34 + h, Math.sin(a) * rr, i % 2 ? leaf : dark, 1.3, 0.45, 1);
+      }
+      ball(0.17, 0, 0.98, 0, leaf, 1.2, 0.8, 1.2);
+      break;
+    }
+    case 'tree': {
+      // tronco e chioma a più masse
+      const r = Math.min(W, D) / 2;
+      const bark = m('bark', '#6d5237');
+      cy(r * 0.12, r * 0.17, 1.7, 0, 0, 0, bark, 12);
+      const crown = [[0, 2.5, 0, 1], [0.35, 2.15, 0.2, 0.7], [-0.3, 2.2, -0.2, 0.7], [0.1, 2.9, -0.15, 0.62], [-0.2, 2.1, 0.3, 0.6]];
+      crown.forEach(([x, y, z, k], i) => ball(r * k, x * r, y, z * r, i % 2 ? M.plant : m('leaf2', '#4f7d48'), 1, 0.85, 1));
+      break;
+    }
+    case 'hedge': {
+      // siepe: massa verde con la sommità a lobi
+      const gm = M.plant;
+      const dk = m('leaf2', '#4f7d48');
+      const hgt = 1.15;
+      bx(W, hgt - 0.3, D * 0.9, 0, 0.1, 0, dk);
+      const n = Math.max(2, Math.round(W / (D * 0.9)));
+      for (let i = 0; i < n; i++) ball(0.5, -W / 2 + (W * (i + 0.5)) / n, hgt - 0.28, 0, i % 2 ? gm : dk, (W / n) * 1.05, 0.6, D * 1.0);
+      break;
+    }
+    case 'fence': {
+      // recinzione in legno: pali, due traverse e doghe verticali
+      const posts = Math.max(2, Math.round(W / 1.5) + 1);
+      for (let i = 0; i < posts; i++) bx(0.08, 1.1, Math.max(D, 0.08), -W / 2 + (W * i) / (posts - 1), 0, 0, wood);
+      for (const y of [0.25, 0.8]) bx(W, 0.05, 0.04, 0, y, D / 2 - 0.02, wood);
+      const slats = Math.max(2, Math.floor(W / 0.12));
+      for (let i = 0; i < slats; i++) bx(0.07, 0.95, 0.02, -W / 2 + (W * (i + 0.5)) / slats, 0.05, D / 2 + 0.01, wood);
+      break;
+    }
+    case 'path': {
+      // percorso pedonale: letto di ghiaia con lastre in pietra separate da fughe
+      const along = W >= D ? 'x' : 'z';
+      const L = along === 'x' ? W : D;
+      const T = along === 'x' ? D : W;
+      bx(W, 0.012, D, 0, 0, 0, m('gravel', '#cfc7b8'));
+      const rows = Math.max(1, Math.round(L / 0.8));
+      const cols = Math.max(1, Math.round(T / 0.55));
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          const lw = L / rows - 0.04;
+          const tw = T / cols - 0.04;
+          const a = -L / 2 + (L * (i + 0.5)) / rows;
+          const b = -T / 2 + (T * (j + 0.5)) / cols;
+          if (along === 'x') bx(lw, 0.03, tw, a, 0.012, b, M.stone);
+          else bx(tw, 0.03, lw, b, 0.012, a, M.stone);
+        }
+      }
+      break;
+    }
+    case 'gate_pedestrian': {
+      // cancello pedonale: due pilastri, anta con montanti e traverse, maniglia
+      const iron = m('iron', '#2f353d', { metalness: 0.5, roughness: 0.4 });
+      const pw = 0.14;
+      for (const sx of [-1, 1]) bx(pw, 1.75, Math.max(D, pw), sx * (W / 2 + pw / 2 - 0.01), 0, 0, M.stone);
+      const lw = W - 0.04;
+      for (const y of [0.15, 1.35]) bx(lw, 0.05, 0.03, 0, y, 0, iron);
+      const bars = Math.max(4, Math.round(lw / 0.1));
+      for (let i = 0; i < bars; i++) bx(0.02, 1.25, 0.02, -lw / 2 + (lw * (i + 0.5)) / bars, 0.2, 0, iron);
+      bx(0.03, 1.45, 0.035, -lw / 2, 0.1, 0, iron);
+      bx(0.03, 1.45, 0.035, lw / 2, 0.1, 0, iron);
+      bx(0.1, 0.03, 0.05, lw / 2 - 0.08, 0.95, 0, chrome);
+      break;
+    }
+    case 'gate_driveway': {
+      // cancello carraio scorrevole: pilastri, anta a doghe orizzontali con guida in alto
+      const iron = m('iron', '#2f353d', { metalness: 0.5, roughness: 0.4 });
+      const pw = 0.3;
+      for (const sx of [-1, 1]) bx(pw, 1.9, Math.max(D, pw), sx * (W / 2 + pw / 2 - 0.02), 0, 0, M.stone);
+      bx(W + 0.2, 0.05, 0.05, 0, 1.75, D / 2, iron);
+      const slats = 9;
+      for (let i = 0; i < slats; i++) bx(W - 0.04, 0.1, 0.03, 0, 0.1 + i * 0.17, D / 2 - 0.02, i % 2 ? iron : m('iron2', '#444b55'));
+      for (const x of [-W / 2 + 0.05, W / 2 - 0.05]) bx(0.05, 1.6, 0.05, x, 0.1, D / 2 - 0.02, iron);
+      break;
+    }
+    case 'washer':
+    case 'dryer': {
+      // elettrodomestico da incasso: corpo bianco, oblò con vetro e anello, pannello comandi con manopola e display
+      const body = m('appliance', '#f2f4f6', { roughness: 0.35 });
+      bx(W, 0.85, D, 0, 0, 0, body);
+      bx(W - 0.02, 0.02, D - 0.02, 0, 0.845, 0, m('applitop', '#e5e8ec'));
+      const r = Math.min(W, 0.6) * 0.32;
+      const doorRing = cy(r, r, 0.03, 0, 0.36, D / 2 + 0.01, m('ring', it.type === 'dryer' ? '#aeb6c0' : '#8e99a6', { metalness: 0.6, roughness: 0.3 }), 28);
+      doorRing.rotation.x = Math.PI / 2;
+      const glassDoor = cy(r * 0.78, r * 0.78, 0.034, 0, 0.36, D / 2 + 0.012, m('porthole', '#1c2a36', { roughness: 0.1, transparent: true, opacity: 0.85 }), 28);
+      glassDoor.rotation.x = Math.PI / 2;
+      bx(W - 0.08, 0.1, 0.012, 0, 0.7, D / 2 + 0.006, m('panel', '#d9dde3'));
+      const knob = cy(0.035, 0.035, 0.02, -W / 4, 0.75, D / 2 + 0.016, M.metal, 16);
+      knob.rotation.x = Math.PI / 2;
+      bx(0.12, 0.035, 0.008, W / 4, 0.72, D / 2 + 0.014, m('display', '#2a3a4a', { emissive: '#4fa8ff', emissiveIntensity: 0.25 }));
+      break;
+    }
+    case 'vacuum': {
+      // aspirapolvere a traino: corpo cilindrico su ruote, tubo flessibile e bocchetta
+      const body = m('vacbody', '#cf3a2f', { roughness: 0.4 });
+      const r = Math.min(W, D) * 0.34;
+      cy(r, r, 0.22, 0, 0.08, 0.02, body, 24);
+      cy(r * 0.9, r * 0.9, 0.04, 0, 0.3, 0.02, M.dark, 24);
+      for (const sx of [-1, 1]) wheel(0.045, 0.03, sx * (r + 0.01), 0.045, 0.06, M.dark);
+      const hose = cy(0.018, 0.018, 0.5, 0, 0.3, -r * 0.3, M.dark, 10);
+      hose.rotation.x = 0.5;
+      cy(0.012, 0.012, 0.28, 0, 0.55, -r - 0.05, chrome, 8).rotation.x = 0.2;
+      bx(0.22, 0.02, 0.07, 0, 0.0, -D / 2 + 0.04, M.dark);
       break;
     }
     case 'office_chair': {

@@ -12,19 +12,20 @@ const M = new Proxy({}, { get: (t, k) => (t[k] ||= mat('#cccccc')) });
 
 // ogni tipo con un modello è un gruppo con nome, misure locali e più pezzi; la rotazione segue il lato
 for (const type of ['bed', 'wardrobe', 'dresser', 'shelving', 'shelving_heavy', 'bookcase', 'car', 'motorbike', 'toilet', 'bidet', 'sink',
-  'shower', 'shower_round', 'shower_walkin', 'bathtub', 'office_chair']) {
+  'shower', 'shower_round', 'shower_walkin', 'bathtub', 'office_chair', 'tv', 'sofa', 'sofa_corner', 'armchair', 'sideboard', 'plant', 'tree',
+  'hedge', 'fence', 'path', 'gate_pedestrian', 'gate_driveway', 'washer', 'dryer', 'vacuum']) {
   assert.ok(hasObject(type), type);
   const it = { type, x: 1, y: 2, w: type === 'car' ? 1.9 : 1.2, h: type === 'car' ? 4.5 : 0.6, facing: 'E' };
   const g = buildObject(THREE, it, M, mat);
   assert.ok(g && g.userData.furniture.type === type, type);
   const meshes = []; g.traverse((o) => o.isMesh && meshes.push(o));
-  assert.ok(meshes.length >= 3, `${type}: ${meshes.length} pezzi`);
+  assert.ok(meshes.length >= (type === 'path' ? 2 : 3), `${type}: ${meshes.length} pezzi`);
   assert.deepEqual(localSize(it), [it.h, it.w]);                 // a est la larghezza è la profondità del rettangolo
   assert.ok(Math.abs(g.rotation.y - Math.PI / 2) < 1e-9);
   assert.ok(Math.abs(g.position.x - (it.x + it.w / 2)) < 1e-9);
   // il modello sta nell'ingombro (tolti sporgenze come le ante o i pomelli)
   const bb = new THREE.Box3().setFromObject(g);
-  assert.ok(bb.max.y > 0.3 && bb.min.y > -0.01, `${type}: quota ${bb.min.y}..${bb.max.y}`);
+  assert.ok(bb.max.y > (type === 'path' ? 0.03 : 0.3) && bb.min.y > -0.01, `${type}: quota ${bb.min.y}..${bb.max.y}`);
 }
 assert.equal(objectKey('bed', 1.6, 2.0), 'LETTO_160X200');
 

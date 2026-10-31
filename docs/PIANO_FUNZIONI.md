@@ -78,6 +78,8 @@ avvia quello locale.
   netta dei locali, tetto; esportazione in un SVG. Mancano PDF, DXF e il disegno della linea di taglio sulla pianta.
 
 ## Arredi 3D come oggetti e DXF a blocchi
+- Anche TV, divani (a 2-3 posti, angolare, poltrona), madia, piante, alberi, siepi, recinzioni, passo pedonale, cancello pedonale e
+  carraio, lavatrice, asciugatrice e aspirapolvere sono oggetti 3D e blocchi nel DXF.
 - Letto, armadio, cassettiera, scaffali, libreria, auto, moto, WC, bidet, lavabo, doccia, vasca e sedia da ufficio sono
   gruppi di pezzi con nome (`lib/furniture3d.js`), non più scatole. Gli altri arredi restano volumi.
 - La sedia da ufficio (nuovo arredo `office_chair`) viene messa dal motore davanti a ogni scrivania (camere, studio,
