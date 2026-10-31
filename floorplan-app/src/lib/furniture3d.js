@@ -14,13 +14,31 @@ export const OBJECT_NAMES = {
   tv: 'TV', sofa: 'DIVANO', sofa_corner: 'DIVANO_ANGOLARE', armchair: 'POLTRONA', sideboard: 'MADIA', plant: 'PIANTA', tree: 'ALBERO',
   hedge: 'SIEPE', fence: 'RECINZIONE', path: 'PASSO_PEDONALE', gate_pedestrian: 'CANCELLO_PEDONALE', gate_driveway: 'CANCELLO_CARRAIO',
   washer: 'LAVATRICE', dryer: 'ASCIUGATRICE', vacuum: 'ASPIRAPOLVERE',
+  nightstand: 'COMODINO', desk: 'SCRIVANIA', table: 'TAVOLO', table_round: 'TAVOLO_TONDO', coffee_table: 'TAVOLINO',
+  kitchen_counter: 'CUCINA', kitchen_peninsula: 'PENISOLA', shoe_cabinet: 'SCARPIERA', console: 'CONSOLE', floor_lamp: 'LAMPADA',
+  bath_column: 'COLONNA_BAGNO', towel_radiator: 'SCALDASALVIETTE', utility_sink: 'LAVATOIO', minibar: 'MINIBAR',
+  workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
 };
+
+/* Categoria di materiale dal nome con cui l'oggetto lo chiama: diventa il layer del pezzo nel blocco DXF. */
+export function materialCategory(key) {
+  if (/glass|porthole|bottle/.test(key)) return 'VETRO';
+  if (/chrome|iron|rim|metal|steel|burner|radiator|ring|^deep$/.test(key)) return 'METALLO';
+  if (/tire/.test(key)) return 'GOMMA';
+  if (/head|tail|lamp/.test(key)) return 'LUCE';
+  if (/white|pillow|chairfab|cloth|towel|^tub$/.test(key)) return 'TESSUTO';
+  if (/gravel|stone/.test(key)) return 'PIETRA';
+  if (/leaf|soil/.test(key)) return 'VEGETAZIONE';
+  if (/bark|wicker|peg|gazroof|legs$/.test(key)) return 'LEGNO';
+  if (/basin|pot|appliance|applitop|niche|splash|sinkbowl|water|drain|paint|vacbody/.test(key)) return 'CERAMICA';
+  return 'PLASTICA';
+}
 
 const YAW = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };
 const r2 = (v) => Math.round(v * 100) / 100;
 
 /* Nome del blocco per tipo e misure: LETTO_160X200. */
-export const objectKey = (type, w, d) => `${OBJECT_NAMES[type] || type.toUpperCase()}_${Math.round(w * 100)}X${Math.round(d * 100)}`;
+export const objectKey = (type, w, d, style = '') => `${OBJECT_NAMES[type] || type.toUpperCase()}_${Math.round(w * 100)}X${Math.round(d * 100)}${style ? `_${style.toUpperCase()}` : ''}`;
 
 /* Ingombro nel riferimento locale: larghezza e profondità, scambiate quando l'arredo guarda a est o a ovest. */
 export function localSize(it) {
@@ -39,9 +57,16 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
   const [W, D] = localSize(it);
   const g = new THREE.Group();
   g.name = OBJECT_NAMES[it.type];
-  g.userData.furniture = { type: it.type, w: r2(W), d: r2(D), key: objectKey(it.type, W, D) };
+  g.userData.furniture = { type: it.type, w: r2(W), d: r2(D), style: theme.id || '', key: objectKey(it.type, W, D, theme.id || '') };
   const own = {};   // materiali propri dell'oggetto, creati una volta sola
-  const m = (key, color, extra) => (own[key] ||= mat(color, extra));
+  /* materiale proprio con la categoria per i layer del DXF (legno, tessuto, metallo, vetro…) dedotta dal nome */
+  const m = (key, color, extra) => {
+    if (!own[key]) {
+      own[key] = mat(color, extra);
+      own[key].userData.cat = materialCategory(key);
+    }
+    return own[key];
+  };
 
   const place = (mesh, x, y, z) => {
     mesh.position.set(x, y, z);
@@ -73,12 +98,37 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
   const ceramic = M.ceramic;
   const glass = m('glass', '#cfe8f5', { transparent: true, opacity: 0.28, roughness: 0.05 });
 
+  // grammatica dello stile (lib/themes.js): gambe, braccioli, capitonné, mobili bassi, maniglie
+  const style = { legs: theme.legs || 'wood', arm: theme.arm || 'square', tuft: !!theme.tuft, low: !!theme.low, id: theme.id || 'modern' };
+  const metalMat = m('stylemetal', theme.metal || '#5b6472', { metalness: 0.7, roughness: 0.3 });
+  const leg = (x, z, h, w = 0.05, mt = wood) => {
+    if (style.legs === 'metal') {
+      cy(0.011, 0.011, h, x, 0, z, metalMat, 10);
+      cy(0.02, 0.02, 0.006, x, 0, z, darkLine, 12);
+    } else if (style.legs === 'turned') {
+      cy(0.024, 0.016, h * 0.35, x, 0, z, mt, 12);
+      ball(0.034, x, h * 0.5, z, mt);
+      cy(0.02, 0.026, h * 0.35, x, h * 0.65, z, mt, 12);
+    } else {
+      cy(w / 2, w / 3, h, x, 0, z, mt, 8);
+    }
+  };
+  /* maniglia sulla faccia verso +z a quota y: pomello (classico), presa incassata (japandi), pomello in legno (nordico) o barra */
+  const pull = (x, y, zf, vertical = false) => {
+    if (style.id === 'classic') ball(0.017, x, y, zf + 0.012, metalMat);
+    else if (style.id === 'nordic') cy(0.014, 0.014, 0.025, x, y, zf + 0.012, wood, 12).rotation.x = Math.PI / 2;
+    else if (style.id === 'japandi') bx(vertical ? 0.01 : 0.12, vertical ? 0.12 : 0.01, 0.004, x, y - 0.005, zf + 0.002, darkLine);
+    else bx(vertical ? 0.012 : 0.14, vertical ? 0.14 : 0.012, 0.02, x, y - 0.006, zf + 0.012, metalMat);
+  };
+
   switch (it.type) {
     case 'bed': {
-      // base con gambe, materasso, piumone che scende ai lati, cuscini e testiera
-      const baseTop = 0.34;
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.07, 0.12, 0.07, sx * (W / 2 - 0.06), 0, sz * (D / 2 - 0.06), wood);
-      bx(W, 0.22, D - 0.04, 0, 0.12, 0.02, wood);
+      // base (su pedana nel japandi), materasso, piumone, cuscini e testiera dello stile
+      const low = style.low;
+      const baseTop = low ? 0.3 : 0.34;
+      if (low) bx(W + 0.12, 0.06, D + 0.06, 0, 0, 0, wood);
+      else for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.12, 0.07);
+      bx(W, low ? 0.2 : 0.22, D - 0.04, 0, low ? 0.06 : 0.12, 0.02, wood);
       bx(W - 0.06, 0.2, D - 0.12, 0, baseTop, 0.02, white);
       const len = (D - 0.12) * 0.64;
       bx(W + 0.02, 0.09, len, 0, baseTop + 0.15, D / 2 - 0.06 - len / 2, M.duvet);
@@ -88,18 +138,38 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         const x = pillows === 2 ? (i ? 1 : -1) * W / 4 : 0;
         bx(Math.min(0.55, (W - 0.1) / pillows - 0.06), 0.13, 0.36, x, baseTop + 0.2, -D / 2 + 0.34, white);
       }
-      bx(W, 0.95, 0.07, 0, 0.1, -D / 2 + 0.035, wood);
-      bx(W + 0.06, 0.05, 0.1, 0, 1.05, -D / 2 + 0.05, wood);
+      const hz = -D / 2;
+      if (style.tuft) {
+        // testiera imbottita e capitonné con bottoni
+        const hh = style.id === 'luxury' ? 1.35 : 1.15;
+        bx(W + 0.06, hh, 0.1, 0, 0.1, hz + 0.05, M.fabric);
+        bx(W + 0.1, 0.06, 0.13, 0, 0.1 + hh, hz + 0.055, wood);
+        const cols = Math.max(3, Math.round(W / 0.22));
+        for (let r = 0; r < 4; r++) for (let c = 0; c < cols; c++) ball(0.014, -W / 2 + 0.08 + (c + (r % 2 ? 0.5 : 0)) * ((W - 0.16) / cols), 0.5 + r * 0.17, hz + 0.105, metalMat);
+      } else if (style.legs === 'metal') {
+        // testiera in tubo di ferro: due montanti, traversa e barre
+        for (const sx of [-1, 1]) cy(0.018, 0.018, 1.05, sx * (W / 2 - 0.02), 0, hz + 0.03, metalMat, 12);
+        bx(W, 0.03, 0.03, 0, 1.0, hz + 0.03, metalMat);
+        const bars = Math.max(6, Math.round(W / 0.12));
+        for (let i = 0; i < bars; i++) bx(0.012, 0.6, 0.012, -W / 2 + (W * (i + 0.5)) / bars, 0.4, hz + 0.03, metalMat);
+      } else if (style.id === 'nordic') {
+        const slats = Math.max(5, Math.round(W / 0.14));
+        bx(W + 0.04, 0.05, 0.05, 0, 0.12, hz + 0.03, wood);
+        for (let i = 0; i < slats; i++) bx(0.07, 0.8, 0.03, -W / 2 + (W * (i + 0.5)) / slats, 0.17, hz + 0.03, wood);
+      } else {
+        bx(W, low ? 0.55 : 0.95, 0.07, 0, low ? 0.06 : 0.1, hz + 0.035, wood);
+        bx(W + 0.06, 0.05, 0.1, 0, low ? 0.61 : 1.05, hz + 0.05, wood);
+      }
       break;
     }
     case 'wardrobe': {
-      // corpo su zoccolo, ante con fessure e maniglie, cornice in alto
+      // corpo su zoccolo, ante con fessure e maniglie dello stile, cornice in alto (con modanatura nel classico e nel luxury)
       const H = 2.2;
       bx(W, 0.06, D - 0.04, 0, 0, -0.01, darkLine);
       bx(W, H - 0.11, D, 0, 0.06, 0, M.cabinet);
-      bx(W + 0.02, 0.05, D + 0.02, 0, H - 0.05, 0, M.cabinet);
+      bx(W + 0.02, style.tuft ? 0.1 : 0.05, D + 0.02, 0, H - (style.tuft ? 0.1 : 0.05), 0, M.cabinet);
+      if (style.tuft) bx(W + 0.05, 0.03, D + 0.05, 0, H - 0.13, 0, wood);
       const doors = Math.max(2, Math.round(Math.max(W, D) / 0.6));
-      // le ante stanno sul lato lungo che guarda in avanti (+z); per un armadio più profondo che largo le ante sono sul lato corto
       const front = W >= D;
       const span = front ? W : D;
       for (let i = 1; i < doors; i++) {
@@ -107,24 +177,32 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         if (front) bx(0.008, H - 0.16, 0.012, o, 0.08, D / 2 + 0.004, darkLine);
         else bx(0.012, H - 0.16, 0.008, W / 2 + 0.004, 0.08, o, darkLine);
       }
+      if (style.tuft && front) {
+        // specchiature in rilievo sulle ante
+        for (let i = 0; i < doors; i++) {
+          const o = -span / 2 + (span * (i + 0.5)) / doors;
+          bx(span / doors - 0.12, 0.7, 0.012, o, 0.2, D / 2 + 0.008, wood);
+          bx(span / doors - 0.12, 0.9, 0.012, o, 1.05, D / 2 + 0.008, wood);
+        }
+      }
       for (let i = 0; i < doors; i += 2) {
         const o = -span / 2 + (span * (i + 1)) / doors;
         for (const k of [-0.035, 0.035]) {
-          if (front) bx(0.015, 0.2, 0.02, o + k, 0.95, D / 2 + 0.012, chrome);
-          else bx(0.02, 0.2, 0.015, W / 2 + 0.012, 0.95, o + k, chrome);
+          if (front) pull(o + k, 1.0, D / 2, true);
+          else bx(0.02, 0.2, 0.015, W / 2 + 0.012, 0.95, o + k, metalMat);
         }
       }
       break;
     }
     case 'dresser': {
-      // cassettiera: quattro gambe, corpo, cassetti con pomelli, piano sporgente
+      // cassettiera: gambe dello stile, corpo, cassetti con maniglie, piano sporgente
       const rows = W > 0.7 ? 3 : 4;
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.05, 0.12, 0.05, sx * (W / 2 - 0.05), 0, sz * (D / 2 - 0.05), wood);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.05), sz * (D / 2 - 0.05), 0.12);
       bx(W, 0.72, D, 0, 0.12, 0, M.cabinet);
       const dh = 0.72 / rows;
       for (let i = 0; i < rows; i++) {
         bx(W - 0.05, dh - 0.02, 0.015, 0, 0.13 + i * dh, D / 2 + 0.006, wood);
-        cy(0.012, 0.012, 0.03, 0, 0.12 + i * dh + dh / 2, D / 2 + 0.03, chrome, 12).rotation.x = Math.PI / 2;
+        pull(0, 0.12 + i * dh + dh / 2, D / 2 + 0.006, false);
       }
       bx(W + 0.02, 0.04, D + 0.02, 0, 0.84, 0, wood);
       break;
@@ -315,57 +393,76 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
     case 'sofa':
     case 'sofa_corner':
     case 'armchair': {
-      // basamento con gambe, braccioli, sedute e schienali a cuscini, cuscini decorativi. Schienale verso -z
-      const arm = it.type === 'armchair' ? 0.14 : 0.16;
+      // basamento con gambe dello stile, braccioli (quadrati, tondi, a rullo, sottili), sedute e schienali a cuscini
+      const slim = style.arm === 'slim';
+      const arm = slim ? 0.08 : it.type === 'armchair' ? 0.14 : 0.16;
       const backT = 0.2;
+      const lowSofa = style.low;
+      const seatY = lowSofa ? 0.2 : 0.3;
       const corner = it.type === 'sofa_corner';
       const mainD = corner ? Math.min(0.95, D) : D;
       const flip = corner && it.flip ? -1 : 1;
       const zb = -D / 2;                       // retro
       const mainZ = zb + mainD / 2;
-      const legs = m('sofalegs', '#3b332c');
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.05, 0.1, 0.05, sx * (W / 2 - 0.08), 0, sz * (D / 2 - 0.08), legs);
-      bx(W - 2 * arm, 0.22, mainD - 0.04, 0, 0.1, mainZ, M.fabric);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.08), sz * (D / 2 - 0.08), lowSofa ? 0.05 : 0.1);
+      bx(W - 2 * arm, 0.22, mainD - 0.04, 0, lowSofa ? 0.05 : 0.1, mainZ, M.fabric);
       const n = it.type === 'armchair' ? 1 : Math.max(2, Math.round((W - 2 * arm) / 0.75));
       const sw = (W - 2 * arm) / n;
       for (let i = 0; i < n; i++) {
         const x = -W / 2 + arm + sw * (i + 0.5);
-        bx(sw - 0.012, 0.15, mainD - backT - 0.02, x, 0.3, zb + backT + (mainD - backT) / 2, M.fabric);
-        const bk = bx(sw - 0.012, 0.42, backT - 0.04, x, 0.4, zb + backT / 2 + 0.02, M.fabric);
+        bx(sw - 0.012, 0.15, mainD - backT - 0.02, x, seatY, zb + backT + (mainD - backT) / 2, M.fabric);
+        const bk = bx(sw - 0.012, lowSofa ? 0.32 : 0.42, backT - 0.04, x, seatY + 0.1, zb + backT / 2 + 0.02, M.fabric);
         bk.rotation.x = -0.1;
+        if (style.tuft) for (const dx of [-0.2, 0, 0.2].filter((v) => Math.abs(v) < sw / 2 - 0.05)) ball(0.013, x + dx, seatY + 0.34, zb + backT - 0.015, metalMat);
       }
-      for (const sx of [-1, 1]) bx(arm, 0.6, mainD, sx * (W / 2 - arm / 2), 0.1, mainZ, M.fabric);
-      bx(W, 0.2, 0.06, 0, 0.5, zb + 0.03, M.fabric);                    // fascia dietro lo schienale
+      const armH = lowSofa ? 0.42 : 0.6;
+      for (const sx of [-1, 1]) {
+        const ax = sx * (W / 2 - arm / 2);
+        if (style.arm === 'round') {
+          bx(arm, armH - arm / 2, mainD, ax, lowSofa ? 0.05 : 0.1, mainZ, M.fabric);
+          const roll = cy(arm / 2, arm / 2, mainD, ax, 0, mainZ, M.fabric, 16);
+          roll.rotation.x = Math.PI / 2;
+          roll.position.set(ax, (lowSofa ? 0.05 : 0.1) + armH - arm / 2, mainZ);
+        } else if (style.arm === 'rolled') {
+          bx(arm * 0.8, armH - 0.08, mainD, ax, lowSofa ? 0.05 : 0.1, mainZ, M.fabric);
+          const roll = cy(arm * 0.62, arm * 0.62, mainD, ax, 0, mainZ, M.fabric, 18);
+          roll.rotation.x = Math.PI / 2;
+          roll.position.set(ax, (lowSofa ? 0.05 : 0.1) + armH - 0.04, mainZ);
+        } else {
+          bx(arm, armH, mainD, ax, lowSofa ? 0.05 : 0.1, mainZ, M.fabric);
+        }
+      }
+      bx(W, lowSofa ? 0.12 : 0.2, 0.06, 0, lowSofa ? 0.4 : 0.5, zb + 0.03, M.fabric);                    // fascia dietro lo schienale
       if (corner) {
         // penisola: seduta lunga sul lato della chaise, senza schienale
         const cw = Math.min(0.95, W - 2 * arm);
         const cx = flip * (W / 2 - arm - cw / 2);
         const cd = D - mainD;
-        bx(cw, 0.22, cd, cx, 0.1, zb + mainD + cd / 2, M.fabric);
-        bx(cw - 0.012, 0.15, cd - 0.012, cx, 0.3, zb + mainD + cd / 2, M.fabric);
+        bx(cw, 0.22, cd, cx, lowSofa ? 0.05 : 0.1, zb + mainD + cd / 2, M.fabric);
+        bx(cw - 0.012, 0.15, cd - 0.012, cx, seatY, zb + mainD + cd / 2, M.fabric);
       }
       const pil = m('pillow', theme.accent || '#c9b79c');
       if (it.type !== 'armchair') {
-        for (const sx of [-1, 1]) bx(0.34, 0.34, 0.1, sx * (W / 2 - arm - 0.28), 0.46, zb + backT + 0.1, pil).rotation.y = sx * 0.3;
+        for (const sx of [-1, 1]) bx(0.34, 0.34, 0.1, sx * (W / 2 - arm - 0.28), seatY + 0.16, zb + backT + 0.1, pil).rotation.y = sx * 0.3;
       }
       break;
     }
     case 'sideboard': {
-      // madia: zoccolo su gambe sottili, due o tre ante con maniglie, piano in legno
+      // madia: zoccolo su gambe dello stile, due o tre ante con maniglie, piano in legno
       const doors = Math.max(2, Math.round(Math.max(W, D) / 0.6));
       const front = W >= D;
       const span = front ? W : D;
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.04, 0.16, 0.04, sx * (W / 2 - 0.06), 0, sz * (D / 2 - 0.06), wood);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.16);
       bx(W, 0.6, D, 0, 0.16, 0, M.cabinet);
       for (let i = 0; i < doors; i++) {
         const o = -span / 2 + (span * (i + 0.5)) / doors;
         const fw = span / doors - 0.02;
         if (front) {
           bx(fw, 0.54, 0.015, o, 0.19, D / 2 + 0.006, wood);
-          bx(0.012, 0.14, 0.02, o + (i % 2 ? fw / 2 - 0.04 : -fw / 2 + 0.04), 0.42, D / 2 + 0.02, chrome);
+          pull(o + (i % 2 ? fw / 2 - 0.05 : -fw / 2 + 0.05), 0.46, D / 2 + 0.006, true);
         } else {
           bx(0.015, 0.54, fw, W / 2 + 0.006, 0.19, o, wood);
-          bx(0.02, 0.14, 0.012, W / 2 + 0.02, 0.42, o + (i % 2 ? fw / 2 - 0.04 : -fw / 2 + 0.04), chrome);
+          bx(0.02, 0.14, 0.012, W / 2 + 0.02, 0.42, o + (i % 2 ? fw / 2 - 0.04 : -fw / 2 + 0.04), metalMat);
         }
       }
       bx(W + 0.03, 0.04, D + 0.03, 0, 0.76, 0, wood);
@@ -492,6 +589,242 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       hose.rotation.x = 0.5;
       cy(0.012, 0.012, 0.28, 0, 0.55, -r - 0.05, chrome, 8).rotation.x = 0.2;
       bx(0.22, 0.02, 0.07, 0, 0.0, -D / 2 + 0.04, M.dark);
+      break;
+    }
+    case 'nightstand': {
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.04), sz * (D / 2 - 0.04), 0.12);
+      bx(W, 0.4, D, 0, 0.12, 0, M.cabinet);
+      bx(W - 0.05, 0.16, 0.014, 0, 0.36, D / 2 + 0.006, wood);
+      pull(0, 0.44, D / 2 + 0.006, false);
+      bx(W - 0.05, 0.14, 0.014, 0, 0.19, D / 2 + 0.006, wood);
+      pull(0, 0.26, D / 2 + 0.006, false);
+      bx(W + 0.02, 0.03, D + 0.02, 0, 0.52, 0, wood);
+      break;
+    }
+    case 'desk': {
+      // piano; pannelli o gambe dello stile, cassettiera a lato e schienale basso
+      bx(W, 0.04, D, 0, 0.71, 0, wood);
+      if (style.legs === 'metal' || style.legs === 'turned') {
+        for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.71, 0.06);
+        bx(W - 0.1, 0.06, D - 0.1, 0, 0.64, 0, wood);
+      } else {
+        bx(0.03, 0.71, D - 0.04, -W / 2 + 0.03, 0, 0, wood);
+        bx(W - 0.08, 0.35, 0.02, 0, 0.3, -D / 2 + 0.04, wood);
+      }
+      if (W >= 1.0) {
+        const px = W / 2 - 0.22;
+        bx(0.4, 0.62, D - 0.06, px, 0.08, 0, M.cabinet);
+        for (let i = 0; i < 3; i++) {
+          bx(0.36, 0.17, 0.014, px, 0.1 + i * 0.2, D / 2 - 0.025, wood);
+          pull(px, 0.18 + i * 0.2, D / 2 - 0.025, false);
+        }
+      }
+      break;
+    }
+    case 'table': {
+      bx(W, 0.04, D, 0, 0.71, 0, wood);
+      bx(W - 0.12, 0.07, D - 0.12, 0, 0.64, 0, wood);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.64, 0.06);
+      break;
+    }
+    case 'table_round': {
+      cy(W / 2, W / 2, 0.04, 0, 0.71, 0, wood, 40);
+      if (style.legs === 'metal' || style.id === 'modern') {
+        cy(0.04, 0.04, 0.68, 0, 0.03, 0, style.legs === 'metal' ? metalMat : wood, 16);
+        cy(W * 0.3, W * 0.32, 0.03, 0, 0, 0, style.legs === 'metal' ? metalMat : wood, 32);
+      } else {
+        for (let i = 0; i < 3; i++) {
+          const a = (i * 2 * Math.PI) / 3 + 0.5;
+          leg(Math.cos(a) * W * 0.3, Math.sin(a) * W * 0.3, 0.7, 0.06);
+        }
+      }
+      break;
+    }
+    case 'coffee_table': {
+      bx(W, 0.04, D, 0, 0.36, 0, wood);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.05), sz * (D / 2 - 0.05), 0.36);
+      bx(W - 0.1, 0.02, D - 0.1, 0, 0.14, 0, wood);
+      break;
+    }
+    case 'kitchen_counter': {
+      // basi con ante e cassetti, piano di lavoro, lavello con miscelatore, piano cottura a 4 fuochi, cappa e paraschizzi
+      const n = Math.max(2, Math.round(W / 0.6));
+      const uw = W / n;
+      bx(W, 0.1, D - 0.06, 0, 0, -0.01, darkLine);
+      for (let i = 0; i < n; i++) {
+        const x = -W / 2 + uw * (i + 0.5);
+        bx(uw - 0.012, 0.74, D - 0.02, x, 0.1, -0.01, M.cabinet);
+        if (i % 3 === 1) {
+          for (let k = 0; k < 3; k++) { bx(uw - 0.04, 0.2, 0.016, x, 0.14 + k * 0.23, D / 2 - 0.01 + 0.008, wood); pull(x, 0.28 + k * 0.23, D / 2 - 0.01 + 0.008, false); }
+        } else {
+          bx(uw - 0.04, 0.68, 0.016, x, 0.14, D / 2 - 0.01 + 0.008, wood);
+          pull(x + (i % 2 ? uw / 2 - 0.06 : -uw / 2 + 0.06), 0.56, D / 2 - 0.01 + 0.008, true);
+        }
+      }
+      bx(W + 0.01, 0.04, D + 0.03, 0, 0.84, 0.0, M.counter);
+      bx(W, 0.45, 0.015, 0, 0.88, -D / 2 + 0.006, m('splash', '#e8e5de'));
+      const sx = -W / 4;
+      bx(0.5, 0.02, 0.38, sx, 0.87, 0.02, m('sinkbowl', '#c3c9d0', { metalness: 0.5, roughness: 0.3 }));
+      cy(0.012, 0.012, 0.22, sx, 0.88, -D / 2 + 0.1, chrome, 10);
+      bx(0.018, 0.018, 0.15, sx, 1.08, -D / 2 + 0.17, chrome);
+      const hx = W / 4;
+      bx(0.58, 0.008, 0.5, hx, 0.88, 0.0, m('hob', '#14171b', { roughness: 0.15 }));
+      for (const [bx0, bz0] of [[-0.13, -0.11], [0.13, -0.11], [-0.13, 0.11], [0.13, 0.11]]) cy(0.07, 0.07, 0.012, hx + bx0, 0.888, bz0, m('burner', '#3a4048'), 18);
+      bx(0.62, 0.08, 0.42, hx, 1.52, -D / 2 + 0.22, metalMat);
+      bx(0.28, 0.62, 0.22, hx, 1.6, -D / 2 + 0.13, metalMat);
+      break;
+    }
+    case 'kitchen_peninsula': {
+      // isola: basi con ante, piano con sporgenza per gli sgabelli e due o tre sgabelli sul lato aperto (+z)
+      const n = Math.max(2, Math.round(W / 0.6));
+      const uw = W / n;
+      bx(W, 0.1, D - 0.06, 0, 0, -0.04, darkLine);
+      for (let i = 0; i < n; i++) {
+        const x = -W / 2 + uw * (i + 0.5);
+        bx(uw - 0.012, 0.74, D - 0.14, x, 0.1, -0.07, M.cabinet);
+        bx(uw - 0.04, 0.66, 0.016, x, 0.14, -D / 2 + 0.005, wood);
+      }
+      bx(W + 0.02, 0.04, D + 0.2, 0, 0.84, 0.1, M.counter);
+      const stools = Math.max(2, Math.min(4, Math.floor(W / 0.6)));
+      for (let k = 0; k < stools; k++) {
+        const x = -W / 2 + (W * (k + 0.5)) / stools;
+        cy(0.17, 0.17, 0.04, x, 0.66, D / 2 + 0.38, M.fabric, 20);
+        cy(0.016, 0.016, 0.64, x, 0.02, D / 2 + 0.38, metalMat, 10);
+        cy(0.15, 0.15, 0.012, x, 0.02, D / 2 + 0.38, metalMat, 20);
+        cy(0.1, 0.1, 0.012, x, 0.3, D / 2 + 0.38, metalMat, 16);
+      }
+      break;
+    }
+    case 'shoe_cabinet': {
+      bx(W, 0.94, D, 0, 0.06, 0, M.cabinet);
+      for (const sx of [-1, 1]) cy(0.02, 0.02, 0.06, sx * (W / 2 - 0.05), 0, 0, darkLine, 8);
+      const rows = 3;
+      for (let i = 0; i < rows; i++) {
+        bx(W - 0.04, 0.27, 0.014, 0, 0.1 + i * 0.3, D / 2 + 0.006, wood);
+        pull(0, 0.3 + i * 0.3, D / 2 + 0.006, false);
+      }
+      bx(W + 0.02, 0.025, D + 0.02, 0, 1.0, 0, wood);
+      break;
+    }
+    case 'console': {
+      bx(W, 0.04, D, 0, 0.76, 0, wood);
+      bx(W - 0.08, 0.1, D - 0.04, 0, 0.66, 0, wood);
+      bx(W * 0.42, 0.08, 0.014, 0, 0.67, D / 2 - 0.015, M.cabinet);
+      pull(0, 0.7, D / 2 - 0.015, false);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.05), sz * (D / 2 - 0.05), 0.66);
+      break;
+    }
+    case 'floor_lamp': {
+      cy(0.15, 0.17, 0.03, 0, 0, 0, metalMat, 24);
+      cy(0.012, 0.012, 1.45, 0, 0.03, 0, metalMat, 10);
+      const shade = M.lamp;
+      if (style.id === 'industrial') {
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), metalMat);
+        place(dome, 0, 1.46, 0);
+        ball(0.05, 0, 1.45, 0, shade);
+      } else if (style.id === 'classic' || style.id === 'luxury') {
+        cy(0.13, 0.23, 0.3, 0, 1.3, 0, shade, 28);
+        cy(0.235, 0.235, 0.012, 0, 1.3, 0, metalMat, 28);
+        cy(0.135, 0.135, 0.012, 0, 1.6, 0, metalMat, 28);
+      } else {
+        cy(0.18, 0.18, 0.3, 0, 1.3, 0, shade, 28);
+      }
+      break;
+    }
+    case 'bath_column': {
+      // colonna contenitore: nicchia aperta con asciugamani arrotolati, sotto ante con maniglie
+      bx(W, 1.78, D, 0, 0.04, 0, M.cabinet);
+      bx(W - 0.06, 0.55, 0.01, 0, 1.2, D / 2 - 0.02, m('niche', '#e9e5dc'));
+      for (const y of [1.2, 1.55]) bx(W - 0.04, 0.02, D - 0.04, 0, y, 0, wood);
+      for (const [sx, y, c] of [[-0.1, 1.23, '#f2f2f2'], [0.1, 1.23, '#cfd8dc'], [0, 1.57, '#f6efe4']]) {
+        cy(0.045, 0.045, Math.min(W - 0.1, 0.3), sx * (W / 0.45) * 0.45, y, 0.0, m(`towel${c}`, c), 14).rotation.z = Math.PI / 2;
+      }
+      bx(W - 0.04, 0.55, 0.014, 0, 0.08, D / 2 + 0.006, wood);
+      pull(W * 0.3, 0.5, D / 2 + 0.006, true);
+      bx(W - 0.04, 0.4, 0.014, 0, 0.7, D / 2 + 0.006, wood);
+      pull(W * 0.3, 0.9, D / 2 + 0.006, true);
+      break;
+    }
+    case 'towel_radiator': {
+      // scaldasalviette a scaletta: montanti laterali e barre orizzontali
+      const rad = m('radiator', style.id === 'luxury' ? '#c4cad3' : '#f4f4f4', { metalness: style.id === 'luxury' ? 0.7 : 0.1, roughness: 0.3 });
+      const L = Math.max(W, D);
+      const alongX = W >= D;
+      const put = (a, y, len, vertical) => {
+        const t = cy(0.014, 0.014, len, 0, 0, 0, rad, 10);
+        if (vertical) t.position.set(alongX ? a : 0, y + len / 2, alongX ? 0 : a);
+        else { t.rotation.z = alongX ? Math.PI / 2 : 0; if (!alongX) t.rotation.x = Math.PI / 2; t.position.set(0, y, 0); }
+      };
+      for (const sx of [-1, 1]) put(sx * (L / 2 - 0.02), 0.1, 1.1, true);
+      for (let i = 0; i < 9; i++) {
+        const t = cy(0.013, 0.013, L - 0.04, 0, 0, 0, rad, 10);
+        if (alongX) t.rotation.z = Math.PI / 2; else t.rotation.x = Math.PI / 2;
+        t.position.set(0, 0.16 + i * 0.115, 0);
+      }
+      break;
+    }
+    case 'utility_sink': {
+      // lavatoio: mobile sotto, vasca profonda in acciaio, miscelatore alto e paraschizzi
+      bx(W, 0.5, D, 0, 0, 0, M.cabinet);
+      bx(W - 0.02, 0.05, D, 0, 0.5, 0, M.metal);
+      const bowl = m('steel', '#c9ced4', { metalness: 0.6, roughness: 0.3 });
+      // vasca vuota: quattro pareti in acciaio e fondo scuro più in basso
+      const bw = W - 0.1;
+      const bd = D - 0.1;
+      bx(bw, 0.02, bd, 0, 0.55, 0, m('deep', '#9aa2ab'));
+      bx(bw, 0.28, 0.02, 0, 0.57, -bd / 2 + 0.01, bowl);
+      bx(bw, 0.28, 0.02, 0, 0.57, bd / 2 - 0.01, bowl);
+      bx(0.02, 0.28, bd - 0.04, -bw / 2 + 0.01, 0.57, 0, bowl);
+      bx(0.02, 0.28, bd - 0.04, bw / 2 - 0.01, 0.57, 0, bowl);
+      cy(0.014, 0.014, 0.28, 0, 0.85, -D / 2 + 0.05, chrome, 10);
+      bx(0.02, 0.02, 0.18, 0, 1.12, -D / 2 + 0.13, chrome);
+      bx(W, 0.2, 0.02, 0, 0.88, -D / 2 + 0.01, m('splash', '#dde2e6'));
+      break;
+    }
+    case 'minibar': {
+      bx(W, 0.85, D, 0, 0, 0, M.cabinet);
+      bx(W - 0.06, 0.62, 0.012, 0, 0.12, D / 2 + 0.006, glass);
+      const bott = m('bottle', '#456a4a', { transparent: true, opacity: 0.85 });
+      for (let i = 0; i < 4; i++) cy(0.03, 0.03, 0.26, -W / 2 + 0.1 + i * ((W - 0.2) / 3), 0.3, 0, i % 2 ? bott : m('bottle2', '#8a5a2b'), 12);
+      bx(W - 0.06, 0.012, D - 0.06, 0, 0.28, 0, chrome);
+      pull(W / 2 - 0.05, 0.45, D / 2 + 0.006, true);
+      bx(W + 0.02, 0.03, D + 0.02, 0, 0.85, 0, wood);
+      break;
+    }
+    case 'workbench': {
+      // banco da lavoro: piano spesso, telaio in ferro, ripiano, morsa e pannello portautensili
+      bx(W, 0.06, D, 0, 0.84, 0, wood);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.05, 0.84, 0.05, sx * (W / 2 - 0.06), 0, sz * (D / 2 - 0.06), M.metal);
+      bx(W - 0.1, 0.03, D - 0.1, 0, 0.2, 0, wood);
+      bx(W, 0.7, 0.02, 0, 0.9, -D / 2 + 0.01, m('peg', '#c9b896'));
+      bx(0.14, 0.1, 0.12, W / 2 - 0.2, 0.9, D / 2 - 0.12, M.metal);
+      for (let i = 0; i < 4; i++) bx(0.03, 0.2 + 0.03 * (i % 2), 0.03, -W / 2 + 0.25 + i * 0.22, 1.3, -D / 2 + 0.04, i % 2 ? M.dark : M.metal);
+      break;
+    }
+    case 'laundry_basket': {
+      const r = Math.min(W, D) / 2;
+      const wick = m('wicker', '#b99a68');
+      cy(r, r * 0.86, 0.5, 0, 0, 0, wick, 24);
+      cy(r * 0.9, r * 0.9, 0.02, 0, 0.5, 0, m('cloth', '#e8e1d6'), 24);
+      ball(r * 0.8, 0, 0.5, 0, m('cloth', '#e8e1d6'), 1, 0.45, 1);
+      for (const sx of [-1, 1]) bx(0.04, 0.04, 0.1, sx * (r - 0.01), 0.4, 0, wick);
+      break;
+    }
+    case 'gazebo': {
+      // gazebo in legno: piattaforma, quattro pali, travi e tetto a padiglione, panca sul fondo
+      const roofMat = m('gazroof', '#8b6b4a', { side: 2 });
+      bx(W, 0.08, D, 0, 0, 0, wood);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bx(0.12, 2.3, 0.12, sx * (W / 2 - 0.1), 0.08, sz * (D / 2 - 0.1), wood);
+      bx(W - 0.1, 0.12, 0.1, 0, 2.28, -D / 2 + 0.1, wood);
+      bx(W - 0.1, 0.12, 0.1, 0, 2.28, D / 2 - 0.1, wood);
+      bx(0.1, 0.12, D - 0.1, -W / 2 + 0.1, 2.28, 0, wood);
+      bx(0.1, 0.12, D - 0.1, W / 2 - 0.1, 2.28, 0, wood);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(W, D) * 0.78, 0.9, 4), roofMat);
+      roof.rotation.y = Math.PI / 4;
+      roof.scale.set(W / Math.max(W, D), 1, D / Math.max(W, D));
+      place(roof, 0, 2.4 + 0.45, 0);
+      bx(W - 0.6, 0.42, 0.36, 0, 0.08, -D / 2 + 0.34, wood);
+      bx(W - 0.6, 0.35, 0.05, 0, 0.5, -D / 2 + 0.2, wood);
       break;
     }
     case 'office_chair': {
