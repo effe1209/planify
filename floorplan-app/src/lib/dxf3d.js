@@ -7,6 +7,7 @@ const COLORS = {
   MURI: 7, VETRI: 4, PAVIMENTI: 8, ARREDI: 30, SOLAI: 9, PORTE: 30, SCALE: 30, TETTO: 12, RINGHIERE: 8,
   LEGNO: 30, TESSUTO: 5, LACCATO: 8, PIANO: 9, PLASTICA: 250, CERAMICA: 7, LUCE: 2, VEGETAZIONE: 3, CARROZZERIA: 4,
   METALLO: 8, GOMMA: 250, VETRO: 4, PIETRA: 8,
+  SENSORI: 6, COPERTURA: 5, IMP_LUCI: 2, IMP_COMANDI: 30, IMP_QUADRI: 1, IMP_PRESE: 5, IMP_CAVI: 3, IMPIANTO: 3,
 };
 const n3 = (v) => (Math.round(v * 1000) / 1000).toString();
 
@@ -48,7 +49,7 @@ export function sceneToDxf(THREE, root) {
   const blocks = new Map();    // nome → facce in coordinate locali
   const inserts = [];          // { name, layer, x, y, z, rot }
   const inBlock = new Set();
-  root.traverse((o) => {
+  root.traverseVisible((o) => {
     if (!o.userData?.furniture) return;
     const { key } = o.userData.furniture;
     o.traverse((c) => { if (c.isMesh) inBlock.add(c); });
@@ -68,10 +69,10 @@ export function sceneToDxf(THREE, root) {
     const origin = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
     const yaw = new THREE.Euler().setFromRotationMatrix(o.matrixWorld, 'YXZ').y;
     const [x, y, z] = toDxf(origin);
-    inserts.push({ name: key, layer: level == null ? 'ARREDI' : `${floorTag(level)}_ARREDI`, x, y, z, rot: (yaw * 180) / Math.PI });
+    inserts.push({ name: key, layer: o.userData.furniture.layer || (level == null ? 'ARREDI' : `${floorTag(level)}_ARREDI`), x, y, z, rot: (yaw * 180) / Math.PI });
   });
 
-  root.traverse((o) => {
+  root.traverseVisible((o) => {
     if (!o.isMesh || !o.geometry?.attributes?.position || inBlock.has(o)) return;
     const level = levelOf(o);
     const kind = o.userData.layer || 'ARREDI';
@@ -87,7 +88,7 @@ export function sceneToDxf(THREE, root) {
     0, 'ENDSEC');
   put(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LTYPE', 70, 1, 0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Continua', 72, 65, 73, 0, 40, 0, 0, 'ENDTAB');
   put(0, 'TABLE', 2, 'LAYER', 70, layers.length + 1, 0, 'LAYER', 2, '0', 70, 0, 62, 7, 6, 'CONTINUOUS');
-  for (const l of layers) put(0, 'LAYER', 2, l, 70, 0, 62, COLORS[l.split('_').pop()] ?? 7, 6, 'CONTINUOUS');
+  for (const l of layers) put(0, 'LAYER', 2, l, 70, 0, 62, COLORS[l] ?? COLORS[l.split('_').pop()] ?? 7, 6, 'CONTINUOUS');
   put(0, 'ENDTAB', 0, 'ENDSEC');
   if (blocks.size) {
     put(0, 'SECTION', 2, 'BLOCKS');
