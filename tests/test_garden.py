@@ -110,6 +110,27 @@ def test_front_door_does_not_open_onto_the_stair_run():
                 assert not touches, (W, L, seed)
 
 
+def test_cars_are_centred_on_the_garage_door_and_off_the_walls():
+    for W, L in ((6, 9), (8, 10), (10, 12), (12, 14)):
+        plan = planner.generate(W, L, "garage", seed=1)
+        door = next(d for d in plan["doors"] if d.get("kind") == "garage")
+        cars = [f for f in plan["furniture"] if f["type"] == "car"]
+        assert cars, (W, L)
+        mid = sum(c["x"] + c["w"] / 2 for c in cars) / len(cars)
+        assert abs(mid - (door["x"] + door["w"] / 2)) < 0.15, (W, L, mid)
+        for c in cars:   # almeno 0,6 m dalle pareti laterali (0,2 m di muro compreso)
+            assert c["x"] >= 0.8 - 1e-6 and c["x"] + c["w"] <= W - 0.8 + 1e-6, (W, L, c)
+
+
+def test_every_room_has_a_door_it_can_be_reached_through():
+    h = planner.generate_house(8, 8, [{"level": 0, "program": "garage"}, {"level": 1, "program": "full"}], seed=1)
+    plan = h["floors"][1]["plan"]
+    bed = [r for r in plan["rooms"] if r["kind"] == "bed"]
+    for r in bed:
+        assert any((abs(d["x"] - r["x"]) < 0.35 or abs(d["x"] - r["x"] - r["w"]) < 0.35 or abs(d["y"] - r["y"]) < 0.35
+                    or abs(d["y"] - r["y"] - r["h"]) < 0.35) for d in plan["doors"]), r
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
