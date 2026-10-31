@@ -213,6 +213,11 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         const hit = snap(p.x, p.y, 0.6);
         if (hit) { px = hit.x; pz = hit.z; nx = hit.nx; nz = hit.nz; }
       }
+      else if ((nx || nz) && k !== 'light_garden') {
+        // i punti dell'impianto stanno 6 cm davanti al muro: si portano sulla faccia, dalla stessa parte
+        const hit = snap(p.x, p.y, 0.2);
+        if (hit && hit.nx * nx + hit.nz * nz > 0.5) { px = hit.x; pz = hit.z; }
+      }
       const wall = nx !== 0 || nz !== 0;
       const key = `IMP_${k.toUpperCase()}`;
       const layerOf = (kk) => (['light', 'light_wall', 'light_ext', 'light_garden', 'emergency', 'fan'].includes(kk) ? 'IMP_LUCI'
