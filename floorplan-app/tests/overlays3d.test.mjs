@@ -44,6 +44,16 @@ const mp = ov.sensors.children.find((c) => c.name === 'AJAX_MOTIONPROTECT');
 assert.ok(Math.abs(mp.position.x - 5.899) < 1e-6, `sensore a x=${mp.position.x}`);
 assert.ok(Math.abs(new THREE.Box3().setFromObject(mp).max.x - 5.9) < 0.005, 'il retro del sensore tocca il muro');
 
+// presa e quadro 6 cm davanti al muro (come li dà l'impianto): si portano sulla faccia, senza restare staccati
+{
+  const gap = { floors: { f1: { points: [pt('socket', 0.16, 2, 1, 0), pt('socket', 5.84, 2, -1, 0), pt('socket', 3, 0.16, 0, 1)], links: [] } } };
+  const o2 = buildOverlays(THREE, { floors: [{ floor, y: 0, plan }], devices: [], electric: gap, theme: THEMES.classic });
+  const [wx, ex, sx] = o2.electric.children.map((c) => new THREE.Box3().setFromObject(c));
+  assert.ok(Math.abs(wx.min.x - 0.1) < 0.005, `presa ovest a x=${wx.min.x}`);
+  assert.ok(Math.abs(ex.max.x - 5.9) < 0.005, `presa est a x=${ex.max.x}`);
+  assert.ok(Math.abs(sx.min.z - 0.1) < 0.005, `presa nord a z=${sx.min.z}`);
+}
+
 // quote reali
 const y = (g, n) => g.children.find((c) => c.name === n).position.y;
 assert.equal(y(ov.electric, 'IMP_SWITCH'), 1.05);
