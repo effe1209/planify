@@ -131,6 +131,43 @@ def test_every_room_has_a_door_it_can_be_reached_through():
                     or abs(d["y"] - r["y"] - r["h"]) < 0.35) for d in plan["doors"]), r
 
 
+def _unreachable(p):
+    """Locali non raggiungibili dall'esterno: porte e locali aperti che si toccano davvero collegano."""
+    rooms = [r for r in p["rooms"] if r["kind"] != "garden"]
+    at = lambda x, y: next((r["id"] for r in rooms if r["x"] - 0.01 <= x <= r["x"] + r["w"] + 0.01 and r["y"] - 0.01 <= y <= r["y"] + r["h"] + 0.01), None)
+    par = {r["id"]: r["id"] for r in rooms}
+
+    def find(a):
+        while par[a] != a:
+            a = par[a]
+        return a
+    for i, a in enumerate(rooms):
+        for b in rooms[i + 1:]:
+            ox = min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"])
+            oy = min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"])
+            touch = ((abs(a["x"] + a["w"] - b["x"]) < 1e-3 or abs(b["x"] + b["w"] - a["x"]) < 1e-3) and oy > 0.3) or \
+                    ((abs(a["y"] + a["h"] - b["y"]) < 1e-3 or abs(b["y"] + b["h"] - a["y"]) < 1e-3) and ox > 0.3)
+            if a["zone"] == b["zone"] and touch:
+                par[find(a["id"])] = find(b["id"])
+    start = []
+    for d in p["doors"]:
+        cx, cy = (d["x"] + d["w"] / 2, d["y"]) if d["rot"] == 0 else (d["x"], d["y"] + d["w"] / 2)
+        a, b = (at(cx, cy - 0.3), at(cx, cy + 0.3)) if d["rot"] == 0 else (at(cx - 0.3, cy), at(cx + 0.3, cy))
+        if a and b:
+            par[find(a)] = find(b)
+        elif a or b:
+            start.append(a or b)
+    roots = {find(s) for s in start}
+    return [r["name"] or r["kind"] for r in rooms if find(r["id"]) not in roots]
+
+
+def test_no_garage_piece_is_cut_off_by_the_stair():
+    """Un pezzo di box dietro al vano scala (e la cantina che vi si apre) deve avere una porta dal vano."""
+    for W, L, seed in ((13, 8, 2), (13, 9, 2), (14, 8, 1)):
+        h = planner.generate_house(W, L, [{"level": 0, "program": "garage"}, {"level": 1, "program": "full"}], seed=seed)
+        assert not _unreachable(h["floors"][0]["plan"]), (W, L, seed)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
