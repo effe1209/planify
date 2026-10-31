@@ -123,23 +123,14 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   // arredi
   for (const it of plan.furniture) {
     // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
-    const obj = buildObject(THREE, it, M, mat);
+    const obj = buildObject(THREE, it, M, mat, theme);
     if (obj) {
       root.add(obj);
       continue;
     }
     const [h, m, lift = 0] = SHAPES[it.type] || [0.6, 'cabinet'];
     const material = M[m] || M.cabinet;
-    if (it.type === 'plant' || it.type === 'tree') {
-      const r = Math.min(it.w, it.h) / 2;
-      const pot = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.4, it.type === 'tree' ? 1.6 : 0.35, 16),
-        it.type === 'tree' ? mat('#7a5a3a') : mat(theme.pot || '#e2d6c2'));
-      pot.position.set(it.x + it.w / 2, (it.type === 'tree' ? 1.6 : 0.35) / 2, it.y + it.h / 2);
-      const crown = new THREE.Mesh(new THREE.SphereGeometry(r * (it.type === 'tree' ? 1 : 0.9), 16, 12), M.plant);
-      crown.position.set(it.x + it.w / 2, it.type === 'tree' ? 2.4 : 0.75, it.y + it.h / 2);
-      pot.castShadow = crown.castShadow = true;
-      root.add(pot, crown);
-    } else if (it.type === 'floor_lamp') {
+    if (it.type === 'floor_lamp') {
       box(it.x + it.w / 2 - 0.02, it.y + it.h / 2 - 0.02, 0.04, 0.04, 0, 1.4, M.metal);
       const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.28, 20), M.lamp);
       shade.position.set(it.x + it.w / 2, 1.5, it.y + it.h / 2);
