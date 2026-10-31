@@ -13,10 +13,12 @@ const M = new Proxy({}, { get: (t, k) => (t[k] ||= mat('#cccccc')) });
 // ogni tipo con un modello è un gruppo con nome, misure locali e più pezzi; la rotazione segue il lato
 for (const type of ['bed', 'wardrobe', 'dresser', 'shelving', 'shelving_heavy', 'bookcase', 'car', 'motorbike', 'toilet', 'bidet', 'sink',
   'shower', 'shower_round', 'shower_walkin', 'bathtub', 'office_chair', 'tv', 'sofa', 'sofa_corner', 'armchair', 'sideboard', 'plant', 'tree',
-  'hedge', 'fence', 'path', 'gate_pedestrian', 'gate_driveway', 'washer', 'dryer', 'vacuum']) {
+  'hedge', 'fence', 'path', 'gate_pedestrian', 'gate_driveway', 'washer', 'dryer', 'vacuum', 'nightstand', 'desk', 'table', 'table_round',
+  'coffee_table', 'kitchen_counter', 'kitchen_peninsula', 'shoe_cabinet', 'console', 'floor_lamp', 'bath_column', 'towel_radiator', 'utility_sink',
+  'minibar', 'workbench', 'laundry_basket', 'gazebo']) {
   assert.ok(hasObject(type), type);
   const it = { type, x: 1, y: 2, w: type === 'car' ? 1.9 : 1.2, h: type === 'car' ? 4.5 : 0.6, facing: 'E' };
-  const g = buildObject(THREE, it, M, mat);
+  const g = buildObject(THREE, it, M, mat, THEMES[['modern', 'classic', 'industrial', 'japandi'][type.length % 4]]);
   assert.ok(g && g.userData.furniture.type === type, type);
   const meshes = []; g.traverse((o) => o.isMesh && meshes.push(o));
   assert.ok(meshes.length >= (type === 'path' ? 2 : 3), `${type}: ${meshes.length} pezzi`);
@@ -28,6 +30,7 @@ for (const type of ['bed', 'wardrobe', 'dresser', 'shelving', 'shelving_heavy', 
   assert.ok(bb.max.y > (type === 'path' ? 0.03 : 0.3) && bb.min.y > -0.01, `${type}: quota ${bb.min.y}..${bb.max.y}`);
 }
 assert.equal(objectKey('bed', 1.6, 2.0), 'LETTO_160X200');
+assert.equal(objectKey('bed', 1.6, 2.0, 'classic'), 'LETTO_160X200_CLASSIC');
 
 // scena con due letti uguali e un'auto: DXF con due blocchi e tre inserimenti, facce nei blocchi
 const plan = {
@@ -40,11 +43,13 @@ const plan = {
 };
 const scene = buildScene(THREE, plan, THEMES.modern);
 const dxf = sceneToDxf(THREE, scene);
-assert.deepEqual([...dxf.blocks].sort(), ['AUTO_190X450', 'LETTO_160X200']);
-assert.equal(dxf.inserts, 3);
+assert.deepEqual([...dxf.blocks].sort(), ['AUTO_190X450_MODERN', 'LETTO_160X200_MODERN', 'TAVOLO_100X60_MODERN']);
+assert.equal(dxf.inserts, 4);
 const text = dxf.text;
-assert.equal((text.match(/\nINSERT\n/g) || []).length, 3);
-assert.equal((text.match(/\nBLOCK\n/g) || []).length, 2);
+assert.equal((text.match(/\nINSERT\n/g) || []).length, 4);
+assert.equal((text.match(/\nBLOCK\n/g) || []).length, 3);
+// layer per materiale dentro i blocchi
+for (const l of ['ARR_LEGNO', 'ARR_TESSUTO', 'ARR_VETRO', 'ARR_GOMMA']) assert.ok(dxf.layers.includes(l), l);
 assert.ok(text.indexOf('BLOCKS') < text.indexOf('ENTITIES'));
 // il letto ruotato verso nord è inserito a 180°
 assert.ok(/\n50\n180\n/.test(text), 'rotazione 180');

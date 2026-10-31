@@ -39,8 +39,10 @@ import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
 import { stairHoles, stairSteps } from './stairs3d';
 import { buildObject } from './furniture3d';
 import { projectStairs } from './stairs';
+import { kitMaterials, styleKit, uvMeters } from './style3d';
+import { pointInPolygon } from './geometry';
 
-export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [] } = {}) {
+export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null } = {}) {
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
@@ -54,14 +56,30 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     glass: new THREE.MeshStandardMaterial({ color: '#bfe0f5', transparent: true, opacity: 0.35, roughness: 0.1 }),
     accent: mat(theme.accent || '#4f6d8f'),
   };
+  // kit dello stile: interni e pavimenti dal tema del piano, facciata dallo stile della casa
+  const kit = styleKit(theme.id);
+  const K = kitMaterials(THREE, mat, kit);
+  const facadeKit = facade && facade !== theme.id ? styleKit(facade) : kit;
+  const KF = facadeKit === kit ? K : kitMaterials(THREE, mat, facadeKit);
+  M.wall = K.wallIn;
+  // categoria di materiale: nel DXF 3D ogni pezzo di un arredo va sul layer del suo materiale
+  const CATS = { wood: 'LEGNO', fabric: 'TESSUTO', duvet: 'TESSUTO', cabinet: 'LACCATO', counter: 'PIANO', dark: 'PLASTICA', ceramic: 'CERAMICA',
+    lamp: 'LUCE', plant: 'VEGETAZIONE', car: 'CARROZZERIA', metal: 'METALLO', stone: 'PIETRA', glass: 'VETRO', accent: 'TESSUTO' };
+  for (const [k, v] of Object.entries(CATS)) M[k].userData.cat = v;
   const box = (x, z, w, d, y0, h, m) => {
-    if (w <= 0.001 || d <= 0.001 || h <= 0.001) return;
+    if (w <= 0.001 || d <= 0.001 || h <= 0.001) return null;
     const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    if (m === M.glass) g.userData.layer = 'VETRI';
+    else if (Array.isArray(m) || m.map) uvMeters(g.geometry, w, h, d);
     g.position.set(x + w / 2, y0 + h / 2, z + d / 2);
     g.castShadow = true;
     g.receiveShadow = true;
     root.add(g);
+    return g;
   };
+  const rooms = plan.rooms.filter((r) => r.kind !== 'garden');
+  const inside = (px, pz) => rooms.some((r) => (r.poly ? pointInPolygon([px, pz], r.poly)
+    : px >= r.x - 0.02 && px <= r.x + r.w + 0.02 && pz >= r.y - 0.02 && pz <= r.y + r.h + 0.02));
 
   // pavimenti dei locali (anche di forma libera)
   for (const r of plan.rooms) {
@@ -76,9 +94,10 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
         shape.holes.push(hole);
       }
     }
-    const color = r.kind === 'garden' ? '#b9d6a8' : r.kind === 'garage' ? '#c9ccd1'
-      : WOOD_FLOORS.has(r.kind) ? theme.wood : TILE_FLOORS.has(r.kind) ? '#e8ecf0' : r.color || '#f5f5f5';
-    const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat(color));
+    const color = r.kind === 'garden' ? '#b9d6a8' : r.kind === 'garage' ? '#c9ccd1' : r.color || '#f5f5f5';
+    // pavimento dello stile: listoni, spina di pesce o cemento nelle zone abitate, piastrelle o marmo nei bagni
+    const floorMat = r.kind === 'garden' || r.kind === 'garage' ? mat(color) : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color);
+    const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.002;
     floor.receiveShadow = true;
@@ -87,12 +106,55 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   }
 
   // vani di porte e finestre come rettangoli in pianta (come li disegna PlanSvg)
-  const openings = [
+  const list = [
     ...plan.doors.filter((d) => d.kind !== 'gate').map((d) => ({ ...d, door: true })),
     ...plan.windows.map((w) => ({ ...w, door: false })),
-  ].map((o) => (o.rot === 0 || !o.rot
+  ];
+  const openings = list.map((o) => (o.rot === 0 || !o.rot
     ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door }
     : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door }));
+
+  // muro intero: faccia interna chiara, faccia esterna nel colore e nel materiale della facciata dello stile
+  const wallPiece = (horiz, w, a, b, y0, h) => {
+    const x0 = horiz ? a : w.x;
+    const z0 = horiz ? w.y : a;
+    const bw = horiz ? b - a : w.w;
+    const bd = horiz ? w.h : b - a;
+    const mid = (a + b) / 2;
+    const off = (horiz ? w.h : w.w) / 2 + 0.12;
+    const cx = w.x + w.w / 2;
+    const cz = w.y + w.h / 2;
+    // da che parte sta l'esterno: si guardano i due lati del muro nel punto medio del tratto
+    const lo = horiz ? inside(mid, cz - off) : inside(cx - off, mid);
+    const hi = horiz ? inside(mid, cz + off) : inside(cx + off, mid);
+    const out = lo && !hi ? 1 : hi && !lo ? -1 : 0;   // +1: l'esterno è verso +z (o +x), -1: verso -z (o -x)
+    const mats = [K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn];
+    const face = horiz ? (out > 0 ? 4 : 5) : (out > 0 ? 0 : 1);
+    if (out) mats[face] = KF.facade;
+    const mesh = box(x0, z0, bw, bd, y0, h, mats);
+    if (!mesh) return;
+    mesh.userData.layer = 'MURI';
+    if (y0 > 0) return;
+    const T = 0.014;
+    const side = (sgn, fn) => {   // sgn: +1 faccia verso +z/+x, -1 verso -z/-x
+      if (horiz) fn(x0, sgn > 0 ? z0 + bd : z0 - T, bw, T);
+      else fn(sgn > 0 ? x0 + bw : x0 - T, z0, T, bd);
+    };
+    for (const sgn of [1, -1]) {
+      if (out === sgn) {
+        // esterno: zoccolo e cornicione dello stile della facciata
+        side(sgn, (x, z, ww, dd) => box(x, z, ww, dd, 0, Math.min(0.45, h), KF.plinth));
+        if (facadeKit.cornice && h >= wallH - 0.01 && !lowWalls) {
+          const o2 = 0.07;
+          if (horiz) box(x0 - 0.04, sgn > 0 ? z0 + bd : z0 - o2, bw + 0.08, o2, wallH - 0.14, 0.14, KF.trim);
+          else box(sgn > 0 ? x0 + bw : x0 - o2, z0 - 0.04, o2, bd + 0.08, wallH - 0.14, 0.14, KF.trim);
+        }
+      } else {
+        // interno: battiscopa dello stile
+        side(sgn, (x, z, ww, dd) => box(x, z, ww, dd, 0, Math.min(kit.baseboard.h, h), K.baseboard));
+      }
+    }
+  };
 
   // muri: ogni tratto si divide dove ci sono vani; sotto e sopra le finestre resta il muro
   for (const w of plan.walls) {
@@ -105,7 +167,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door }))
       .sort((p, q) => p.a - q.a);
     let cur = a0;
-    const seg = (a, b, y0, h, m = M.wall) => (horiz ? box(a, w.y, b - a, w.h, y0, h, m) : box(w.x, a, w.w, b - a, y0, h, m));
+    const seg = (a, b, y0, h, m = null) => (m ? (horiz ? box(a, w.y, b - a, w.h, y0, h, m) : box(w.x, a, w.w, b - a, y0, h, m)) : wallPiece(horiz, w, a, b, y0, h));
     for (const c of cuts) {
       if (c.a > cur) seg(cur, c.a, 0, wallH);
       if (c.door) {
@@ -118,6 +180,89 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       cur = Math.max(cur, c.b);
     }
     if (cur < a1) seg(cur, a1, 0, wallH);
+  }
+
+  // infissi e porte nei colori dello stile: telaio e traversa centrale, davanzale, anta socchiusa con maniglia
+  list.forEach((o, i) => {
+    const q = openings[i];
+    const horiz = o.rot === 0 || !o.rot;
+    const len = o.w;
+    const fr = 0.045;
+    const th = t + 0.02;                    // il telaio sporge poco da entrambe le facce
+    const bar = (aa, bb, y0, h, m) => (horiz ? box(aa, q.z0 - 0.01, bb - aa, th, y0, h, m) : box(q.x0 - 0.01, aa, th, bb - aa, y0, h, m));
+    const a0 = horiz ? q.x0 : q.z0;
+    const a1 = horiz ? q.x1 : q.z1;
+    if (!o.door) {
+      const top = Math.min(DOOR_H, wallH);
+      if (wallH <= SILL) return;
+      const Fm = K.frame;
+      bar(a0, a0 + fr, SILL, top - SILL, Fm);
+      bar(a1 - fr, a1, SILL, top - SILL, Fm);
+      bar(a0, a1, SILL, fr, Fm);
+      bar(a0, a1, top - fr, fr, Fm);
+      const panes = len > 2.2 ? 3 : len > 1.2 ? 2 : 1;
+      for (let k = 1; k < panes; k++) bar(a0 + (len * k) / panes - fr / 2, a0 + (len * k) / panes + fr / 2, SILL, top - SILL, Fm);
+      // davanzale: lastra che sporge sul lato esterno e leggermente dentro
+      if (horiz) box(q.x0 - 0.05, q.z0 - 0.06, len + 0.1, t + 0.12, SILL - 0.035, 0.035, K.trim);
+      else box(q.x0 - 0.06, q.z0 - 0.05, t + 0.12, len + 0.1, SILL - 0.035, 0.035, K.trim);
+      return;
+    }
+    if (o.kind === 'garage') {
+      // basculante a pannelli: cinque doghe con la fuga tra l'una e l'altra
+      const hh = Math.min(DOOR_H, wallH) - 0.03;
+      for (let k = 0; k < 5; k++) bar(a0 + 0.02, a1 - 0.02, 0.02 + (k * hh) / 5, hh / 5 - 0.012, K.door);
+      return;
+    }
+    if (wallH <= DOOR_H) return;
+    // stipiti e architrave
+    bar(a0, a0 + fr, 0, DOOR_H, K.frame);
+    bar(a1 - fr, a1, 0, DOOR_H, K.frame);
+    bar(a0, a1, DOOR_H - fr, fr, K.frame);
+    // anta socchiusa di 65°, incernierata all'inizio del vano
+    const leaf = new THREE.Group();
+    const lw = len - 2 * fr;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? K.frame : K.door);
+    slab.position.set(lw / 2, (DOOR_H - fr - 0.01) / 2 + 0.005, 0);
+    slab.castShadow = true;
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.1, 10), K.handle);
+    knob.rotation.x = Math.PI / 2;
+    knob.position.set(lw - 0.08, 1.0, 0);
+    leaf.add(slab, knob);
+    const dir = horiz ? o.openDir : -o.openDir;   // verso (+1/-1) in cui si apre, lungo z (porte orizzontali) o x (verticali)
+    const hinge = horiz ? [q.x0 + fr, q.z0 + t / 2] : [q.x0 + t / 2, q.z0 + fr];
+    leaf.position.set(hinge[0], 0, hinge[1]);
+    // l'anta è costruita lungo +x: nelle porte orizzontali gira da +x verso ±z, in quelle verticali parte da +z (−90°) verso ±x
+    const open = (65 * Math.PI) / 180;
+    leaf.rotation.y = horiz ? -dir * open : -Math.PI / 2 + dir * open;
+    leaf.traverse((c) => { if (c.isMesh) { c.userData.layer = 'PORTE'; c.receiveShadow = true; } });
+    root.add(leaf);
+  });
+
+  // ringhiera attorno all'apertura della scala nei lati lunghi non appoggiati a un muro (i lati corti sono il passaggio)
+  for (const v of voids) {
+    const room = rooms.find((r) => v.x >= r.x - 0.01 && v.x + v.w <= r.x + r.w + 0.01 && v.y >= r.y - 0.01 && v.y + v.h <= r.y + r.h + 0.01);
+    if (!room) continue;
+    const alongX = v.w >= v.h;
+    const edges = alongX
+      ? [{ a: v.x, b: v.x + v.w, z: v.y, near: v.y - room.y < 0.3 }, { a: v.x, b: v.x + v.w, z: v.y + v.h, near: room.y + room.h - (v.y + v.h) < 0.3 }]
+      : [{ a: v.y, b: v.y + v.h, x: v.x, near: v.x - room.x < 0.3 }, { a: v.y, b: v.y + v.h, x: v.x + v.w, near: room.x + room.w - (v.x + v.w) < 0.3 }];
+    for (const e of edges) {
+      if (e.near) continue;
+      const len = e.b - e.a;
+      const at = (a, y0, h, thick, mt) => (alongX ? box(a, e.z - thick / 2, thick, thick, y0, h, mt) : box(e.x - thick / 2, a, thick, thick, y0, h, mt));
+      const bar = (y0, h, thick, mt) => (alongX ? box(e.a, e.z - thick / 2, len, thick, y0, h, mt) : box(e.x - thick / 2, e.a, thick, len, y0, h, mt));
+      const posts = Math.max(2, Math.round(len / 0.9) + 1);
+      const meshes = [];
+      for (let i = 0; i < posts; i++) meshes.push(at(e.a + (len * i) / (posts - 1) - 0.015, 0, 0.95, 0.03, K.rail));
+      meshes.push(bar(0.93, 0.035, 0.05, K.rail));
+      if (theme.id === 'modern') meshes.push(bar(0.12, 0.8, 0.012, M.glass));   // moderno: vetro
+      else if (theme.id === 'industrial') for (const y of [0.3, 0.55, 0.78]) meshes.push(bar(y, 0.008, 0.01, K.rail));
+      else {
+        const n = Math.floor(len / 0.11);
+        for (let i = 0; i < n; i++) meshes.push(at(e.a + (len * (i + 0.5)) / n - 0.01, 0.05, 0.86, 0.02, K.rail));
+      }
+      for (const mm of meshes) if (mm) mm.userData.layer = 'RINGHIERE';
+    }
   }
 
   // arredi
@@ -212,11 +357,13 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   const quota = (level) => level * (FLOOR_H + spread);
   const slabMat = new THREE.MeshStandardMaterial({ color: '#d9d6cf', roughness: 0.9 });
   const byFloor = projectStairs(project).byFloor;
+  // una sola facciata per la casa: lo stile del piano terra (o del piano più basso)
+  const facadeId = themeFor(floors.find((f) => f.level === 0) || floors[0]).id;
   for (const f of floors) {
     // le scale partono dal piano e salgono al successivo: sul piano di sopra non si disegnano
     const up = (byFloor[f.id] || []).filter((st) => st.engine ? st.upTo : st.role === 'up');
     const voids = f.level === lowest ? [] : floorVoids(byFloor[f.id]);
-    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids });
+    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids, facade: facadeId });
     const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
@@ -327,12 +474,14 @@ export function addGround(THREE, scene, model) {
  * spegne con `visible`. type = 'gable' (due falde, un'ala per ogni parte rettangolare dell'edificio) | 'flat'.
  */
 export function buildRoof(THREE, plan, y, opts = {}) {
-  const { type, slope, overhang } = { ...ROOF_DEFAULTS, ...opts };
+  const { type, slope, overhang, style } = { ...ROOF_DEFAULTS, ...opts };
   const g = new THREE.Group();
   g.name = 'tetto';
   g.position.y = y;
-  const tile = new THREE.MeshStandardMaterial({ color: '#a8604a', roughness: 0.8, side: THREE.DoubleSide });
-  const slab = new THREE.MeshStandardMaterial({ color: '#c9ccd1', roughness: 0.9 });
+  const kit = styleKit(style);
+  const mk = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
+  const tile = kitMaterials(THREE, mk, kit).roof;
+  const slab = mk(kit.plinth);
   for (const w of roofWings(plan)) {
     if (type === 'flat') {
       const o = overhang / 2;
@@ -345,7 +494,12 @@ export function buildRoof(THREE, plan, y, opts = {}) {
     }
     const { tris } = gableTriangles(w, { slope, overhang });
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(2), 3));
+    const flat = tris.flat(2);
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
+    // UV in metri sulla falda: lungo il colmo e lungo la linea di massima pendenza
+    const uvs = [];
+    for (let i = 0; i < flat.length; i += 3) uvs.push(flat[i] + flat[i + 2] * 0.3, flat[i + 1] / Math.max(0.2, Math.sin((slope * Math.PI) / 180)) + flat[i + 2] * 0.7);
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, tile);
     mesh.castShadow = mesh.receiveShadow = true;

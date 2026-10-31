@@ -3,7 +3,11 @@
  * Layer per piano e per tipo: «PT_MURI», «P1_ARREDI», «P1_SOLAI», «EST_ARREDI» (giardino)… (senza prefisso per un solo piano).
  * Le facce delle scatole (muri, arredi) escono come quadrilateri, il resto (pavimenti, sfere, cilindri) a triangoli.
  */
-const COLORS = { MURI: 7, VETRI: 4, PAVIMENTI: 8, ARREDI: 30, SOLAI: 9 };
+const COLORS = {
+  MURI: 7, VETRI: 4, PAVIMENTI: 8, ARREDI: 30, SOLAI: 9, PORTE: 30, SCALE: 30, TETTO: 12, RINGHIERE: 8,
+  LEGNO: 30, TESSUTO: 5, LACCATO: 8, PIANO: 9, PLASTICA: 250, CERAMICA: 7, LUCE: 2, VEGETAZIONE: 3, CARROZZERIA: 4,
+  METALLO: 8, GOMMA: 250, VETRO: 4, PIETRA: 8,
+};
 const n3 = (v) => (Math.round(v * 1000) / 1000).toString();
 
 /* Sigla del piano per i layer: PT, P1, P2, S1 (interrato)… */
@@ -54,7 +58,9 @@ export function sceneToDxf(THREE, root) {
       const local = [];
       o.traverse((c) => {
         if (!c.isMesh || !c.geometry?.attributes?.position) return;
-        for (const f of meshFaces(c, (v) => { v.applyMatrix4(inv); return [v.x, -v.z, v.y]; })) local.push(f);
+        const mt = Array.isArray(c.material) ? c.material[0] : c.material;
+        const layer = `ARR_${mt?.userData?.cat || 'ARREDI'}`;
+        for (const f of meshFaces(c, (v) => { v.applyMatrix4(inv); return [v.x, -v.z, v.y]; })) local.push({ layer, pts: f });
       });
       blocks.set(key, local);
     }
@@ -73,7 +79,7 @@ export function sceneToDxf(THREE, root) {
     for (const pts of meshFaces(o, toDxf)) faces.push({ layer, pts });
   });
 
-  const layers = [...new Set([...faces.map((f) => f.layer), ...inserts.map((i) => i.layer)])].sort();
+  const layers = [...new Set([...faces.map((f) => f.layer), ...inserts.map((i) => i.layer), ...[...blocks.values()].flat().map((f) => f.layer)])].sort();
   const out = [];
   const put = (...pairs) => { for (let i = 0; i < pairs.length; i += 2) out.push(String(pairs[i]), String(pairs[i + 1])); };
   put(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 6,
@@ -87,9 +93,9 @@ export function sceneToDxf(THREE, root) {
     put(0, 'SECTION', 2, 'BLOCKS');
     for (const [name, local] of blocks) {
       put(0, 'BLOCK', 8, '0', 2, name, 70, 0, 10, 0, 20, 0, 30, 0, 3, name);
-      for (const pts of local) {
+      for (const { layer, pts } of local) {
         const p = pts.length === 3 ? [...pts, pts[2]] : pts;
-        put(0, '3DFACE', 8, '0');
+        put(0, '3DFACE', 8, layer);
         p.forEach(([x, y, z], i) => put(10 + i, n3(x), 20 + i, n3(y), 30 + i, n3(z)));
       }
       put(0, 'ENDBLK', 8, '0');
