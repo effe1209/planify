@@ -132,8 +132,10 @@ const BASE_FURNITURE = {
   },
   vacuum: (w, h) => (
     <>
-      <circle cx={w / 2} cy={h * 0.6} r={Math.min(w, h) * 0.38} fill="#dfe3ea" stroke={F_STROKE} strokeWidth="0.9" />
-      <line x1={w / 2} y1={h * 0.25} x2={w / 2} y2={0} stroke={F_STROKE} strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.42} fill="#2b3038" stroke={F_STROKE} strokeWidth="0.9" />
+      <rect x={w * 0.22} y={h * 0.62} width={w * 0.56} height={h * 0.16} rx={2} fill="#b7bcc4" stroke={F_STROKE} strokeWidth="0.7" />
+      <rect x={w * 0.22} y={h * 0.74} width={w * 0.56} height={h * 0.04} fill="#f2c400" />
+      <circle cx={w / 2} cy={h * 0.4} r={Math.min(w, h) * 0.12} fill="#d9eef7" stroke={F_STROKE} strokeWidth="0.7" />
     </>
   ),
   /* ── giardino ── */
