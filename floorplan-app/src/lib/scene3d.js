@@ -87,12 +87,12 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     // la forma si costruisce con y rovesciata: ruotata di -90° sull'asse x torna in (x, z = y) con la faccia in alto
     const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, -y)));
     // aperture dei solai (scale che salgono da sotto): il pavimento del piano non le copre
-    for (const v of voids) {
-      if (v.x >= r.x - 0.01 && v.x + v.w <= r.x + r.w + 0.01 && v.y >= r.y - 0.01 && v.y + v.h <= r.y + r.h + 0.01) {
-        const hole = new THREE.Path();
-        [[v.x, v.y], [v.x, v.y + v.h], [v.x + v.w, v.y + v.h], [v.x + v.w, v.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
-        shape.holes.push(hole);
-      }
+    for (const v0 of voids) {
+      const v = clipHole(v0, r);   // una scala a cavallo di due locali buca il pavimento di entrambi
+      if (!v) continue;
+      const hole = new THREE.Path();
+      [[v.x, v.y], [v.x, v.y + v.h], [v.x + v.w, v.y + v.h], [v.x + v.w, v.y]].forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
+      shape.holes.push(hole);
     }
     const color = r.kind === 'garden' ? '#b9d6a8' : r.kind === 'garage' ? '#c9ccd1' : r.color || '#f5f5f5';
     // pavimento dello stile: listoni, spina di pesce o cemento nelle zone abitate, piastrelle o marmo nei bagni
@@ -341,6 +341,15 @@ export const FLOOR_H = WALL_H + SLAB_T;
  * themeFor(floor) dà lo stile di ogni piano. Ogni gruppo di piano porta userData.floor = { id, name, level };
  * house.userData.grade è la quota del terreno.
  */
+/* Parte di un'apertura che cade dentro il locale (rettangolo del locale), o null se non lo tocca. */
+function clipHole(v, r) {
+  const x0 = Math.max(v.x, r.x);
+  const y0 = Math.max(v.y, r.y);
+  const x1 = Math.min(v.x + v.w, r.x + r.w);
+  const y1 = Math.min(v.y + v.h, r.y + r.h);
+  return x1 - x0 > 0.02 && y1 - y0 > 0.02 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
 /* Aperture di un piano per le scale che salgono dal piano sotto (scale del motore con downTo, del progetto con role down). */
 function floorVoids(stairs) {
   return (stairs || []).filter((st) => (st.engine ? st.downTo : st.role === 'down'))
@@ -373,8 +382,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     for (const r of f.plan.rooms) {
       if (r.kind === 'garden') continue;
       // il solaio ha l'apertura dove la scala sale dal piano sotto; sul vano scala resta la fascia attorno e lo spazio di arrivo
-      const holes = floorVoids(byFloor[f.id]).filter((v) => v.x >= r.x - 0.01 && v.x + v.w <= r.x + r.w + 0.01
-        && v.y >= r.y - 0.01 && v.y + v.h <= r.y + r.h + 0.01);
+      const holes = floorVoids(byFloor[f.id]).map((v) => clipHole(v, r)).filter(Boolean);
       const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
       const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
       for (const v of holes) {

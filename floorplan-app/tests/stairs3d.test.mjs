@@ -54,3 +54,22 @@ for (const [type, w, h, n] of [['u', 2.3, 3.4, 1], ['l', 3.2, 3.4, 2], ['straigh
 const sh = stairHoles(vano('straight', 'N', 'E', 2.2, 4.6), H)[0];
 assert.ok(Math.abs(Math.max(sh.w, sh.h) - (16 / 17) * 4.6) < 1e-6, JSON.stringify(sh));
 console.log('stairs3d ok');
+
+// solaio e pavimento di sopra: l'apertura passa anche se la scala sta a cavallo di due locali
+{
+  const THREE = await import('three');
+  const { buildHouse } = await import('../src/lib/scene3d.js');
+  const { THEMES } = await import('../src/lib/themes.js');
+  const walls = [{ x: -0.1, y: -0.1, w: 8.2, h: 0.2 }, { x: -0.1, y: 3.9, w: 8.2, h: 0.2 }, { x: -0.1, y: -0.1, w: 0.2, h: 4.2 }, { x: 7.9, y: -0.1, w: 0.2, h: 4.2 }];
+  const mk = (id, level) => ({ id, name: id, level, plan: {
+    scale: 50, wallThickness: 10, dimensions: { width: 8, length: 4 }, walls, doors: [], windows: [], furniture: [],
+    rooms: [{ id: 1, kind: 'living', name: 'A', x: 0, y: 0, w: 4, h: 4 }, { id: 2, kind: 'corridor', name: 'B', x: 4, y: 0, w: 4, h: 4 }],
+    stairs: [{ room: 1, type: 'straight', entry: 'W', hand: 'S', x: 1.5, y: 1, w: 5, h: 2, core: { x: 1.5, y: 1, w: 5, h: 2 } }],
+  } });
+  const house = buildHouse(THREE, { floors: [mk('a', 0), mk('b', 1)] }, () => THEMES.modern);
+  const slabs = [];
+  house.traverse((o) => { if (o.userData.layer === 'SOLAI') slabs.push(o); });
+  assert.equal(slabs.length, 2, 'un solaio per locale');
+  assert.ok(slabs.every((s) => s.geometry.parameters.shapes.holes.length === 1), 'il solaio di entrambi i locali ha l\'apertura');
+  console.log('stairs3d span ok');
+}
