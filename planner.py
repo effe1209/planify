@@ -1481,7 +1481,7 @@ def ensure_access(lay: Layout) -> None:
     rooms = [r for r in lay.rooms if r.kind != "garden"]
     if len(rooms) < 2:
         return
-    par = {r.group: r.group for r in rooms}
+    par = {r.id: r.id for r in rooms}
 
     def find(g):
         while par[g] != g:
@@ -1493,22 +1493,27 @@ def ensure_access(lay: Layout) -> None:
         par[find(a)] = find(b)
     for d in lay.doors:
         if d.room_b is not None:
-            link(lay.room(d.room_a).group, lay.room(d.room_b).group)
-    start = [lay.room(d.room_a).group for d in lay.doors if d.room_b is None] or \
-        [r.group for r in rooms if r.kind == "stairs"] or [rooms[0].group]
+            link(d.room_a, d.room_b)
+    # locali dello stesso gruppo (zona aperta) sono uniti solo se si toccano davvero: un pezzo di box dietro al vano scala no
+    for i, a in enumerate(rooms):
+        for b in rooms[i + 1:]:
+            if a.group == b.group and (lambda e: e and e[3] - e[2] > 0.3)(shared_edge(a.rect, b.rect)):
+                link(a.id, b.id)
+    start = [d.room_a for d in lay.doors if d.room_b is None] or \
+        [r.id for r in rooms if r.kind == "stairs"] or [rooms[0].id]
     pref = {"corridor": 0, "entry": 0, "stairs": 1, "living": 2, "living_kitchen": 2, "zone_day": 2, "garage": 2, "kitchen": 3,
             "dining": 3, "study": 4, "bed": 5, "bath": 9, "wc": 9}
     for _ in range(len(rooms)):
         root = find(start[0])
         for s0 in start[1:]:
             link(s0, start[0])
-        lost = [r for r in rooms if find(r.group) != find(start[0])]
+        lost = [r for r in rooms if find(r.id) != find(start[0])]
         if not lost:
             return
         best = None
         for a in lost:
             for b in rooms:
-                if find(b.group) != find(start[0]) or b is a:
+                if find(b.id) != find(start[0]) or b is a:
                     continue
                 if a.kind in ("bath", "wc") and b.kind in ("bed", "bath", "wc"):
                     continue
@@ -1528,7 +1533,7 @@ def ensure_access(lay: Layout) -> None:
             start_pos = clamp(snap(e[2] + 0.15 + (e[3] - e[2] - 0.3 - w) * at), e[2] + 0.15, e[3] - 0.15 - w)
             if not lay._conflict(e[0], e[1], start_pos, start_pos + w):
                 lay.add_door(a.id, b.id, w, at, into=a.id)
-                link(a.group, b.group)
+                link(a.id, b.id)
                 lay.notes[:] = [n for n in lay.notes if not (n.startswith(("Nessun muro in comune", "Muro troppo corto")) and a.name in n)]
                 lay.notes.append(f"{a.name}: aggiunta una porta verso {b.name}, altrimenti non si poteva entrare.")
                 done = True
@@ -1536,7 +1541,7 @@ def ensure_access(lay: Layout) -> None:
         if not done:
             break
     for r in rooms:
-        if find(r.group) != find(start[0]):
+        if find(r.id) != find(start[0]):
             lay.notes.append(f"{r.name} non ha accesso: nessuna porta raggiungibile.")
 
 
@@ -2440,6 +2445,16 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
                  "W": lambda r: r.rect.x2 <= sr.x + EPS, "E": lambda r: r.rect.x >= sr.x2 - EPS}[stair["entry"]]
         span = lambda r: (lambda e: e[3] - e[2])(shared_edge(st.rect, r.rect))
         boxes.sort(key=lambda r: (not (front(r) and span(r) >= 1.2), -span(r)))
+        # pezzi di box separati dal box principale dal vano scala: si raggiungono solo dal vano, quindi servono una porta da lì
+        reach, todo = {garage.id}, [garage]
+        gar = [r for r in lay.rooms if r.kind == "garage"]
+        while todo:
+            cur = todo.pop()
+            for r in gar:
+                if r.id not in reach and (lambda e: e and e[3] - e[2] > 0.3)(shared_edge(cur.rect, r.rect)):
+                    reach.add(r.id)
+                    todo.append(r)
+        isolated = [r for r in gar if r.id not in reach and shared_edge(st.rect, r.rect)]
         geo = Rect(core.x + 0.1, core.y + 0.1, core.w - 0.2, core.h - 0.2)
         ns = stair["entry"] in "NS"
         ends = ("N", "S") if ns else ("E", "W")
@@ -2462,6 +2477,15 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
                         _o, line, lo, hi = lay._side_geom(st, side)
                         if not _fit_door(lo, hi, _stair_free(stair["type"], entry, hand, geo, side), DOOR_W, 0.1):
                             continue
+                    extra_ok = True
+                    for piece in isolated:
+                        e_p = shared_edge(st.rect, piece.rect)
+                        p_side = ("E" if abs(e_p[1] - st.rect.x2) < 1e-3 else "W") if e_p[0] == "v" else \
+                            ("S" if abs(e_p[1] - st.rect.y2) < 1e-3 else "N")
+                        if not _fit_door(e_p[2], e_p[3], _stair_free(stair["type"], entry, hand, geo, p_side), DOOR_W, 0.15):
+                            extra_ok = False
+                    if not extra_ok:
+                        continue
                     choice = (box, e_box, side, entry, hand)
                     break
                 if choice:
@@ -2474,12 +2498,20 @@ def layout_garage(W: float, L: float, rng: Optional[random.Random] = None,
             if e_box:
                 at = _fit_door(e_box[2], e_box[3], _stair_free(stair["type"], entry, hand, geo, bside), DOOR_W, 0.15)
                 lay.add_door(st.id, box.id, DOOR_W, at[1], into=st.id)
+            for piece in isolated:
+                e_p = shared_edge(st.rect, piece.rect)
+                p_side = ("E" if abs(e_p[1] - st.rect.x2) < 1e-3 else "W") if e_p[0] == "v" else \
+                    ("S" if abs(e_p[1] - st.rect.y2) < 1e-3 else "N")
+                fit = _fit_door(e_p[2], e_p[3], _stair_free(stair["type"], entry, hand, geo, p_side), DOOR_W, 0.15)
+                lay.add_door(st.id, piece.id, DOOR_W, fit[1], into=st.id)
             if side:
                 _o, line, lo, hi = lay._side_geom(st, side)
                 lay.add_entrance(st.id, side, DOOR_W, _fit_door(lo, hi, _stair_free(stair["type"], entry, hand, geo, side), DOOR_W, 0.1)[1], margin=0.1)
         else:
             if boxes:
                 lay.add_door(st.id, boxes[0].id, DOOR_W, 0.5, into=st.id)
+            for piece in isolated:
+                lay.add_door(st.id, piece.id, DOOR_W, 0.5, into=st.id)
             if needs.get("street"):
                 if ext:
                     lay.add_entrance(st.id, ext[0], DOOR_W, 0.5)
