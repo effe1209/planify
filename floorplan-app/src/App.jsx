@@ -717,9 +717,9 @@ export default function App() {
     typeof f.level === 'number' && Math.abs(f.level - level) === 1 && f.plan);
 
   /* Progetto nuovo con tutti i piani della casa (risposta di /generate-house). */
-  const openHouse = (res) => {
+  const openHouse = (res, street = engineHas('street_garage')) => {
     const floors = res.floors.map(({ level, program, plan: p }) => {
-      const shift = engineHas('street_garage') ? houseShift(form) : 0;
+      const shift = street ? houseShift(form) : 0;
       const spec = { ...(form.houseFloors.find((f) => f.level + shift === level) || { program }), level };
       const type = program === 'garage' ? 'garage' : 'apartment';
       return makeFloor({
@@ -852,8 +852,18 @@ export default function App() {
           await waitForEngine(base, { signal: controller.signal });
           res = await house();
         }
+        let street = engineHas('street_garage');
+        // garage al piano strada senza scala (lotto troppo piccolo): il piano di sopra avrebbe la porta nel vuoto e nessun
+        // collegamento, quindi si ripiega sul garage interrato con rampa, dove la scala parte dal piano terra
+        const garageFloor = res.floors.find((f) => f.program === 'garage');
+        if (street && houseShift(form) && garageFloor && !garageFloor.plan.stairs?.length) {
+          res = await readJson(await postJson(base, '/generate-house',
+            { ...req, floors: houseFloorsRequest(form, { street: false }) }, controller.signal));
+          street = false;
+          res.notes = ['Il lotto è troppo piccolo per la scala del garage al piano strada: garage interrato con rampa.', ...(res.notes || [])];
+        }
         clearTimeout(timeout);
-        openHouse(res);
+        openHouse(res, street);
         return;
       }
       const body = planBody(form, w, l, requestSeed);
