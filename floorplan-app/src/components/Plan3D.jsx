@@ -20,11 +20,12 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
   /* Mostra o nasconde sensori, impianto, cavi, coni e luci; a luci accese la scena si abbassa come di sera. */
   const applyShow = (st, built, show, on) => {
     if (!built) return;
-    built.sensors.visible = !!show?.sensors;
-    built.electric.visible = !!show?.electric;
-    built.cables.visible = !!show?.electric && !!show?.cables;
-    built.cones.visible = !!show?.cones;
-    built.lights.visible = !!show?.electric || !!show?.lights;
+    const vis = (list, on) => list.forEach((g) => { g.visible = on; });
+    vis(built.groups.sensors, !!show?.sensors);
+    vis(built.groups.electric, !!show?.electric);
+    vis(built.groups.cables, !!show?.electric && !!show?.cables);
+    vis(built.groups.cones, !!show?.cones);
+    vis(built.groups.lights, !!show?.electric || !!show?.lights);
     st.setLights(built, !!on);
     if (st.hemi) st.hemi.intensity = on ? 0.5 : 1.3;
     if (st.sun) st.sun.intensity = on ? 0.4 : 1.6;
@@ -33,12 +34,17 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
   const attach = (st, target, spreadBy) => {
     const ov = overlayRef.current;
     if (!ov || !st) return null;
+    // il giardino sta in un gruppo suo, spostato e ruotato accanto alla facciata: i suoi oggetti vanno là dentro
+    const gardenHost = (f) => target.children.find((c) => c.userData.floor?.id === f.id);
     const floors = project
-      ? project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
-        .map((f) => ({ floor: f, y: f.level * (st.FLOOR_H + (spreadBy || 0)), plan: f.plan }))
+      ? project.floors.filter((f) => (typeof f.level === 'number' || f.level === 'out') && f.plan?.rooms?.length)
+        .map((f) => (f.level === 'out'
+          ? { floor: f, y: 0, plan: f.plan, host: gardenHost(f) }
+          : { floor: f, y: f.level * (st.FLOOR_H + (spreadBy || 0)), plan: f.plan }))
+        .filter((f) => f.floor.level !== 'out' || f.host)
       : [{ floor: { id: ov.floorId }, y: 0, plan }];
     const built = st.buildOverlays(st.THREE, { floors, devices: ov.devices || [], electric: ov.electric, theme: THEMES[style] || THEMES.modern });
-    for (const g of [built.sensors, built.electric, built.cables, built.cones, built.lights]) target.add(g);
+    for (const g of [built.sensors, built.electric, built.cables, built.cones, built.lights]) target.add(g);   // i gruppi dei piani con host stanno già nel loro host
     applyShow(st, built, ov.show, ov.lightsOn);
     return built;
   };
@@ -81,6 +87,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         sun.position.set(center.x + dir.dx * reach, 14 + Ht, center.z + dir.dz * reach);
         sun.target.position.set(center.x, 0, center.z);
         sun.castShadow = true;
+        sun.shadow.bias = -0.0004;        // niente righe sfarfallanti sui muri esposti al sole (shadow acne)
+        sun.shadow.normalBias = 0.03;
         sun.shadow.mapSize.set(2048, 2048);
         const ext = Math.max(W, L, Ht);
         Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + Ht * 2 });
@@ -189,10 +197,12 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     const st = sceneRef.current;
     if (!st) return undefined;
     const old = builtRef.current;
-    if (old) for (const g of [old.sensors, old.electric, old.cables, old.cones, old.lights]) {
-      st.model.remove(g);
+    if (old) for (const g of Object.values(old.groups).flat()) {
+      g.parent?.remove(g);
       g.traverse((o) => { o.geometry?.dispose(); });
     }
+    // le luci puntuali dei gruppi tolti non fanno più parte della scena
+
     builtRef.current = attach(st, st.model, spread || 0);
     return undefined;
     // attach legge overlay e project dall'ultimo render: si ricostruisce solo quando cambiano i dati veri

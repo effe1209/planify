@@ -3311,7 +3311,8 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
     base = int(seed) if seed is not None else random.randrange(1, 1_000_000)
     many = len(floors) > 1
 
-    def one(f: dict, s: int, access: str, core: Optional[dict] = None, wet: Optional[list] = None) -> dict:
+    def one(f: dict, s: int, access: str, core: Optional[dict] = None, wet: Optional[list] = None,
+            st_type: Optional[str] = None) -> dict:
         prog = f.get("program") if f.get("program") in HOUSE_PROGRAMS else "full"
         if prog == "garage":
             needs = {**(f.get("needs") or {}), "street": f.get("level", 0) == 0}
@@ -3320,7 +3321,7 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
                         double_bedrooms=f.get("double_bedrooms"), single_bedrooms=f.get("single_bedrooms"),
                         bathrooms=f.get("bathrooms"), kitchen=f.get("kitchen") or "auto",
                         peninsula=bool(f.get("peninsula")), needs=f.get("needs"),
-                        program=prog, access=access, stair_type=stair_type, core=core, wet=wet)
+                        program=prog, access=access, stair_type=st_type or stair_type, core=core, wet=wet)
 
     # dal piano d'ingresso verso l'esterno: ogni piano ha già generato quello accanto, verso l'ingresso
     order = sorted((i for i in range(len(floors)) if i != lead), key=lambda i: (abs(i - lead), i))
@@ -3328,7 +3329,12 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
     best = None
     for attempt in range(4):
         s = base + attempt * 7919
-        ground = one(floors[lead], s, "stairs" if street_garage else "both" if many else "street")
+        # garage al piano strada: la porta di casa sta sul lato opposto a dove parte la scala, quindi serve una rampa
+        # con il passaggio accanto (dritta o a L); a U la porta darebbe sul pianerottolo a metà altezza
+        pick = None
+        if street_garage and stair_type in ("auto", "u"):
+            pick = ("straight", "straight", "l", None)[attempt]   # l'ultima prova senza vincoli: la U se è l'unica che entra
+        ground = one(floors[lead], s, "stairs" if street_garage else "both" if many else "street", st_type=pick)
         plans = {lead: ground}
         aligned = not many or bool(ground.get("stairs"))
         if aligned and many:
@@ -3350,6 +3356,9 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
             break
     aligned, _, _, plans, s = best
     notes = [] if aligned else ["La scala non si allinea su tutti i piani: prova misure più ampie o meno locali."]
+    if street_garage and plans.get(lead, {}).get("stairs") and plans[lead]["stairs"][0]["type"] == "u":
+        notes.append("Con queste misure la scala è a U: la porta di casa dà sul pianerottolo. Con più spazio la scala diventa "
+                     "dritta o a L e la porta si apre sul passaggio accanto alla rampa.")
     out = []
     for i, f in enumerate(floors):
         p = plans.get(i)
