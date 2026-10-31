@@ -8,7 +8,9 @@ import { THEMES } from '../src/lib/themes.js';
 
 const plan = {
   scale: 50, wallThickness: 10, dimensions: { width: 6, length: 4 },
-  rooms: [{ id: 1, kind: 'living', name: 'Soggiorno', x: 0, y: 0, w: 6, h: 4 }], walls: [], doors: [], windows: [], furniture: [],
+  rooms: [{ id: 1, kind: 'living', name: 'Soggiorno', x: 0, y: 0, w: 5, h: 4 }, { id: 2, kind: 'stairs', name: 'Scala', x: 5, y: 0, w: 1, h: 4 }],
+  walls: [{ x: -0.1, y: -0.1, w: 6.2, h: 0.2 }, { x: -0.1, y: 3.9, w: 6.2, h: 0.2 }, { x: -0.1, y: -0.1, w: 0.2, h: 4.2 }, { x: 5.9, y: -0.1, w: 0.2, h: 4.2 }],
+  doors: [], windows: [], furniture: [],
 };
 const floor = { id: 'f1' };
 const devices = [
@@ -19,7 +21,7 @@ const devices = [
 ];
 const pt = (kind, x, y, nx = 0, ny = 0) => ({ id: `${kind}${x}${y}`, floor: 'f1', room: 1, kind, x, y, nx, ny, circuit: 'L' });
 const electric = { floors: { f1: {
-  points: [pt('light', 2, 2), pt('light', 4, 2), pt('switch', 0.1, 1, 1, 0), pt('socket', 0.1, 3, 1, 0), pt('socket', 5.9, 3, -1, 0), pt('panel', 0.1, 0.5, 1, 0), pt('light_wall', 3, 0.05, 0, 1)],
+  points: [pt('light', 2, 2), { ...pt('light', 5.5, 2), room: 2 }, { ...pt('light_ext', 3, 4.3) }, pt('switch', 0.1, 1, 1, 0), pt('socket', 0.1, 3, 1, 0), pt('socket', 5.9, 3, -1, 0), pt('panel', 0.1, 0.5, 1, 0), pt('light_wall', 3, 0.05, 0, 1)],
   links: [{ kind: 'cmd', points: [[0.1, 1], [2, 2]] }, { kind: 'feed', points: [[0.1, 0.5], [0.1, 3]] }],
 } } };
 
@@ -27,7 +29,20 @@ const ov = buildOverlays(THREE, { floors: [{ floor, y: 0, plan }], devices, elec
 const names = (g) => g.children.map((c) => c.name);
 assert.deepEqual(names(ov.sensors).sort(), ['AJAX_FIREPROTECT2_CO', 'AJAX_HUB2_PLUS', 'AJAX_MOTIONPROTECT']);
 assert.equal(ov.electric.children.filter((c) => c.name === 'IMP_SOCKET').length, 2);
-assert.equal(ov.lights.children.filter((c) => c.name === 'PLAFONIERA').length, 2);
+// in soggiorno un lampadario, nel vano scala una plafoniera che non scende sulle scale
+assert.equal(ov.lights.children.filter((c) => c.name === 'LAMPADARIO').length, 1);
+assert.equal(ov.lights.children.filter((c) => c.name === 'PLAFONIERA').length, 1);
+const stairLamp = ov.lights.children.find((c) => c.name === 'PLAFONIERA');
+assert.ok(new THREE.Box3().setFromObject(stairLamp).min.y > 2.7 - 0.2, 'la plafoniera resta a ridosso del soffitto');
+const chand = ov.lights.children.find((c) => c.name === 'LAMPADARIO');
+assert.ok(new THREE.Box3().setFromObject(chand).min.y < 2.7 - 0.4, 'il lampadario scende dal soffitto');
+// luce esterna senza normale: attaccata alla faccia esterna del muro sud (y = 4,1), non a mezz'aria
+const ext = ov.lights.children.find((c) => c.name === 'IMP_LIGHT_EXT');
+assert.ok(Math.abs(ext.position.z - 4.102) < 1e-6, `luce esterna a z=${ext.position.z}`);
+// sensore di movimento: appoggiato alla faccia interna del muro est (x = 5,9), con il retro sul muro
+const mp = ov.sensors.children.find((c) => c.name === 'AJAX_MOTIONPROTECT');
+assert.ok(Math.abs(mp.position.x - 5.899) < 1e-6, `sensore a x=${mp.position.x}`);
+assert.ok(Math.abs(new THREE.Box3().setFromObject(mp).max.x - 5.9) < 0.005, 'il retro del sensore tocca il muro');
 
 // quote reali
 const y = (g, n) => g.children.find((c) => c.name === n).position.y;

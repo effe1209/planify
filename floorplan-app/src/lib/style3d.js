@@ -288,6 +288,8 @@ export function uvMeters(geo, w, h, d) {
 
 /* Materiali di un kit. `mat(color, extra)` crea un MeshStandardMaterial. */
 export function kitMaterials(THREE, mat, kit) {
+  // la facciata vince sulle facce interne coplanari agli spigoli (due muri che si incrociano): niente z-fighting
+  const over = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 };
   const tex = (spec, extra = {}) => {
     const map = texture(THREE, spec.tex, spec.color, spec.tone);
     return mat(map ? '#ffffff' : spec.color, { ...(map && { map }), ...extra });   // con la texture il colore è già nell'immagine
@@ -300,8 +302,8 @@ export function kitMaterials(THREE, mat, kit) {
   const roofMap = texture(THREE, roofTex, kit.roof.color, kit.roof.tone);
   return {
     wallIn: tex(kit.wallIn),
-    facade: tex(kit.facade),
-    plinth: mat(kit.plinth),
+    facade: tex(kit.facade, over),
+    plinth: mat(kit.plinth, over),
     trim: mat(kit.trim),
     baseboard: mat(kit.baseboard.color),
     floor: floorTex(kit.floor),

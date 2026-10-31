@@ -29,6 +29,20 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
   out.cables.name = 'cavi';
   out.cones.name = 'copertura';
   out.lights.name = 'luci';
+  // i piani con un `host` (il giardino, spostato e ruotato accanto alla casa) tengono i loro oggetti nel gruppo del piano
+  out.groups = { sensors: [out.sensors], electric: [out.electric], cables: [out.cables], cones: [out.cones], lights: [out.lights] };
+  const sub = (kind, host) => {
+    if (!host) return out[kind];
+    let g = host.userData[`ov_${kind}`];
+    if (!g) {
+      g = new THREE.Group();
+      g.name = out[kind].name;
+      host.add(g);
+      host.userData[`ov_${kind}`] = g;
+      out.groups[kind].push(g);
+    }
+    return g;
+  };
   const kit = styleKit(theme.id);
   const mats = new Map();
   const mat = (key, color, extra = {}, cat = 'PLASTICA') => {
@@ -62,11 +76,37 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
   };
   /* orienta il fronte (+z) del gruppo verso (dx, dz) nel piano della pianta */
   const face = (g, dx, dz) => { g.rotation.y = Math.atan2(dx, dz); };
+  /* sposta i pezzi in modo che il retro dell'oggetto stia a z = 0: così appoggia alla parete invece di affondarci a metà */
+  const mountBack = (g) => {
+    const bb = new THREE.Box3().setFromObject(g);
+    const dz = -bb.min.z;
+    g.children.forEach((c) => { c.position.z += dz; });
+  };
 
-  for (const { floor, y, plan } of floors) {
+  for (const { floor, y, plan, host } of floors) {
+    const G = (kind) => sub(kind, host);
     const at = (g, x, h, z, group) => {
       g.position.set(x, y + h, z);
       group.add(g);
+    };
+    // muri del piano: gli oggetti a parete si appoggiano alla faccia del muro più vicino, non restano in aria
+    const walls = (plan.walls || []).map((w) => ({ ...w, horiz: w.w >= w.h }));
+    const snap = (x, z, reach = 0.7) => {
+      let best = null;
+      for (const w of walls) {
+        const dx = Math.max(w.x - x, 0, x - (w.x + w.w));
+        const dz = Math.max(w.y - z, 0, z - (w.y + w.h));
+        const d = Math.hypot(dx, dz);
+        if (d <= reach && (!best || d < best.d)) best = { d, w };
+      }
+      if (!best) return null;
+      const { w } = best;
+      if (w.horiz) {
+        const south = z > w.y + w.h / 2;
+        return { x: Math.min(w.x + w.w - 0.05, Math.max(w.x + 0.05, x)), z: south ? w.y + w.h : w.y, nx: 0, nz: south ? 1 : -1 };
+      }
+      const east = x > w.x + w.w / 2;
+      return { x: east ? w.x + w.w : w.x, z: Math.min(w.y + w.h - 0.05, Math.max(w.y + 0.05, z)), nx: east ? 1 : -1, nz: 0 };
     };
 
     // ── sensori Ajax ──
@@ -116,8 +156,18 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         if (id.includes('cam')) cyl(g, 0.012, 0.012, 0.01, black, 0.02, -0.025, 0.027, 12).rotation.x = Math.PI / 2;
         if (outdoor) box(g, 0.08, 0.012, 0.07, body, 0, 0.056, 0.012);   // tettuccio
       }
-      face(g, dx, dz);
-      at(g, dev.x, h, dev.y, out.sensors);
+      // sensori a parete (movimento, apertura, tastiera, sirena, centrale): attaccati alla faccia del muro più vicino
+      const wallMounted = !(id.startsWith('fireprotect') || id === 'leaksprotect');
+      const hit = wallMounted ? snap(dev.x, dev.y, 0.8) : null;
+      if (hit) {
+        mountBack(g);
+        face(g, hit.nx, hit.nz);
+        if (id.startsWith('doorprotect') && dev.h == null) h = 2.2;   // sopra l'architrave, dove il muro c'è
+        at(g, hit.x + hit.nx * 0.001, h, hit.z + hit.nz * 0.001, G('sensors'));
+      } else {
+        face(g, dx, dz);
+        at(g, dev.x, h, dev.y, G('sensors'));
+      }
       g.userData.dev = dev.id;
 
       // cono di rilevazione: ventaglio dall'apparecchio al pavimento, con la portata del diagramma Ajax
@@ -143,7 +193,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
           geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
           const cone = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }));
           cone.userData.layer = 'COPERTURA';
-          out.cones.add(cone);
+          G('cones').add(cone);
         }
       }
     }
@@ -154,37 +204,105 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
     const lightsSeen = [];
     for (const p of ep.points) {
       const k = p.kind;
-      const nx = p.nx || 0;
-      const nz = p.ny || 0;
+      let nx = p.nx || 0;
+      let nz = p.ny || 0;
+      let px = p.x;
+      let pz = p.y;
+      if (!(nx || nz) && !['light_garden', 'fan', 'box', 'hob', 'hood'].includes(k)) {
+        // senza normale (luci esterne, campanello, motore): si appoggia al muro più vicino, dalla parte in cui sta
+        const hit = snap(p.x, p.y, 0.6);
+        if (hit) { px = hit.x; pz = hit.z; nx = hit.nx; nz = hit.nz; }
+      }
       const wall = nx !== 0 || nz !== 0;
       const key = `IMP_${k.toUpperCase()}`;
       const layerOf = (kk) => (['light', 'light_wall', 'light_ext', 'light_garden', 'emergency', 'fan'].includes(kk) ? 'IMP_LUCI'
         : ['switch', 'switch_2way', 'switch_inter', 'button', 'bell', 'thermostat'].includes(kk) ? 'IMP_COMANDI'
           : ['panel', 'subpanel', 'box'].includes(kk) ? 'IMP_QUADRI' : 'IMP_PRESE');
       if (k === 'light') {
-        // punto luce a soffitto: corpo illuminante nello stile della casa; emissivo, con luce vera per i più vicini
+        // punto luce a soffitto: nei locali di passaggio e di servizio (scale, corridoi, bagni…) una plafoniera, che non
+        // scende sulla testa; in soggiorno e in camera un lampadario o una sospensione nello stile della casa
         const g = object('PLAFONIERA', 'IMP_LUCI', `IMP_LIGHT_${(theme.id || 'modern').toUpperCase()}`);
         const lamp = mat('lampglow', '#fff3d4', { emissive: '#ffcf80', emissiveIntensity: 0.15 }, 'LUCE');
         out.glow.push(lamp);
         const style = theme.id || 'modern';
-        if (style === 'classic' || style === 'luxury') {
-          cyl(g, 0.008, 0.008, 0.3, metal, 0, -0.15, 0, 8);
-          cyl(g, 0.1, 0.19, 0.2, lamp, 0, -0.4, 0, 22);
-          cyl(g, 0.2, 0.2, 0.012, mat('lampring', kit.handle, { metalness: 0.7, roughness: 0.3 }, 'METALLO'), 0, -0.5, 0, 22);
-        } else if (style === 'industrial') {
-          cyl(g, 0.006, 0.006, 0.45, black, 0, -0.225, 0, 8);
-          const dome = part(g, new THREE.SphereGeometry(0.17, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), black, 0, -0.55, 0);
-          dome.rotation.x = Math.PI;
-          part(g, new THREE.SphereGeometry(0.05, 12, 10), lamp, 0, -0.5, 0);
-        } else if (style === 'nordic' || style === 'japandi') {
-          cyl(g, 0.005, 0.005, 0.3, grey, 0, -0.15, 0, 8);
-          const ball = part(g, new THREE.SphereGeometry(0.19, 20, 14), lamp, 0, -0.45, 0);
-          ball.scale.set(1, style === 'japandi' ? 1.4 : 1, 1);
-        } else {
-          cyl(g, 0.15, 0.15, 0.04, white, 0, -0.02, 0, 26);
-          cyl(g, 0.12, 0.12, 0.012, lamp, 0, -0.046, 0, 26);
+        const rk = plan.rooms.find((r) => r.id === p.room)?.kind;
+        const flush = ['stairs', 'corridor', 'entry', 'bath', 'wc', 'storage', 'closet', 'laundry', 'garage', 'kitchen', 'study', 'meeting', 'director'].includes(rk);
+        const brass = mat('lampring', kit.handle, { metalness: 0.7, roughness: 0.3 }, 'METALLO');
+        if (flush) {
+          g.name = 'PLAFONIERA';
+          if (style === 'classic') {
+            cyl(g, 0.17, 0.15, 0.09, lamp, 0, -0.045, 0, 28);
+            cyl(g, 0.185, 0.185, 0.014, brass, 0, -0.092, 0, 28);
+          } else if (style === 'luxury') {
+            cyl(g, 0.2, 0.2, 0.05, lamp, 0, -0.025, 0, 28);
+            for (let i = 0; i < 10; i++) {
+              const a = (i * Math.PI * 2) / 10;
+              part(g, new THREE.SphereGeometry(0.022, 10, 8), brass, Math.cos(a) * 0.21, -0.05, Math.sin(a) * 0.21);
+            }
+          } else if (style === 'industrial') {
+            cyl(g, 0.11, 0.11, 0.02, black, 0, -0.01, 0, 20);
+            cyl(g, 0.085, 0.085, 0.11, lamp, 0, -0.075, 0, 18);
+            for (let i = 0; i < 6; i++) {
+              const a = (i * Math.PI * 2) / 6;
+              box(g, 0.008, 0.12, 0.008, black, Math.cos(a) * 0.1, -0.075, Math.sin(a) * 0.1);
+            }
+            cyl(g, 0.105, 0.105, 0.012, black, 0, -0.135, 0, 20);
+          } else if (style === 'nordic') {
+            cyl(g, 0.2, 0.2, 0.035, white, 0, -0.0175, 0, 30);
+            cyl(g, 0.17, 0.17, 0.012, lamp, 0, -0.04, 0, 30);
+          } else if (style === 'japandi') {
+            cyl(g, 0.22, 0.22, 0.09, lamp, 0, -0.045, 0, 30);
+            cyl(g, 0.225, 0.225, 0.012, mat('lampwood', kit.plinth, {}, 'LEGNO'), 0, -0.094, 0, 30);
+          } else {
+            box(g, 0.32, 0.035, 0.32, white, 0, -0.0175, 0);
+            box(g, 0.27, 0.01, 0.27, lamp, 0, -0.04, 0);
+          }
+          at(g, p.x, WALL_H, p.y, G('lights'));
+          lightsSeen.push({ x: p.x, y: y + WALL_H - 0.15, z: p.y });
+          continue;
         }
-        at(g, p.x, WALL_H, p.y, out.lights);
+        g.name = 'LAMPADARIO';
+        if (style === 'classic') {
+          // lampadario a sei braccia con le lampadine a candela
+          cyl(g, 0.008, 0.008, 0.28, brass, 0, -0.14, 0, 8);
+          cyl(g, 0.03, 0.03, 0.2, brass, 0, -0.38, 0, 12);
+          for (let i = 0; i < 6; i++) {
+            const a = (i * Math.PI * 2) / 6;
+            const arm = box(g, 0.2, 0.012, 0.012, brass, Math.cos(a) * 0.1, -0.44, Math.sin(a) * 0.1);
+            arm.rotation.y = -a;
+            cyl(g, 0.012, 0.012, 0.08, lamp, Math.cos(a) * 0.2, -0.4, Math.sin(a) * 0.2, 8);
+            part(g, new THREE.SphereGeometry(0.017, 8, 6), lamp, Math.cos(a) * 0.2, -0.355, Math.sin(a) * 0.2);
+          }
+        } else if (style === 'luxury') {
+          // lampadario a tre anelli dorati con gocce di cristallo
+          cyl(g, 0.006, 0.006, 0.34, brass, 0, -0.17, 0, 8);
+          [[0.24, -0.4], [0.17, -0.5], [0.1, -0.58]].forEach(([r, yy]) => {
+            part(g, new THREE.TorusGeometry(r, 0.008, 6, 28), brass, 0, yy, 0).rotation.x = Math.PI / 2;
+            for (let i = 0; i < 12; i++) {
+              const a = (i * Math.PI * 2) / 12;
+              part(g, new THREE.SphereGeometry(0.016, 8, 6), lamp, Math.cos(a) * r, yy - 0.03, Math.sin(a) * r);
+            }
+          });
+        } else if (style === 'industrial') {
+          cyl(g, 0.006, 0.006, 0.5, black, 0, -0.25, 0, 8);
+          const dome = part(g, new THREE.SphereGeometry(0.18, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), black, 0, -0.6, 0);
+          dome.rotation.x = Math.PI;
+          part(g, new THREE.SphereGeometry(0.05, 12, 10), lamp, 0, -0.55, 0);
+        } else if (style === 'nordic') {
+          cyl(g, 0.005, 0.005, 0.32, grey, 0, -0.16, 0, 8);
+          part(g, new THREE.SphereGeometry(0.2, 22, 14), lamp, 0, -0.5, 0);
+        } else if (style === 'japandi') {
+          cyl(g, 0.005, 0.005, 0.3, grey, 0, -0.15, 0, 8);
+          cyl(g, 0.15, 0.15, 0.34, lamp, 0, -0.47, 0, 26);
+        } else {
+          // moderno: tre sfere di vetro a quote diverse
+          [[-0.09, 0.14, -0.3], [0.1, 0.12, -0.44], [0, 0.13, -0.58]].forEach(([dx2, r, yy], i) => {
+            cyl(g, 0.004, 0.004, Math.abs(yy) - r, grey, dx2, yy / 2 + r / 2, i ? 0.05 : -0.05, 6);
+            part(g, new THREE.SphereGeometry(r, 18, 12), lamp, dx2, yy, i ? 0.05 : -0.05);
+          });
+          cyl(g, 0.12, 0.12, 0.02, white, 0, -0.01, 0, 22);
+        }
+        at(g, p.x, WALL_H, p.y, G('lights'));
         lightsSeen.push({ x: p.x, y: y + WALL_H - 0.5, z: p.y });
         continue;
       }
@@ -228,12 +346,29 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
       } else if (k === 'chime') {
         box(g, 0.1, 0.06, 0.03, white, 0, 0, 0.015);
       } else if (k === 'light_wall') {
-        // applique: staffa e vetro opalino
-        box(g, 0.08, 0.04, 0.03, metal, 0, 0, 0.015);
+        // applique nello stile della casa: braccio con paralume (classico, luxury), cilindro (moderno), collo d'oca (industriale),
+        // calotta (nordico, japandi)
         const gl = mat('applglow', '#fff3d4', { emissive: '#ffcf80', emissiveIntensity: 0.15 }, 'LUCE');
         out.glow.push(gl);
-        part(g, new THREE.SphereGeometry(0.08, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), gl, 0, 0, 0.03).rotation.x = Math.PI / 2;
-        lightsSeen.push({ x: p.x + nx * 0.2, y: y + baseH, z: p.y + nz * 0.2 });
+        const st = theme.id || 'modern';
+        const brass = mat('lampring', kit.handle, { metalness: 0.7, roughness: 0.3 }, 'METALLO');
+        box(g, 0.07, 0.1, 0.012, st === 'industrial' ? black : st === 'classic' || st === 'luxury' ? brass : metal, 0, 0, 0.006);
+        if (st === 'classic' || st === 'luxury') {
+          box(g, 0.015, 0.015, 0.14, brass, 0, 0, 0.08);
+          cyl(g, 0.05, 0.09, 0.14, gl, 0, 0.07, 0.15, 20);
+        } else if (st === 'modern') {
+          cyl(g, 0.04, 0.04, 0.2, gl, 0, 0, 0.06, 18);
+          cyl(g, 0.042, 0.042, 0.012, white, 0, 0.1, 0.06, 18);
+          cyl(g, 0.042, 0.042, 0.012, white, 0, -0.1, 0.06, 18);
+        } else if (st === 'industrial') {
+          box(g, 0.012, 0.012, 0.18, black, 0, 0.04, 0.1);
+          const dome = part(g, new THREE.SphereGeometry(0.1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), black, 0, 0.02, 0.24);
+          dome.rotation.x = Math.PI / 2 + 0.5;
+          part(g, new THREE.SphereGeometry(0.035, 10, 8), gl, 0, 0.0, 0.25);
+        } else {
+          part(g, new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), gl, 0, 0, 0.012).rotation.x = Math.PI / 2;
+        }
+        lightsSeen.push({ x: px + nx * 0.25, y: y + baseH, z: pz + nz * 0.25 });
       } else if (k === 'light_ext') {
         box(g, 0.16, 0.22, 0.1, mat('extlamp', '#2b3036', { metalness: 0.4 }, 'METALLO'), 0, 0, 0.05);
         const gl = mat('extglow', '#fff3d4', { emissive: '#ffcf80', emissiveIntensity: 0.15 }, 'LUCE');
@@ -251,10 +386,10 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         box(g, 0.08, 0.08, 0.012, plate, 0, 0, 0.006);
       }
       if (k === 'light_garden') {
-        at(g, p.x, 0, p.y, out.lights);
+        at(g, p.x, 0, p.y, G('lights'));
       } else {
         if (wall) face(g, nx, nz);
-        at(g, p.x + (wall ? nx * 0.002 : 0), baseH, p.y + (wall ? nz * 0.002 : 0), lampLike ? out.lights : out.electric);
+        at(g, px + (wall ? nx * 0.002 : 0), baseH, pz + (wall ? nz * 0.002 : 0), lampLike ? G('lights') : G('electric'));
       }
     }
 
@@ -264,7 +399,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
       if (i % step || out.realLights.length >= MAX_REAL_LIGHTS) return;
       const pl = new THREE.PointLight('#ffd9a0', 0, 7, 1.6);
       pl.position.set(l.x, l.y, l.z);
-      out.lights.add(pl);
+      G('lights').add(pl);
       out.realLights.push(pl);
     });
 
@@ -282,7 +417,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         c.rotation.z = Math.PI / 2;
         c.rotation.y = -Math.atan2(bz - az, bx - ax);
         c.userData.layer = 'IMP_CAVI';
-        out.cables.add(c);
+        G('cables').add(c);
       }
     }
   }
