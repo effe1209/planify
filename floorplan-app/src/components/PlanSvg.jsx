@@ -1181,9 +1181,31 @@ export default function PlanSvg({
         {showFurn && (
           <g filter={ref(tech ? 'mono' : 'fshadow')} opacity={furnOpacity}>
             {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
-            {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => !coveredByStairs(it, stairs))
+            {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => !it.elev && !coveredByStairs(it, stairs))
               .sort(([a], [b]) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
               .map(([it, i]) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
+          </g>
+        )}
+        {plan.mezzanine && !tech && (
+          <g pointerEvents="none">
+            {/* soppalco: attenua quello che c'è sotto, contorno tratteggiato, zona notte e rampa */}
+            <rect x={plan.mezzanine.x * s} y={plan.mezzanine.y * s} width={plan.mezzanine.w * s} height={plan.mezzanine.h * s}
+              fill="#ffffff" fillOpacity="0.85" stroke="#5b6472" strokeWidth="1.2" strokeDasharray="7 4" />
+            {showFurn && (
+              <g filter={ref('fshadow')} opacity={furnOpacity}>
+                {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => it.elev)
+                  .map(([it, i]) => <Furn key={`mf-${i}`} item={it} scale={s} theme={theme} />)}
+              </g>
+            )}
+            <Stair st={{ ...plan.mezzanine.stair, id: 'mezzanine', role: 'none' }} s={s} />
+            {!thumb && layers.labels && (
+              <text x={(plan.mezzanine.x + plan.mezzanine.w / 2) * s}
+                y={(plan.mezzanine.stair.y + plan.mezzanine.stair.h / 2 > plan.mezzanine.y + plan.mezzanine.h / 2
+                  ? plan.mezzanine.y + 0.4 : plan.mezzanine.y + plan.mezzanine.h - 0.25) * s}
+                textAnchor="middle" fontSize="10" fontWeight="600" fill="#3d4452">
+                Soppalco · +{plan.mezzanine.elev.toFixed(2).replace('.', ',')} m
+              </text>
+            )}
           </g>
         )}
         {showFurn && !garden && !tech && (

@@ -186,7 +186,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       old.traverse((o) => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
     }
     if (!roof) return;
-    const top = project ? st.roofFloor(project) : { floor: { plan }, y: st.WALL_H };
+    const top = project ? st.roofFloor(project) : { floor: { plan }, y: plan?.height || st.WALL_H };
     const roofStyle = project ? (top?.floor.meta?.style || style) : style;
     if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle }));
   }, [roof, ready, plan, project, spread, style]);

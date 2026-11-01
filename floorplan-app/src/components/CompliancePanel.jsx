@@ -3,9 +3,9 @@ import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { DEFAULT_HEIGHT, checkCompliance } from '../lib/compliance';
 
 /* Verifica della pianta rispetto alla normativa nazionale: ogni voce cita la fonte; un clic porta al locale. */
-export default function CompliancePanel({ plan, type, height, stairs, onHeight, onSelectRoom }) {
-  const h = height ?? DEFAULT_HEIGHT;
-  const res = useMemo(() => checkCompliance(plan, { type, height: h, stairs }), [plan, type, h, stairs]);
+export default function CompliancePanel({ plan, type, height, stairs, complex, onHeight, onSelectRoom }) {
+  const h = height ?? plan?.height ?? DEFAULT_HEIGHT;
+  const res = useMemo(() => checkCompliance(plan, { type, height: h, stairs, complex }), [plan, type, h, stairs, complex]);
   if (!plan) return null;
   const tone = res.fail ? 'is-weak' : res.warn ? 'is-good' : 'is-great';
   const title = res.fail
@@ -22,7 +22,7 @@ export default function CompliancePanel({ plan, type, height, stairs, onHeight, 
       </div>
       {onHeight && (
         <label className="pf-field pf-compliance-height">
-          <span>Altezza interna del piano</span>
+          <span>Altezza interna del piano{plan?.mezzanine ? ' (loft a doppia altezza)' : ''}</span>
           <div>
             <input type="number" step="0.05" min="2" max="6" value={h}
               onChange={(e) => { const v = parseFloat(e.target.value); if (v >= 2 && v <= 6) onHeight(v); }} />

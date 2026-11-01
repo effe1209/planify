@@ -35,7 +35,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house", "street_garage", "pdf_import", "catasto_import"]
+            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -173,6 +173,7 @@ class FurnitureItem(BaseModel):
     room: int = 0      # id della stanza che lo contiene
     flip: bool = False # disegno specchiato (doccia angolare, divano angolare, penisola)
     parts: Optional[Dict[str, float]] = None   # posizioni interne (piano cucina: hob, sink in metri dall'inizio)
+    elev: float = 0.0  # quota del pavimento su cui poggia (arredi del soppalco)
 
 
 class Notch(BaseModel):
@@ -202,6 +203,8 @@ class PlanResponse(BaseModel):
     design: Optional[Dict[str, Any]] = None   # valutazione progettuale: punteggio, punti di forza, criticità
     stairs: List[Dict[str, Any]] = []          # vani scala: ingombro (core) da passare agli altri piani e rampe
     house: Optional[Dict[str, Any]] = None     # giardino: dove sta la casa sul lato nord ({x, w} in metri)
+    height: Optional[float] = None             # altezza interna del piano se diversa da quella standard (loft)
+    mezzanine: Optional[Dict[str, Any]] = None  # soppalco del loft: ingombro, quota, parapetto, rampa
 
 
 class HouseFloorPlan(BaseModel):

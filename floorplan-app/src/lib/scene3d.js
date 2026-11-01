@@ -46,7 +46,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
-  const wallH = lowWalls ? 1.2 : WALL_H;
+  const wallH = lowWalls ? 1.2 : (plan.height || WALL_H);   // il loft ha il volume a doppia altezza
   const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
   const M = {
     wall: mat('#f3f0ea'), wood: mat(theme.wood), fabric: mat(theme.fabric), duvet: mat(theme.duvet),
@@ -159,6 +159,11 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   // muri: ogni tratto si divide dove ci sono vani; sotto e sopra le finestre resta il muro
   for (const w of plan.walls) {
     const horiz = w.w >= w.h;
+    // sotto il soppalco i muri interni arrivano al suo solaio; quelli esterni salgono a tutta altezza
+    const mz = plan.mezzanine;
+    const ext = w.x <= 0.01 || w.y <= 0.01 || w.x + w.w >= plan.dimensions.width - 0.01 || w.y + w.h >= plan.dimensions.length - 0.01;
+    const wh = mz && !ext && !lowWalls && w.x + w.w / 2 >= mz.x - 0.15 && w.x + w.w / 2 <= mz.x + mz.w + 0.15
+      && w.y + w.h / 2 >= mz.y - 0.15 && w.y + w.h / 2 <= mz.y + mz.h + 0.15 ? mz.elev - mz.slab : wallH;
     const a0 = horiz ? w.x : w.y;
     const a1 = horiz ? w.x + w.w : w.y + w.h;
     const cuts = openings.filter((o) => (horiz
@@ -169,17 +174,17 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     let cur = a0;
     const seg = (a, b, y0, h, m = null) => (m ? (horiz ? box(a, w.y, b - a, w.h, y0, h, m) : box(w.x, a, w.w, b - a, y0, h, m)) : wallPiece(horiz, w, a, b, y0, h));
     for (const c of cuts) {
-      if (c.a > cur) seg(cur, c.a, 0, wallH);
+      if (c.a > cur) seg(cur, c.a, 0, wh);
       if (c.door) {
-        if (wallH > DOOR_H) seg(c.a, c.b, DOOR_H, wallH - DOOR_H);
+        if (wh > DOOR_H) seg(c.a, c.b, DOOR_H, wh - DOOR_H);
       } else {
-        seg(c.a, c.b, 0, Math.min(SILL, wallH));
-        if (wallH > SILL) seg(c.a + 0.02, c.b - 0.02, SILL, Math.min(DOOR_H, wallH) - SILL, M.glass);
-        if (wallH > DOOR_H) seg(c.a, c.b, DOOR_H, wallH - DOOR_H);
+        seg(c.a, c.b, 0, Math.min(SILL, wh));
+        if (wh > SILL) seg(c.a + 0.02, c.b - 0.02, SILL, Math.min(DOOR_H, wh) - SILL, M.glass);
+        if (wh > DOOR_H) seg(c.a, c.b, DOOR_H, wh - DOOR_H);
       }
       cur = Math.max(cur, c.b);
     }
-    if (cur < a1) seg(cur, a1, 0, wallH);
+    if (cur < a1) seg(cur, a1, 0, wh);
   }
 
   // infissi e porte nei colori dello stile: telaio e traversa centrale, davanzale, anta socchiusa con maniglia
@@ -266,11 +271,17 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   }
 
   // arredi
+  // arredi del soppalco (it.elev): stessi volumi, alzati alla quota del suo pavimento
+  const raise = (it, from) => {
+    if (it.elev) for (let i = from; i < root.children.length; i++) root.children[i].position.y += it.elev;
+  };
   for (const it of plan.furniture) {
+    const from = root.children.length;
     // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
     const obj = buildObject(THREE, it, M, mat, theme);
     if (obj) {
       root.add(obj);
+      raise(it, from);
       continue;
     }
     const [h, m, lift = 0] = SHAPES[it.type] || [0.6, 'cabinet'];
@@ -308,6 +319,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     } else {
       box(it.x, it.y, it.w, it.h, lift, h, material);
     }
+    raise(it, from);
   }
   // layer di ogni volume (per il DXF 3D): muri, vetri, pavimenti, il resto sono arredi
   root.traverse((o) => {
@@ -315,10 +327,13 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     o.userData.layer = o.material === M.wall ? 'MURI' : o.material === M.glass ? 'VETRI' : 'ARREDI';
   });
   // scale: i gradini salgono al piano di sopra (altezza = solaio compreso)
-  const flights = stairs ?? (plan.stairs || []).filter((st) => st.entry);
+  const mz = plan.mezzanine;
+  const flights = [...(stairs ?? (plan.stairs || []).filter((st) => st.entry)),
+    ...(mz ? [{ ...mz.stair, id: 'mezzanine', type: 'straight' }] : [])];
+  if (mz) buildMezzanine(THREE, root, mz, M, K, theme, box);
   const stepMat = new THREE.MeshStandardMaterial({ color: theme.wood || '#cdb89a', roughness: 0.7 });
   for (const st of flights) {
-    for (const b of stairSteps(st, WALL_H + SLAB_T)) {
+    for (const b of stairSteps(st, st.id === 'mezzanine' ? mz.elev : WALL_H + SLAB_T)) {
       // i gradini bassi poggiano a terra; sopra 1 m la rampa è sospesa (gradino con spessore, aperta sotto), così chi sale dal
       // piano sotto passa sotto la rampa del piano di sopra e non dentro un blocco pieno
       const th = b.top > 1.0 ? 0.2 : b.top;
@@ -331,6 +346,34 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     }
   }
   return root;
+}
+
+/* Soppalco del loft: solaio, parapetto (vetro e corrimano) sui lati aperti con il varco della scala. */
+function buildMezzanine(THREE, root, mz, M, K, theme, box) {
+  const e = mz.elev;
+  const slab = box(mz.x, mz.y, mz.w, mz.h, e - mz.slab, mz.slab, M.wood);
+  if (slab) slab.userData.layer = 'SOLAI';
+  const gap = { x0: mz.stair.x, x1: mz.stair.x + mz.stair.w, y0: mz.stair.y, y1: mz.stair.y + mz.stair.h };
+  const rail = (x, z, w, d) => {
+    for (const m of [box(x, z, w, d, e, mz.parapet, M.glass), box(x, z, w, d, e + mz.parapet - 0.04, 0.04, K.rail)]) if (m) m.userData.layer = 'RINGHIERE';
+  };
+  const thick = 0.03;
+  for (const side of mz.open) {
+    const vertical = side === 'W' || side === 'E';
+    const at = side === 'W' ? mz.x : side === 'E' ? mz.x + mz.w : side === 'N' ? mz.y : mz.y + mz.h;
+    const a = vertical ? mz.y : mz.x;
+    const b = vertical ? mz.y + mz.h : mz.x + mz.w;
+    // il varco: dove la rampa arriva su questo lato
+    const g0 = vertical ? gap.y0 : gap.x0;
+    const g1 = vertical ? gap.y1 : gap.x1;
+    const touches = vertical ? (gap.x0 <= at + 0.05 && gap.x1 >= at - 0.05) : (gap.y0 <= at + 0.05 && gap.y1 >= at - 0.05);
+    const spans = touches ? [[a, Math.min(g0, b)], [Math.max(g1, a), b]] : [[a, b]];
+    for (const [p0, p1] of spans) {
+      if (p1 - p0 < 0.05) continue;
+      if (vertical) rail(at - thick / 2, p0, thick, p1 - p0);
+      else rail(p0, at - thick / 2, p1 - p0, thick);
+    }
+  }
 }
 
 /* Quota di un piano rispetto al piano terra: muri alti WALL_H più il solaio. */
@@ -526,5 +569,5 @@ export function roofFloor(project) {
     && !f.plan.rooms.every((r) => r.kind === 'garden' || r.kind === 'garage'));
   if (!floors.length) return null;
   const top = floors.reduce((a, f) => (f.level > a.level ? f : a));
-  return { floor: top, y: top.level * FLOOR_H + WALL_H };
+  return { floor: top, y: top.level * FLOOR_H + (top.plan.height || WALL_H) };
 }
