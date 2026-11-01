@@ -40,4 +40,8 @@ test('si reimporta: le stanze dal layer AREE', () => {
   const back = parseDxfClientSide(txt);
   assert.equal(back.rooms.length, 2);
 });
+test('quote in cm a catene sul layer QUOTE: totale, interassi e aperture', () => {
+  const q = [...txt.matchAll(/0\nTEXT\n8\nQUOTE\n(?:[^\n]*\n){8}1\n([^\n]*)\n/g)].map((m) => m[1]);
+  for (const v of ['800', '500', '300', '150', '100']) assert.ok(q.includes(v), `manca la quota ${v} cm: ${q}`);
+});
 console.log(`\n${ok} test superati`);

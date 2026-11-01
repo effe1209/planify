@@ -204,7 +204,7 @@ test('anche i muri esterni si spostano e cambiano la misura della casa', async (
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
   await page.locator('.pf-editbtn').click();
-  const dims = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /^\d+(,\d+)? m$/.test(t)).join('|');
+  const dims = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /^\d{3,4}$/.test(t)).join('|');   // quote in cm
   const before = await dims();
   const walls = page.locator('.pf-sheet svg rect[style*="col-resize"]');
   await expect(walls.first()).toBeVisible();
@@ -330,6 +330,17 @@ test('il loft è una tipologia selezionata, resta tale cambiando misura e ha le 
   await expect(tabs.getByRole('radio', { name: 'Sopra' })).toHaveAttribute('aria-checked', 'true');
   await tabs.getByRole('radio', { name: 'Sotto' }).click();
   await expect(page.locator('.pf-sheet svg text', { hasText: 'Soppalco sopra' }).first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('la pianta ha le quote esterne in cm su tre livelli', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const w = Number(await page.getByLabel('Larghezza').inputValue());
+  await expect(page.locator('.pf-sheet svg text', { hasText: new RegExp(`^${Math.round(w * 100)}$`) }).first()).toBeVisible();
+  await page.locator('.pf-sheet svg').first().screenshot({ path: process.env.SHOT2 || '/tmp/quote-pianta.png' });
   expect(errors).toEqual([]);
 });
 

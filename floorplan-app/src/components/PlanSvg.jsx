@@ -14,6 +14,7 @@ import Rug from './Rug';
 import Decor from './Decor';
 import { decorFor } from '../lib/decor';
 import { slideDoor } from '../lib/mezz';
+import { dimensionChains, tierIndex } from '../lib/dimensions';
 import { itemProblems, snapItem } from '../lib/furnitureEdit';
 import { rugsFor } from '../lib/rugs';
 import { mezzAxis, mezzLimits, resizeMezz } from '../lib/mezz';
@@ -614,6 +615,45 @@ function Stair({ st, s }) {
         <path d={`M ${cutX - z} 0 L ${cutX} ${(u ? half : wid) * 0.45} L ${cutX - z * 0.6} ${(u ? half : wid) * 0.55} L ${cutX + z * 0.4} ${u ? half : wid}`}
           fill="none" stroke={INK} strokeWidth="1.3" />
       )}
+    </g>
+  );
+}
+
+/* Catene di quote esterne in cm: aperture, interassi e totale, impilate dal muro verso l'esterno. */
+function DimChains({ chains, s, W, H }) {
+  const OFF = [22, 42, 62];
+  const at = (side, along, off) => (side === 'N' ? [along, -off] : side === 'S' ? [along, H + off] : side === 'W' ? [-off, along] : [W + off, along]);
+  return (
+    <g fontFamily={FONT} stroke={INK} strokeWidth="0.8" fill="none" pointerEvents="none">
+      {chains.map((c) => {
+        const off = OFF[tierIndex(chains, c)] ?? 62;
+        const horiz = c.side === 'N' || c.side === 'S';
+        const [x0, y0] = at(c.side, c.pts[0] * s, off);
+        const [x1, y1] = at(c.side, c.pts[c.pts.length - 1] * s, off);
+        return (
+          <g key={`${c.side}-${c.tier}`}>
+            <line x1={x0} y1={y0} x2={x1} y2={y1} />
+            {c.pts.map((v) => {
+              const [ax, ay] = at(c.side, v * s, 4);
+              const [bx, by] = at(c.side, v * s, off + 4);
+              const [tx, ty] = at(c.side, v * s, off);
+              return (
+                <g key={v}>
+                  <line x1={ax} y1={ay} x2={bx} y2={by} strokeWidth="0.5" />
+                  <line x1={tx - 3} y1={ty + 3} x2={tx + 3} y2={ty - 3} strokeWidth="1.1" />
+                </g>
+              );
+            })}
+            {c.segs.filter((q) => (q.b - q.a) * s >= 22).map((q) => {
+              const [mx, my] = at(c.side, ((q.a + q.b) / 2) * s, off);
+              return (
+                <text key={q.a} x={mx} y={my - 3} fontSize="8.5" fontWeight={q.open ? 700 : 500} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth="2.6"
+                  paintOrder="stroke" strokeLinejoin="round" transform={horiz ? undefined : `rotate(-90 ${mx} ${my})`}>{q.cm}</text>
+              );
+            })}
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -1413,7 +1453,11 @@ export default function PlanSvg({
             onDrag={onDeviceDrag} codes={deviceCodes} />
         )}
 
-        {!thumb && layers.dims && (
+        {!thumb && layers.dims && !garden && (() => {
+          const chains = dimensionChains(plan);
+          return chains.length ? <DimChains chains={chains} s={s} W={W} H={H} /> : null;
+        })()}
+        {!thumb && layers.dims && (garden || !dimensionChains(plan).length) && (
           <g fontFamily={FONT}>
             <g stroke={INK} strokeWidth="0.8">
               <line x1={0} y1={-6 - band} x2={0} y2={-42 - band} />
