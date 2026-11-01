@@ -54,6 +54,14 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
             else:
                 assert "bath" not in mz, (w, l, seed)
             assert not [f for f in plan["furniture"] if not f.get("elev") and ov(f, mz["stair"])], (w, l, seed)
+            # letto e armadio staccati (almeno 0,4 m) e il bagnetto non sta fra i due
+            bed = next(f for f in up if f["type"] == "bed")
+            war = next(f for f in up if f["type"] == "wardrobe")
+            gap = max(war["y"] - (bed["y"] + bed["h"]), bed["y"] - (war["y"] + war["h"]), war["x"] - (bed["x"] + bed["w"]), bed["x"] - (war["x"] + war["w"]))
+            assert gap >= (0.4 if mz["w"] >= 3.4 else 0.1), (w, l, seed, gap)
+            if "bath" in mz:
+                bx0 = min(q["y"] for q in mz["bath"]["walls"]); bx1 = max(q["y"] + q["h"] for q in mz["bath"]["walls"])
+                assert not (min(bed["y"], war["y"]) < bx0 and bx1 < max(bed["y"] + bed["h"], war["y"] + war["h"])), (w, l, seed)
             assert not [n for n in plan["notes"] if "non" in n.lower() and "raggiungibile" in n.lower()]
     big = planner.generate(14, 10, "open-space", num_rooms=1, seed=1)   # soggiorno grande: tavolino in proporzione
     ct = next(f for f in big["furniture"] if f["type"] == "coffee_table")
@@ -62,6 +70,27 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
     assert "mezzanine" not in small and any("soppalco non entra" in n for n in small["notes"])   # sotto 7 × 5 m: loft a un livello
     assert "mezzanine" not in planner.generate(12, 8, "open-space", num_rooms=1, seed=1)   # il monolocale non ha soppalco
     print("ok test_loft_is_a_real_loft_with_a_mezzanine")
+
+
+def test_tv_never_stands_in_front_of_a_window():
+    """La TV va a parete piena o su un mobile basso da terra, mai davanti a una finestra."""
+    def on_window(tv, win):
+        horiz = win["rot"] % 180 == 0
+        a0, a1 = (win["x"], win["x"] + win["w"]) if horiz else (win["y"], win["y"] + win["w"])
+        c = (tv["x"] + tv["w"] / 2) if horiz else (tv["y"] + tv["h"] / 2)
+        line = win["y"] if horiz else win["x"]
+        d = (min(abs(tv["y"] - line), abs(tv["y"] + tv["h"] - line)) if horiz else min(abs(tv["x"] - line), abs(tv["x"] + tv["w"] - line)))
+        half = (tv["w"] if horiz else tv["h"]) / 2
+        return a0 - half + 0.05 < c < a1 + half - 0.05 and d < 0.5
+    seen = 0
+    for w, l, t in [(12, 8, "loft"), (10, 6.5, "loft"), (9, 6, "open-space"), (12, 9, "apartment"), (7, 5, "loft"), (14, 10, "apartment")]:
+        for seed in range(6):
+            plan = planner.generate(w, l, t, num_rooms=3, seed=seed, style="modern")
+            for tv in [f for f in plan["furniture"] if f["type"] == "tv"]:
+                seen += 1
+                assert not any(on_window(tv, win) for win in plan["windows"]), (w, l, t, seed, tv)
+    assert seen > 10, seen
+    print("ok test_tv_never_stands_in_front_of_a_window")
 
 
 def test_stair_slots_climb_a_floor_with_comfortable_risers():
@@ -110,6 +139,7 @@ if __name__ == "__main__":
     test_minimum_areas_are_respected()
     test_loft_has_a_bathroom_below_the_apartment_minimum()
     test_loft_is_a_real_loft_with_a_mezzanine()
+    test_tv_never_stands_in_front_of_a_window()
     test_stair_slots_climb_a_floor_with_comfortable_risers()
     test_bedroom_windows_follow_the_room_size()
     test_every_desk_in_a_home_or_hotel_has_an_office_chair_facing_it()

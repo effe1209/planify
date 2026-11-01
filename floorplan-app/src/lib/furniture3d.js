@@ -402,6 +402,20 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const sw = Math.min(W - 0.04, 1.9);
       const sh = Math.min(0.95, sw * 0.5625);
       const screen = m('screen', '#0b0f14', { roughness: 0.12, metalness: 0.3 });
+      if (it.parts?.stand) {
+        // mobile TV basso da terra, di design: corpo su gambe sottili, schermo sul piano con piede
+        const cw = W;
+        const uh = 0.34;
+        bx(cw, uh, D, 0, 0.14, 0, M.wood);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(0.03, 0.14, 0.03, sx * (cw / 2 - 0.08), 0, sz * (D / 2 - 0.06), M.metal);
+        const top = 0.14 + uh;
+        const w2 = Math.min(cw - 0.1, 1.2);
+        const h2 = w2 * 0.5625;
+        bx(w2, h2, 0.04, 0, top + 0.05, 0, M.dark);
+        bx(w2 - 0.04, h2 - 0.04, 0.008, 0, top + 0.07, 0.024, screen);
+        bx(0.3, 0.03, 0.16, 0, top, 0, M.metal);
+        break;
+      }
       bx(sw, sh, 0.04, 0, 0.62, -D / 2 + 0.06, M.dark);
       bx(sw - 0.04, sh - 0.04, 0.008, 0, 0.64, -D / 2 + 0.084, screen);
       bx(0.18, 0.14, 0.04, 0, 0.62 + sh / 2 - 0.07, -D / 2 + 0.02, M.metal);

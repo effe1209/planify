@@ -1089,6 +1089,21 @@ def _media_score(P: Placer, room: Room, tv: Item, sofa: Item) -> Optional[float]
     return score
 
 
+# TV: a parete (schermo grande) oppure su un mobile basso da terra (più profondo, schermo più piccolo).
+# Mai davanti a una finestra: il controluce e il vetro lo rendono inutilizzabile.
+TV_OPTIONS = ((1.6, 0.25, False), (1.3, 0.45, True))
+
+
+def _place_tv(P: Placer, room: Room, sides) -> Optional[Item]:
+    for along, depth, stand in TV_OPTIONS:
+        tv = P.place_wall(room, "tv", along, depth, sides, gap=0.05, avoid_windows=True, zone_gap=0.2)
+        if tv:
+            if stand:
+                tv.parts = {"stand": 1}
+            return tv
+    return None
+
+
 def _place_media(P: Placer, room: Room) -> bool:
     """Zona TV / divano: si provano tutte le coppie di pareti e misure di divano e si tiene la migliore
     secondo _media_score (luce, porte, distanza di visione, asse), non la prima che entra."""
@@ -1098,10 +1113,12 @@ def _place_media(P: Placer, room: Room) -> bool:
         if span < 3.0:
             continue
         for tv_side, sofa_side in ((pair[0], pair[1]), (pair[1], pair[0])):
-            for avoid in (True, False):
-                tv = P.place_wall(room, "tv", 1.6, 0.25, [tv_side], gap=0.05, avoid_windows=avoid, zone_gap=0.2)
+            for along_tv, depth_tv, stand in TV_OPTIONS:
+                tv = P.place_wall(room, "tv", along_tv, depth_tv, [tv_side], gap=0.05, avoid_windows=True, zone_gap=0.2)
                 if not tv:
                     continue
+                if stand:
+                    tv.parts = {"stand": 1}
                 target = tv.rect.cx if tv_side in "NS" else tv.rect.cy
                 # il divano può dare le spalle a una zona aperta (sul soggiorno con cucina fa da separazione)
                 for allow_open in (False, True):
@@ -1118,6 +1135,8 @@ def _place_media(P: Placer, room: Room) -> bool:
                         P.remove(sofa)
                         if sc is not None:
                             sc += along * 0.6 + (1.5 if typ == "sofa_corner" else 0.0)   # più posti, meglio
+                            if stand:
+                                sc -= 0.8   # a parete è meglio, il mobile TV è la seconda scelta
                             if best is None or sc > best[0] + 1e-9:
                                 best = (sc, tv, sofa)
                         break   # per questa coppia di pareti basta il divano più grande che entra
@@ -1136,8 +1155,7 @@ def _place_media_free(P: Placer, room: Room) -> bool:
     for side in P.sides_far_from_door(room):
         if inn.w < 1.8 and side in "NS" or inn.h < 1.8 and side in "EW":
             continue
-        tv = (P.place_wall(room, "tv", 1.6, 0.25, [side], gap=0.05, avoid_windows=True, zone_gap=0.2) or
-              P.place_wall(room, "tv", 1.6, 0.25, [side], gap=0.05, zone_gap=0.2))
+        tv = _place_tv(P, room, [side])
         if not tv:
             continue
         dx, dy = {"S": (0, 1.9), "N": (0, -1.9), "E": (1.9, 0), "W": (-1.9, 0)}[tv.facing]
@@ -1700,7 +1718,7 @@ def furnish_hotel_room(P: Placer, room: Room):
     # TV on wall facing the bed
     bed_facing = bed.facing  # direction the bed faces (opposite of the wall it's against)
     opp_sides = [bed_facing] + [s for s in "NSEW" if s != bed_facing]
-    P.place_wall(room, "tv", 1.6, 0.25, opp_sides, gap=0.05, zone_gap=0.2)
+    _place_tv(P, room, opp_sides)
 
     # Desk near window
     desk_sides = wins + [s for s in "NSEW" if s not in wins]
@@ -2839,47 +2857,60 @@ def furnish_mezzanine(lay: Layout) -> None:
         out.append(it)
         return it
 
-    if clear >= 0.85:
-        ybed = y0 + 0.55
+    cd, cl = 1.4, 1.5   # bagnetto chiuso: profondità dal muro esterno e lunghezza lungo il muro
+    can_bath = x1 - x0 >= cd + 0.9
+    wide = clear >= 0.85
+    if not wide and x1 - x0 < 1.6 + 0.4:
+        return
+    stop = r.y2 - (MEZZ_STAIR_W + 0.9 if wide else WALL + MEZZ_STAIR_W + 0.05)   # il pianerottolo di arrivo della scala resta libero
+
+    def plan_run(with_bath: bool):
+        """Dal fondo verso la scala: bagnetto, letto con i comodini, armadio staccato dal letto (0,6 m di passaggio).
+        Senza posto per il bagnetto si torna a letto, armadio, scrivania."""
+        y = y0 + (cl + 0.3 if with_bath else 0.0)
+        if wide:
+            ybed = y + 0.5
+            end = ybed + 1.6 + 0.05 + 0.45
+        else:
+            ybed = y
+            end = y + 2.0 + 0.1
+        for gap in (0.6, 0.5, 0.4, 0.25, 0.1):
+            ystart = end + gap
+            wl = next((w for w in (2.4, 1.8, 1.2) if ystart + w <= stop + 1e-6), None)
+            if wl:
+                break
+        return ybed, end, ystart, wl
+
+    bath_first = can_bath and plan_run(True)[3] is not None
+    ybed, end, ystart, wl = plan_run(bath_first)
+    depth = 0.6
+    if wide:
         put("bed", 2.0, 1.6, ybed)
         put("nightstand", 0.4, 0.45, ybed - 0.5)
         put("nightstand", 0.4, 0.45, ybed + 1.6 + 0.05)
-        y = ybed + 1.6 + 0.05 + 0.45 + 0.3
-        stop = r.y2 - MEZZ_STAIR_W - 0.9   # il pianerottolo di arrivo della scala sta in fondo: resta libero
-        depth = 0.6
-    elif x1 - x0 >= 1.6 + 0.4:
+    else:
         # soppalco stretto: letto di testa contro il muro in fondo, si sale dal lato della scala
         bx = x1 - 1.6 if side == "E" else x0
-        bed = Item("bed", Rect(bx, y0, 1.6, 2.0), living.id, 0.05, None, "S")
+        bed = Item("bed", Rect(bx, ybed, 1.6, 2.0), living.id, 0.05, None, "S")
         bed.elev = m["elev"]
         out.append(bed)
-        y = y0 + 2.0 + 0.1
-        stop = r.y2 - WALL - MEZZ_STAIR_W - 0.05   # l'armadio sta lungo il muro, fuori dalla fascia della rampa
-        depth = 0.6
-    else:
-        return
-    # armadio: il più lungo che lascia ancora posto a un sanitario (WC + lavabo, ~1,4 m lungo il muro)
-    wc_len = 1.5
-    wl = next((w for w in (2.4, 1.8, 1.2) if y + w + 0.2 + wc_len <= stop + 1e-6), None)
-    if wl is None:
-        wl = next((w for w in (1.8, 1.2) if y + w <= stop + 1e-6), None)
     if wl:
-        put("wardrobe", depth, wl, y)
-        y += wl + 0.2
-    cd, cl = 1.4, 1.5   # bagnetto chiuso: profondità dal muro esterno e lunghezza lungo il muro
-    if y + cl <= stop + 1e-6 and x1 - x0 >= cd + 0.9:
+        put("wardrobe", depth, wl, ystart)
+        ystart += wl + 0.2
+    if bath_first:
+        # bagnetto chiuso nell'angolo in fondo, lontano dalla scala: tramezzi con il varco della porta scorrevole
+        y = y0
         put("toilet", 0.65, 0.4, y + 0.2)
         put("sink", 0.45, 0.5, y + 0.2 + 0.4 + 0.15)
         cx0 = x1 - cd if side == "E" else x0
         dx = cx0 if side == "E" else cx0 + cd - 0.1    # il muro verso il soppalco (con la porta)
         tk = 0.1
         gap0 = y + (cl - DOOR_W_BATH) / 2
-        m["walls"] = [Rect(cx0, y, cd, tk), Rect(cx0, y + cl - tk, cd, tk),
+        m["walls"] = [Rect(cx0, y + cl - tk, cd, tk),   # il lato in fondo è il muro esterno del loft
                       Rect(dx, y, tk, gap0 - y), Rect(dx, gap0 + DOOR_W_BATH, tk, y + cl - gap0 - DOOR_W_BATH)]
         m["door"] = Rect(dx, gap0, tk, DOOR_W_BATH)
-        y += cl
-    elif y + 1.2 <= stop - 0.6 and clear >= 0.85:
-        desk = put("desk", 0.55, 1.2, y)
+    elif ystart + 1.2 <= stop - 0.6 and wide:
+        desk = put("desk", 0.55, 1.2, ystart)
         ch = Rect(desk.rect.x - 0.52 if side == "E" else desk.rect.x2 + 0.02, desk.rect.cy - 0.25, 0.5, 0.5)
         chair = Item("office_chair", ch, living.id, 0.0, None, OPP[face])
         chair.elev = m["elev"]
