@@ -11,7 +11,7 @@ export function ShapeGlyph({ d }) {
   );
 }
 
-/* Il marchio Planify: la P con il quadratino lime su fondo nero (a 2× per gli schermi nitidi). */
+/* Il logo Planify tondo, com'è nel file del marchio: disco nero con la P, il quadratino lime e la scritta (a 2× per gli schermi nitidi). */
 export function Logo() {
-  return <img src="/planify-mark.png" srcSet="/planify-mark-64.png 1x, /planify-mark.png 2x" alt="Planify" width="32" height="32" style={{ borderRadius: 8 }} />;
+  return <img src="/planify-logo-64.png" srcSet="/planify-logo-64.png 1x, /planify-logo-128.png 2x" alt="Planify" width="40" height="40" style={{ borderRadius: '50%' }} />;
 }
