@@ -88,11 +88,19 @@ test('il modello 3D si esporta in GLB con materiali, arredi e luci', async ({ pa
     page.waitForEvent('download', { timeout: 60_000 }),
     page.locator('button', { hasText: 'GLB Blender' }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/\.glb$/);
+  expect(download.suggestedFilename()).toMatch(/-blender\.zip$/);   // un solo ZIP: modello, script per Cycles e istruzioni
   const file = await download.path();
   const { readFileSync } = await import('node:fs');
-  const buf = readFileSync(file);
-  expect(buf.toString('ascii', 0, 4)).toBe('glTF');
+  const { unzipStore } = await import('../src/lib/zip.js');
+  const files = unzipStore(new Uint8Array(readFileSync(file)));
+  const names = Object.keys(files);
+  expect(names.some((n) => n.endsWith('.glb'))).toBe(true);
+  expect(names.some((n) => n.endsWith('_blender.py'))).toBe(true);
+  expect(names).toContain('LEGGIMI.txt');
+  const py = new TextDecoder().decode(files[names.find((n) => n.endsWith('_blender.py'))]);
+  expect(py).toContain("scene.render.engine = 'CYCLES'");
+  expect(py).toContain('CAM_TRE-QUARTI');
+  const buf = Buffer.from(files[names.find((n) => n.endsWith('.glb'))]);
   const jsonLen = buf.readUInt32LE(12);
   const gltf = JSON.parse(buf.toString('utf8', 20, 20 + jsonLen));
   expect(gltf.meshes.length).toBeGreaterThan(50);
@@ -102,6 +110,10 @@ test('il modello 3D si esporta in GLB con materiali, arredi e luci', async ({ pa
   expect(gltf.nodes.some((n) => n.name === 'SOLE')).toBe(true);
   expect(gltf.extensions?.KHR_lights_punctual?.lights.length).toBeGreaterThan(1);
   expect(gltf.images?.length || 0).toBeGreaterThan(0);   // texture dello stile incorporate
+  expect(gltf.cameras?.length).toBeGreaterThanOrEqual(4);   // le inquadrature del render come camere
+  expect(gltf.nodes.some((n) => /^TETTO/.test(n.name || ''))).toBe(true);   // tetto
+  expect(gltf.nodes.some((n) => /^SOFFITTI/.test(n.name || ''))).toBe(true);   // soffitti
+  expect(gltf.nodes.some((n) => /^IMP_|PLAFONIERA|LAMPADARIO/.test(n.name || ''))).toBe(true);   // corpi illuminanti
 });
 
 test('il pulsante Modifica resta attivo e fisso in cima alla barra, si divide e si unisce un locale', async ({ page }, info) => {
@@ -357,10 +369,11 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   const view = panel.getByLabel('Inquadratura del render');
   await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
   const before = await page.evaluate(() => window.__planify3d.camera.position.toArray());
-  await view.selectOption({ label: 'Interno: Soggiorno' });
+  await view.selectOption({ label: process.env.RVIEW || 'Interno: Soggiorno' });
   const after = await page.evaluate(() => window.__planify3d.camera.position.toArray());
-  expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
+  if (!process.env.RVIEW) expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
   expect(before[1]).toBeGreaterThan(3);
+  if (process.env.RTIME) await panel.getByLabel('Ora del giorno').selectOption({ label: process.env.RTIME });
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 90_000 }),
     panel.getByRole('button', { name: /Salva render/ }).click(),
@@ -371,7 +384,7 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   expect(buf.toString('ascii', 1, 4)).toBe('PNG');
   expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1920, 1080]);
   copyFileSync(file, process.env.RENDEROUT || '/tmp/render-interno.png');
-  expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
+  if (!process.env.RVIEW) expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
   expect(errors).toEqual([]);
 });
 
@@ -415,6 +428,34 @@ test('il loft in 3D ha le viste Completa, Sotto e Sopra e la sezione con piano d
   await page.locator('.pf-3d canvas').screenshot({ path: process.env.SHOT4 || '/tmp/loft-sezione.png' });
   await page.getByRole('button', { name: 'Sezione', exact: true }).click();
   expect((await state()).planes).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('il render in qualità alta usa il path tracing e salva il PNG', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(280_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const panel = page.getByRole('complementary', { name: 'Render' });
+  await panel.getByLabel('Inquadratura del render').selectOption({ label: process.env.RVIEW || 'Interno: Soggiorno' });
+  await panel.getByLabel('Risoluzione del render').selectOption({ label: 'Anteprima 960 × 540' });
+  if (process.env.RTIME) await panel.getByLabel('Ora del giorno').selectOption({ label: process.env.RTIME });
+  await panel.getByLabel('Qualità del render').selectOption({ label: 'Alta, path tracing (minuti)' });
+  await panel.getByLabel('Campioni del path tracing').selectOption({ label: process.env.RSAMPLES || 'Anteprima (16 campioni)' });
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 250_000 }).catch(async (e) => { throw new Error(`${e.message} | pannello: ${(await panel.innerText()).replace(/\s+/g, ' ')}`); }),
+    panel.getByRole('button', { name: /Salva render/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  const buf = readFileSync(file);
+  expect(buf.toString('ascii', 1, 4)).toBe('PNG');
+  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([960, 540]);
+  expect(download.suggestedFilename()).toMatch(/-pt\.png$/);
+  copyFileSync(file, process.env.PTOUT || '/tmp/render-pt.png');
   expect(errors).toEqual([]);
 });
 
