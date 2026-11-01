@@ -5,6 +5,7 @@
  */
 import { frontOf } from './project';
 import { rugsFor } from './rugs';
+import { decorFor } from './decor';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -278,6 +279,40 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   for (const r of rugsFor(plan)) {
     const m = box(r.x, r.y, r.w, r.h, 0.004, 0.012, rugMat);
     if (m) m.userData.layer = 'ARREDI';
+  }
+
+  // tende alle finestre (sempre aperte, raccolte ai lati) e specchi con la luce sopra il lavabo
+  const curtainMat = mat(theme.curtain || '#ebe4d6', { roughness: 1 });
+  const mirrorMat = mat('#dbe8f1', { roughness: 0.04, metalness: 0.85 });
+  const frameMat = mat('#2b3038', { roughness: 0.6 });
+  const mz0 = plan.mezzanine;
+  const underMezz = (x, z) => mz0 && x > mz0.x && x < mz0.x + mz0.w && z > mz0.y && z < mz0.y + mz0.h;
+  /* rettangolo a filo del muro: `a0..a1` lungo il muro (da d.x, d.y verso ux, uy), `o0..o1` verso l'interno */
+  const onWall = (d, a0, a1, o0, o1, y0, h, m) => {
+    const pts = [[d.x + d.ux * a0 + d.nx * o0, d.y + d.uy * a0 + d.ny * o0], [d.x + d.ux * a1 + d.nx * o1, d.y + d.uy * a1 + d.ny * o1]];
+    const x = Math.min(pts[0][0], pts[1][0]);
+    const z = Math.min(pts[0][1], pts[1][1]);
+    const mesh = box(x, z, Math.abs(pts[1][0] - pts[0][0]), Math.abs(pts[1][1] - pts[0][1]), y0, h, m);
+    if (mesh) mesh.userData.layer = 'ARREDI';
+    return mesh;
+  };
+  for (const d of decorFor(plan)) {
+    if (d.kind === 'curtain') {
+      const top = Math.min(2.5, (underMezz(d.x, d.y) ? mz0.elev - mz0.slab : wallH) - 0.12);
+      onWall(d, 0, d.len, 0.02, 0.04, top, 0.025, M.metal);   // bastone
+      const n = Math.max(3, Math.round(d.len / 0.07));
+      for (let i = 0; i < n; i++) {
+        const fold = i % 2 ? 0.075 : 0.035;
+        onWall(d, (d.len * i) / n, (d.len * (i + 1)) / n, 0.03, 0.03 + fold, 0.03, top - 0.05, curtainMat);
+      }
+    } else if (d.kind === 'mirror') {
+      const e = d.elev || 0;
+      const half = d.len / 2;
+      onWall(d, -half - 0.025, half + 0.025, 0.004, 0.024, e + 0.92, 0.86, frameMat);
+      onWall(d, -half, half, 0.024, 0.03, e + 0.945, 0.81, mirrorMat);
+      const bar = onWall(d, -half, half, 0.004, 0.07, e + 1.8, 0.05, M.lamp);   // luce sopra lo specchio
+      if (bar) bar.userData.layer = 'LUCI';
+    }
   }
 
   // sedie attorno ai tavoli (come nel disegno in pianta): seduta, gambe e schienale sul lato esterno

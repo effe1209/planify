@@ -209,7 +209,9 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
       let nz = p.ny || 0;
       let px = p.x;
       let pz = p.y;
-      if (!(nx || nz) && !['light_garden', 'fan', 'box', 'hob', 'hood'].includes(k)) {
+      if (p.elev) {
+        // soppalco: il punto è già sulla faccia del muro, a quota del suo pavimento
+      } else if (!(nx || nz) && !['light_garden', 'fan', 'box', 'hob', 'hood'].includes(k)) {
         // senza normale (luci esterne, campanello, motore): si appoggia al muro più vicino, dalla parte in cui sta
         const hit = snap(p.x, p.y, 0.6);
         if (hit) { px = hit.x; pz = hit.z; nx = hit.nx; nz = hit.nz; }
@@ -308,13 +310,14 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
           });
           cyl(g, 0.12, 0.12, 0.02, white, 0, -0.01, 0, 22);
         }
-        at(g, p.x, WALL_H, p.y, G('lights'));
-        lightsSeen.push({ x: p.x, y: y + WALL_H - 0.5, z: p.y, g: G('lights') });
+        const ceil = p.ceil ?? WALL_H;
+        at(g, p.x, ceil, p.y, G('lights'));
+        lightsSeen.push({ x: p.x, y: y + ceil - 0.5, z: p.y, g: G('lights') });
         continue;
       }
       const g = object(`IMP_${k.toUpperCase()}`, layerOf(k), key);
       const lampLike = k === 'light_wall' || k === 'light_ext' || k === 'light_garden' || k === 'emergency';
-      const baseH = HEIGHT[k] ?? 1.2;
+      const baseH = (HEIGHT[k] ?? 1.2) + (p.elev || 0);
       if (k === 'switch' || k === 'switch_2way' || k === 'switch_inter' || k === 'button' || k === 'bell') {
         box(g, 0.08, 0.08, 0.012, plate, 0, 0, 0.006);
         box(g, 0.025, 0.045, 0.008, k === 'bell' ? mat('bell', '#c9a14a', {}, 'METALLO') : white, 0, 0, 0.014);
