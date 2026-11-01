@@ -28,9 +28,31 @@ function innerBox(plan, r) {
 }
 
 /* Posizione agganciata per un arredo spostato in (x, y): griglia di 5 cm e muri vicini. */
+/* Il soppalco: l'arredo in quota si aggancia ai suoi bordi (muri sui lati chiusi) e resta del locale sotto cui è nato. */
+function mezzBox(plan) {
+  const m = plan.mezzanine;
+  const t = plan.wallThickness / plan.scale;
+  const { width: W, length: L } = plan.dimensions;
+  const edge = (v, max) => v < 1e-3 || Math.abs(v - max) < 1e-3;
+  return {
+    x0: m.x + (edge(m.x, W) ? t : 0.05), y0: m.y + (edge(m.y, L) ? t : 0.05),
+    x1: m.x + m.w - (edge(m.x + m.w, W) ? t : 0.05), y1: m.y + m.h - (edge(m.y + m.h, L) ? t : 0.05),
+  };
+}
+
 export function snapItem(plan, item, x, y) {
   let nx = round(x);
   let ny = round(y);
+  if (item.elev && plan.mezzanine) {
+    const b = mezzBox(plan);
+    nx = Math.max(b.x0, Math.min(b.x1 - item.w, nx));
+    ny = Math.max(b.y0, Math.min(b.y1 - item.h, ny));
+    if (Math.abs(nx - b.x0) < WALL_SNAP) nx = b.x0;
+    else if (Math.abs(nx + item.w - b.x1) < WALL_SNAP) nx = b.x1 - item.w;
+    if (Math.abs(ny - b.y0) < WALL_SNAP) ny = b.y0;
+    else if (Math.abs(ny + item.h - b.y1) < WALL_SNAP) ny = b.y1 - item.h;
+    return { x: +nx.toFixed(3), y: +ny.toFixed(3), room: item.room };
+  }
   const room = roomAtPoint(plan, nx + item.w / 2, ny + item.h / 2);
   if (room && room.kind !== 'garden') {
     const b = innerBox(plan, room);
@@ -58,6 +80,18 @@ const overlap = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 
 export function itemProblems(plan, index, it = plan.furniture[index]) {
   if (!it || GROUND.has(it.type)) return [];
   const out = [];
+  if (it.elev && plan.mezzanine) {
+    const b = mezzBox(plan);
+    const st = plan.mezzanine.stair;
+    if (it.x < b.x0 - 0.02 || it.y < b.y0 - 0.02 || it.x + it.w > b.x1 + 0.02 || it.y + it.h > b.y1 + 0.02) out.push('Esce dal soppalco');
+    const same = plan.furniture.filter((o, i) => i !== index && o.elev && overlap(it, o));
+    if (same.length) out.push(`Si sovrappone a ${same.length === 1 ? 'un altro arredo' : `${same.length} arredi`}`);
+    // l'arrivo della rampa deve restare libero
+    const land = { E: { x: st.x + st.w, y: st.y, w: 0.9, h: st.h }, W: { x: st.x - 0.9, y: st.y, w: 0.9, h: st.h },
+      S: { x: st.x, y: st.y + st.h, w: st.w, h: 0.9 }, N: { x: st.x, y: st.y - 0.9, w: st.w, h: 0.9 } }[st.up || 'E'];
+    if (overlap(it, st) || overlap(it, land)) out.push('Blocca la scala del soppalco');
+    return out;
+  }
   const room = plan.rooms.find((r) => r.id === it.room) || roomAtPoint(plan, it.x + it.w / 2, it.y + it.h / 2);
   if (room && room.kind !== 'garden') {
     const b = innerBox(plan, room);
@@ -65,7 +99,7 @@ export function itemProblems(plan, index, it = plan.furniture[index]) {
       out.push(`Esce da ${room.name || 'il locale'}`);
     }
   }
-  const hits = plan.furniture.filter((o, i) => i !== index && !GROUND.has(o.type) && overlap(it, o));
+  const hits = plan.furniture.filter((o, i) => i !== index && !GROUND.has(o.type) && !o.elev && overlap(it, o));
   if (hits.length) out.push(`Si sovrappone a ${hits.length === 1 ? 'un altro arredo' : `${hits.length} arredi`}`);
   // porte: il vano e la fascia di passaggio (80 cm) da entrambi i lati
   for (const d of plan.doors) {

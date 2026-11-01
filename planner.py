@@ -2802,7 +2802,8 @@ def layout_loft_mezzanine(W: float, L: float, rng: random.Random) -> Layout:
 
 
 def furnish_mezzanine(lay: Layout) -> None:
-    """Zona notte del soppalco: letto contro il muro esterno, comodini, armadio e (se c'è posto) scrivania."""
+    """Zona notte del soppalco: letto contro il muro esterno, armadio e, se resta posto, un piccolo sanitario
+    (WC e lavabo) o la scrivania. Il pianerottolo di arrivo della scala resta libero."""
     m = lay.mezz
     if not m:
         return
@@ -2825,27 +2826,38 @@ def furnish_mezzanine(lay: Layout) -> None:
         out.append(it)
         return it
 
-    if clear < 0.85:
+    if clear >= 0.85:
+        ybed = y0 + 0.55
+        put("bed", 2.0, 1.6, ybed)
+        put("nightstand", 0.4, 0.45, ybed - 0.5)
+        put("nightstand", 0.4, 0.45, ybed + 1.6 + 0.05)
+        y = ybed + 1.6 + 0.05 + 0.45 + 0.3
+        stop = r.y2 - MEZZ_STAIR_W - 0.9   # il pianerottolo di arrivo della scala sta in fondo: resta libero
+        depth = 0.6
+    elif x1 - x0 >= 1.6 + 0.4:
         # soppalco stretto: letto di testa contro il muro in fondo, si sale dal lato della scala
-        bw_bed = 1.6
-        if x1 - x0 >= bw_bed + 0.4:
-            bx = x1 - bw_bed if side == "E" else x0
-            bed = Item("bed", Rect(bx, y0, bw_bed, 2.0), living.id, 0.05, None, "S")
-            bed.elev = m["elev"]
-            lay.items.append(bed)
+        bx = x1 - 1.6 if side == "E" else x0
+        bed = Item("bed", Rect(bx, y0, 1.6, 2.0), living.id, 0.05, None, "S")
+        bed.elev = m["elev"]
+        out.append(bed)
+        y = y0 + 2.0 + 0.1
+        stop = r.y2 - WALL - MEZZ_STAIR_W - 0.05   # l'armadio sta lungo il muro, fuori dalla fascia della rampa
+        depth = 0.6
+    else:
         return
-    ybed = y0 + 0.55
-    put("bed", 2.0, 1.6, ybed)
-    put("nightstand", 0.4, 0.45, ybed - 0.5)
-    put("nightstand", 0.4, 0.45, ybed + 1.6 + 0.05)
-    # il pianerottolo di arrivo della scala sta in fondo, lungo il lato aperto: resta libero
-    y = ybed + 1.6 + 0.05 + 0.45 + 0.3
-    stop = r.y2 - MEZZ_STAIR_W - 0.9
-    if y + 1.8 <= stop:
-        wl = 2.4 if y + 2.4 <= stop else 1.8
-        put("wardrobe", 0.6, wl, y)
-        y += wl + 0.3
-    if y + 1.2 <= stop - 0.6:
+    # armadio: il più lungo che lascia ancora posto a un sanitario (WC + lavabo, ~1,4 m lungo il muro)
+    wc_len = 1.4
+    wl = next((w for w in (2.4, 1.8, 1.2) if y + w + wc_len <= stop + 1e-6), None)
+    if wl is None:
+        wl = next((w for w in (1.8, 1.2) if y + w <= stop + 1e-6), None)
+    if wl:
+        put("wardrobe", depth, wl, y)
+        y += wl + 0.2
+    if y + wc_len <= stop + 1e-6 and x1 - x0 >= 1.5:
+        put("toilet", 0.65, 0.4, y)
+        put("sink", 0.45, 0.5, y + 0.4 + 0.2)
+        y += wc_len
+    elif y + 1.2 <= stop - 0.6 and clear >= 0.85:
         desk = put("desk", 0.55, 1.2, y)
         ch = Rect(desk.rect.x - 0.52 if side == "E" else desk.rect.x2 + 0.02, desk.rect.cy - 0.25, 0.5, 0.5)
         chair = Item("office_chair", ch, living.id, 0.0, None, OPP[face])

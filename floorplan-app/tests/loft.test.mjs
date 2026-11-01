@@ -46,11 +46,18 @@ assert.ok(ids(checkCompliance({ ...loft, mezzanine: { ...mezz, parapet: 0.8 } },
 const g = buildScene(THREE, { ...loft, walls: [{ x: 0, y: 0, w: 12, h: 0.2 }], doors: [], windows: [] }, THEMES.industrial);
 const box = new THREE.Box3().setFromObject(g);
 assert.ok(box.max.y > 4.9, `muri alti ${box.max.y}`);
-const layers = (n) => g.children.filter((c) => c.userData.layer === n);
+const layersOf = (grp, n) => grp.children.filter((c) => c.userData.layer === n);
+const layers = (n) => layersOf(g, n);
 assert.equal(layers('SOLAI').length, 1);
 assert.ok(layers('RINGHIERE').length >= 2, 'parapetto');
 const bedObj = g.children.find((c) => Math.abs(c.position.y - 2.6) < 1e-6 && !c.userData.layer);
 assert.ok(bedObj, 'il letto sta sul soppalco');
 const steps = layers('SCALE');
 assert.ok(steps.length === 15 && Math.max(...steps.map((c) => new THREE.Box3().setFromObject(c).max.y)) <= 2.61, `gradini ${steps.length}`);
+// la ringhiera segue la rampa del soppalco; i tramezzi che toccano il perimetro con un'estremità restano bassi sotto il soppalco
+const rails = layers('RINGHIERE');
+assert.ok(rails.some((c) => Math.abs(c.rotation.z) > 0.1 || Math.abs(c.rotation.x) > 0.1), 'ringhiera inclinata sulla scala');
+const part = buildScene(THREE, { ...loft, walls: [{ x: 8.4, y: 0, w: 0.2, h: 8 }, { x: 8.4, y: 3, w: 3.6, h: 0.2 }], doors: [], windows: [] }, THEMES.industrial);
+const pbox = new THREE.Box3().setFromObject(part);
+assert.ok(layersOf(part, 'MURI').every((c) => new THREE.Box3().setFromObject(c).max.y <= 2.41), 'tramezzi sotto il soppalco bassi');
 console.log('loft ok');

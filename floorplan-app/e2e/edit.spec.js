@@ -332,3 +332,20 @@ test('il loft è una tipologia selezionata, resta tale cambiando misura e ha le 
   await expect(page.locator('.pf-sheet svg text', { hasText: 'Soppalco sopra' }).first()).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('nella vista Sopra si aggiungono arredi al soppalco', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('radiogroup', { name: 'Livello del loft' }).getByRole('radio', { name: 'Sopra' }).click();
+  const panel = page.locator('.pf-customizer');
+  await expect(panel).toContainText('Soppalco');
+  const rows = panel.locator('.pf-furn-row');
+  const before = await rows.count();
+  await panel.locator('.pf-add-furn select').selectOption({ label: 'Comodino' });
+  await panel.getByRole('button', { name: /Aggiungi/ }).click();
+  await expect(rows).toHaveCount(before + 1);
+  expect(errors).toEqual([]);
+});

@@ -14,12 +14,13 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip
   return (
     <section className="pf-sec pf-customizer">
       <div className="pf-customizer-head">
-        <span className="pf-customizer-title"><Sliders size={14} /> Modifica locale</span>
+        <span className="pf-customizer-title"><Sliders size={14} /> {room.mezz ? 'Soppalco' : 'Modifica locale'}</span>
         <button type="button" className="pf-customizer-close" onClick={onClose} title="Chiudi" aria-label="Chiudi">
           <X size={15} />
         </button>
       </div>
 
+      {!room.mezz && (<>
       <label className="pf-field-sm">
         <span>Nome del locale</span>
         <input type="text" className="pf-input-sm" value={room.name} onChange={(e) => onChange({ name: e.target.value })} />
@@ -49,8 +50,10 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip
         </div>
       </div>
 
+      </>)}
+
       <div className="pf-field-sm">
-        <span>Arredi nella stanza ({furniture.length})</span>
+        <span>{room.mezz ? `Arredi del soppalco (${furniture.length})` : `Arredi nella stanza (${furniture.length})`}</span>
         <div className="pf-furn-list">
           {furniture.map(({ item, index }) => (
             <div key={index} className="pf-furn-row">

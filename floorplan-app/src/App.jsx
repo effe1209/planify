@@ -18,7 +18,7 @@ import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
 import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
-import { rotateItem, snapItem } from './lib/furnitureEdit';
+import { itemProblems, rotateItem, snapItem } from './lib/furnitureEdit';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
 import HistoryPanel from './components/HistoryPanel';
@@ -385,10 +385,15 @@ export default function App() {
     };
   }, [plan]);
 
-  const selectedRoom = plan?.rooms.find((r) => r.id === selectedId) || null;
-  const roomFurniture = selectedRoom
-    ? plan.furniture.map((item, index) => ({ item, index })).filter(({ item }) => item.room === selectedRoom.id)
-    : [];
+  // il soppalco si seleziona come un locale (vista «Sopra»): i suoi arredi sono quelli in quota
+  const selectedRoom = selectedId === 'mezz' && plan?.mezzanine
+    ? { id: 'mezz', name: 'Soppalco', kind: 'mezz', ...plan.mezzanine, mezz: true }
+    : plan?.rooms.find((r) => r.id === selectedId) || null;
+  const roomFurniture = selectedRoom?.mezz
+    ? plan.furniture.map((item, index) => ({ item, index })).filter(({ item }) => item.elev)
+    : selectedRoom
+      ? plan.furniture.map((item, index) => ({ item, index })).filter(({ item }) => item.room === selectedRoom.id && !item.elev)
+      : [];
   const totalArea = plan ? plan.rooms.reduce((a, r) => a + (r.area ?? r.w * r.h), 0) : 0;
   const base = requestBase(normalizeBaseUrl(backendUrl));
 
@@ -909,7 +914,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   });
   const addFurniture = (roomId, catalogId) => {
-    const room = plan.rooms.find((r) => r.id === roomId);
+    const onMezz = roomId === 'mezz' && plan.mezzanine;
+    const room = onMezz ? { ...plan.mezzanine, id: plan.rooms.find((r) => r.kind === 'living')?.id ?? plan.rooms[0].id }
+      : plan.rooms.find((r) => r.id === roomId);
     const entry = FURNITURE.find((f) => f.id === catalogId);
     if (!room || !entry) return;
     const offset = (roomFurniture.length * 0.3) % Math.max(0.2, room.w - entry.w);
@@ -921,9 +928,23 @@ export default function App() {
       h: entry.h,
       rot: 0,
       facing: 'S',
-      room: roomId,
+      room: onMezz ? room.id : roomId,
+      ...(onMezz && { elev: plan.mezzanine.elev }),
       ...(entry.parts && { parts: entry.parts }),
     };
+    if (onMezz) {   // dentro il soppalco, nel primo punto libero
+      const spots = [];
+      for (let yy = room.y + 0.1; yy <= room.y + room.h - entry.h; yy += 0.25) for (let xx = room.x + 0.1; xx <= room.x + room.w - entry.w; xx += 0.25) spots.push([xx, yy]);
+      const free = spots.find(([xx, yy]) => {
+        const p = snapItem(plan, { ...item, w: entry.w, h: entry.h }, xx, yy);
+        return itemProblems(plan, -1, { ...item, x: p.x, y: p.y }).length === 0;
+      });
+      const [fx, fy] = free || [room.x + 0.1, room.y + 0.1];
+      const p = snapItem(plan, item, fx, fy);
+      item.x = p.x;
+      item.y = p.y;
+      if (!free) say('Il soppalco è pieno: sposta gli arredi per fargli posto');
+    }
     editFurniture((list) => [...list, item]);
     say(`${entry.label} aggiunto`);
   };
@@ -1926,7 +1947,7 @@ export default function App() {
                 {[['all', 'Completa', 'Loft intero, soppalco sopra il piano sotto'], ['below', 'Sotto', 'Solo il livello a terra'], ['above', 'Sopra', 'Solo il soppalco']].map(([id, label, tip]) => (
                   <button key={id} type="button" role="radio" aria-checked={loftLevel === id} title={tip}
                     className={loftLevel === id ? 'is-on' : ''}
-                    onClick={() => { setLoftLevel(id); setSelectedItem(null); }}>{label}</button>
+                    onClick={() => { setLoftLevel(id); setSelectedItem(null); setSelectedId(id === 'above' ? 'mezz' : null); }}>{label}</button>
                 ))}
               </div>
             )}
@@ -2000,7 +2021,7 @@ export default function App() {
                   onFlip={flipFurniture}
                   onRemoveItem={removeFurniture}
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
-                  onFurnish={engineHas('furnish_plan') && !readOnly ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
+                  onFurnish={engineHas('furnish_plan') && !readOnly && !selectedRoom.mezz ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
                   busy={furnishing}
                   onClose={() => setSelectedId(null)}
                 />
