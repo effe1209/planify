@@ -156,12 +156,14 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     }
   };
 
+  const planDims = plan.dimensions || { width: Math.max(0, ...plan.rooms.map((r) => r.x + r.w)), length: Math.max(0, ...plan.rooms.map((r) => r.y + r.h)) };
   // muri: ogni tratto si divide dove ci sono vani; sotto e sopra le finestre resta il muro
   for (const w of plan.walls) {
     const horiz = w.w >= w.h;
     // sotto il soppalco i muri interni arrivano al suo solaio; quelli esterni salgono a tutta altezza
     const mz = plan.mezzanine;
-    const ext = w.x <= 0.01 || w.y <= 0.01 || w.x + w.w >= plan.dimensions.width - 0.01 || w.y + w.h >= plan.dimensions.length - 0.01;
+    // esterno = il muro sta sul perimetro (un tramezzo che lo tocca con un'estremità resta interno)
+    const ext = horiz ? w.y <= 0.01 || w.y + w.h >= planDims.length - 0.01 : w.x <= 0.01 || w.x + w.w >= planDims.width - 0.01;
     const wh = mz && !ext && !lowWalls && w.x + w.w / 2 >= mz.x - 0.15 && w.x + w.w / 2 <= mz.x + mz.w + 0.15
       && w.y + w.h / 2 >= mz.y - 0.15 && w.y + w.h / 2 <= mz.y + mz.h + 0.15 ? mz.elev - mz.slab : wallH;
     const a0 = horiz ? w.x : w.y;
@@ -331,7 +333,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   const mz = plan.mezzanine;
   const flights = [...(stairs ?? (plan.stairs || []).filter((st) => st.entry)),
     ...(mz ? [{ ...mz.stair, id: 'mezzanine', type: 'straight' }] : [])];
-  if (mz) buildMezzanine(THREE, root, mz, M, K, theme, box);
+  if (mz) buildMezzanine(THREE, root, mz, M, K, theme, box, planDims);
   const stepMat = new THREE.MeshStandardMaterial({ color: theme.wood || '#cdb89a', roughness: 0.7 });
   for (const st of flights) {
     for (const b of stairSteps(st, st.id === 'mezzanine' ? mz.elev : WALL_H + SLAB_T)) {
@@ -350,7 +352,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
 }
 
 /* Soppalco del loft: solaio, parapetto (vetro e corrimano) sui lati aperti con il varco della scala. */
-function buildMezzanine(THREE, root, mz, M, K, theme, box) {
+function buildMezzanine(THREE, root, mz, M, K, theme, box, dims) {
   const e = mz.elev;
   const slab = box(mz.x, mz.y, mz.w, mz.h, e - mz.slab, mz.slab, M.wood);
   if (slab) slab.userData.layer = 'SOLAI';
@@ -359,6 +361,7 @@ function buildMezzanine(THREE, root, mz, M, K, theme, box) {
     for (const m of [box(x, z, w, d, e, mz.parapet, M.glass), box(x, z, w, d, e + mz.parapet - 0.04, 0.04, K.rail)]) if (m) m.userData.layer = 'RINGHIERE';
   };
   const thick = 0.03;
+  buildStairRail(THREE, root, mz, M, K, dims);
   for (const side of mz.open) {
     const vertical = side === 'W' || side === 'E';
     const at = side === 'W' ? mz.x : side === 'E' ? mz.x + mz.w : side === 'N' ? mz.y : mz.y + mz.h;
@@ -373,6 +376,35 @@ function buildMezzanine(THREE, root, mz, M, K, theme, box) {
       if (p1 - p0 < 0.05) continue;
       if (vertical) rail(at - thick / 2, p0, thick, p1 - p0);
       else rail(p0, at - thick / 2, p1 - p0, thick);
+    }
+  }
+}
+
+/* Ringhiera della scala del soppalco: vetro e corrimano inclinati come la rampa, sui lati lunghi che non stanno contro un muro. */
+function buildStairRail(THREE, root, mz, M, K, dims) {
+  const st = mz.stair;
+  const alongX = st.up === 'E' || st.up === 'W';
+  const len = alongX ? st.w : st.h;
+  const sign = st.up === 'E' || st.up === 'S' ? 1 : -1;
+  const ang = Math.atan2(mz.elev, len) * sign;
+  const run = Math.hypot(len, mz.elev);
+  const wall = 0.25;   // spessore del muro esterno + gioco: oltre questo il lato è contro la parete
+  const sides = alongX
+    ? [[st.y, st.y <= wall], [st.y + st.h, st.y + st.h >= dims.length - wall]]
+    : [[st.x, st.x <= wall], [st.x + st.w, st.x + st.w >= dims.width - wall]];
+  const cx = st.x + st.w / 2;
+  const cz = st.y + st.h / 2;
+  for (const [at, wallSide] of sides) {
+    if (wallSide) continue;
+    for (const [m, h, lift] of [[M.glass, mz.parapet, mz.parapet / 2], [K.rail, 0.04, mz.parapet - 0.02]]) {
+      const geo = alongX ? new THREE.BoxGeometry(run, h, 0.03) : new THREE.BoxGeometry(0.03, h, run);
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.position.set(alongX ? cx : at, mz.elev / 2 + lift, alongX ? at : cz);
+      if (alongX) mesh.rotation.z = ang;
+      else mesh.rotation.x = -ang;
+      mesh.castShadow = true;
+      mesh.userData.layer = 'RINGHIERE';
+      root.add(mesh);
     }
   }
 }

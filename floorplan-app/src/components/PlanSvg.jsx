@@ -1321,7 +1321,9 @@ export default function PlanSvg({
         {tech && !thumb && layers.dims && <InnerDims plan={plan} s={s} />}
         {tech && !thumb && codes && <OpeningCodes plan={plan} s={s} codes={codes} />}
 
-        {!thumb && layers.labels && plan.rooms.map((r) => {
+        {!thumb && layers.labels && plan.rooms.filter((r) => !(level === 'above' && plan.mezzanine
+          && r.x + r.w / 2 >= plan.mezzanine.x && r.x + r.w / 2 <= plan.mezzanine.x + plan.mezzanine.w
+          && r.y + r.h / 2 >= plan.mezzanine.y && r.y + r.h / 2 <= plan.mezzanine.y + plan.mezzanine.h)).map((r) => {
           const lb = roomLabel(r, s);
           if (!lb) return null;
           const cx = (r.label ? r.label[0] : r.x + r.w / 2) * s;
@@ -1342,7 +1344,11 @@ export default function PlanSvg({
           );
         })}
 
-        {!thumb && !wallEdit && plan.rooms.map((r) => (
+        {!thumb && !wallEdit && level === 'above' && plan.mezzanine && (
+          <rect className="pf-hit" x={plan.mezzanine.x * s} y={plan.mezzanine.y * s} width={plan.mezzanine.w * s} height={plan.mezzanine.h * s}
+            fill="transparent" style={{ cursor: 'pointer' }} onClick={() => onSelect?.(selectedId === 'mezz' ? null : 'mezz')} />
+        )}
+        {!thumb && !wallEdit && !(level === 'above' && plan.mezzanine) && plan.rooms.map((r) => (
           <RoomShape key={`hit-${r.id}`} className="pf-hit" room={r} s={s}
             fill="transparent" style={{ cursor: 'pointer' }}
             onMouseEnter={() => onHover?.(r.id)} onMouseLeave={() => onHover?.(null)}

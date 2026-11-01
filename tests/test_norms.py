@@ -46,6 +46,9 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
             assert mz["parapet"] >= 1.0 and mz["stair"]["risers"] * 0.2 >= mz["elev"] > mz["stair"]["risers"] * 0.15
             up = [f for f in plan["furniture"] if f.get("elev")]
             assert any(f["type"] == "bed" for f in up) and all(ov(f, mz) for f in up), (w, l, seed)
+            assert any(f["type"] == "wardrobe" for f in up), (w, l, seed)   # zona notte completa: letto e armadio
+            if (f := [x for x in up if x["type"] == "toilet"]):
+                assert any(x["type"] == "sink" for x in up), (w, l, seed)   # il sanitario viene con il lavabo
             assert not [f for f in plan["furniture"] if not f.get("elev") and ov(f, mz["stair"])], (w, l, seed)
             assert not [n for n in plan["notes"] if "non" in n.lower() and "raggiungibile" in n.lower()]
     small = planner.generate(6.5, 5, "loft", num_rooms=1, seed=1)
