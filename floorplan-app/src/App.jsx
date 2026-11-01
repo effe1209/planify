@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import RenderPanel from './components/RenderPanel';
 import {
   AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
+  Camera, Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -1793,6 +1794,10 @@ export default function App() {
               )}
               {view3d && (
                 <>
+                  <button type="button" className={`pf-tool ${view3d.render ? 'is-on' : ''}`} aria-pressed={!!view3d.render}
+                    onClick={() => setView3d({ ...view3d, render: !view3d.render })} title="Render: inquadrature automatiche e libere, ora del giorno, sfondo, fino a 4K">
+                    <Camera size={15} /> <span className="pf-tl">Render</span>
+                  </button>
                   <button type="button" className="pf-tool" onClick={export3dPng} title="Immagine della vista 3D così come la vedi">
                     <ImageIcon size={15} /> <span className="pf-tl">PNG 3D</span>
                   </button>
@@ -1897,8 +1902,14 @@ export default function App() {
               </ErrorBoundary>
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
-                <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
-                  spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
+                <div className="pf-3d-wrap">
+                  <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                    spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
+                  {view3d.render && (
+                    <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
+                      roof={view3d.roof} lowWalls={view3d.low} name={threeName()} onClose={() => setView3d({ ...view3d, render: false })} onDone={say} />
+                  )}
+                </div>
               </ErrorBoundary>
             ) : globalView && current?.floors.length > 1 ? (
               <ErrorBoundary key={`all-${current.id}`}>

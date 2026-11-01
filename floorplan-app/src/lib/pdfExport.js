@@ -542,6 +542,38 @@ export async function exportProjectPdf(project) {
   } catch {
     /* WebGL non disponibile: il PDF esce senza la vista 3D */
   }
+  // le inquadrature automatiche: pianta 3D, fronte e i due interni più significativi (soggiorno/soppalco e camera)
+  try {
+    const { houseImage } = await import('./render3d');
+    const { cameraViews } = await import('./renderStudio');
+    const all = cameraViews(project, { aspect: 16 / 9 });
+    const living = all.find((v) => v.kind === 'inside' && /soppalco|soggiorno|salotto|open/i.test(v.label)) || all.find((v) => v.kind === 'inside');
+    const bedroom = all.find((v) => v.kind === 'inside' && /camera|letto/i.test(v.label) && v !== living);
+    const picks = [all.find((v) => v.id === 'plan3d'), all.find((v) => v.id === 'front'), living, bedroom].filter(Boolean);
+    const shots = [];
+    for (const v of picks) {
+      const img = await houseImage(project, { width: 1280, height: 720, view: v });
+      if (img) shots.push({ v, img });
+    }
+    if (shots.length) {
+      doc.addPage('a4', 'landscape');
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Viste del progetto', M, 16);
+      doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED).text(safe('Inquadrature automatiche: dall\'alto, fronte e dentro i locali a 1,6 m'), M, 22);
+      const cw = (pw - 2 * M - 6) / 2;
+      const chh = (ph - 28 - 16 - 14) / 2;
+      const z = Math.min(cw / 1280, chh / 720);
+      shots.forEach(({ v, img }, i) => {
+        const x = M + (i % 2) * (cw + 6);
+        const y = 27 + Math.floor(i / 2) * (chh + 12);
+        doc.addImage(img.data, 'PNG', x, y, 1280 * z, 720 * z, undefined, 'FAST');
+        doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text(safe(v.label), x, y + 720 * z + 4.5);
+      });
+    }
+  } catch {
+    /* WebGL non disponibile: il PDF esce senza le viste */
+  }
   const { byFloor } = projectStairs(project);
   const house = houseFor(project);
   const electric = project.electric ? planElectric(project, { level: project.electric.level }) : null;

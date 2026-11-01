@@ -138,6 +138,15 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         };
         loop();
         onReady?.({
+          // telecamera della vista: per il render con «vista attuale» e per spostarla sulle inquadrature automatiche
+          camera: () => ({ position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov }),
+          setCamera: (v) => {
+            camera.position.set(...v.position);
+            controls.target.set(...v.target);
+            camera.fov = v.fov;
+            camera.updateProjectionMatrix();
+            controls.update();
+          },
           png: () => {
             renderer.render(scene, camera);
             return renderer.domElement.toDataURL('image/png');

@@ -681,3 +681,18 @@
 .pf-sheets-bar label { display: flex; align-items: center; gap: 8px; }
 .pf-sheets-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, max-content)); gap: 14px; align-items: start; }
 .pf-sheets-grid svg { background: #fff; border-radius: 12px; box-shadow: var(--shadow-md, 0 4px 14px rgba(0,0,0,.12)); max-width: 100%; height: auto; }
+
+/* Pannello Render sopra la vista 3D */
+.pf-3d-wrap { position: relative; }
+.pf-render {
+  position: absolute; top: 12px; right: 12px; z-index: 5; width: 248px; padding: 12px; display: flex; flex-direction: column; gap: 9px;
+  border-radius: 16px; border: 1px solid var(--hairline); background: var(--card); box-shadow: var(--shadow-float); font-size: 12.5px;
+}
+.pf-render header { display: flex; align-items: center; justify-content: space-between; }
+.pf-render header strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.pf-render label { display: flex; flex-direction: column; gap: 3px; }
+.pf-render label > span { font-size: 11px; color: var(--muted, #6b7482); }
+.pf-render select { min-height: 32px; border-radius: 10px; border: 1px solid var(--hairline); background: transparent; color: inherit; padding: 0 8px; font: inherit; }
+.pf-render .pf-tip { margin: 0; font-size: 11px; line-height: 1.35; color: var(--muted, #6b7482); }
+.pf-render .pf-tool { justify-content: center; min-height: 36px; }
+@media (max-width: 720px) { .pf-render { position: static; width: auto; margin: 8px 0 0; } }

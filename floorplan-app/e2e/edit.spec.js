@@ -344,6 +344,37 @@ test('la pianta ha le quote esterne in cm su tre livelli', async ({ page }, info
   expect(errors).toEqual([]);
 });
 
+test('il pannello Render salva un PNG dall\'interno di un locale e porta la telecamera', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const panel = page.getByRole('complementary', { name: 'Render' });
+  await expect(panel).toBeVisible();
+  const view = panel.getByLabel('Inquadratura del render');
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const before = await page.evaluate(() => window.__planify3d.camera.position.toArray());
+  await view.selectOption({ label: 'Interno: Soggiorno' });
+  const after = await page.evaluate(() => window.__planify3d.camera.position.toArray());
+  expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
+  expect(before[1]).toBeGreaterThan(3);
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 90_000 }),
+    panel.getByRole('button', { name: /Salva render/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  const buf = readFileSync(file);
+  expect(buf.toString('ascii', 1, 4)).toBe('PNG');
+  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1920, 1080]);
+  copyFileSync(file, process.env.RENDEROUT || '/tmp/render-interno.png');
+  expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
+  expect(errors).toEqual([]);
+});
+
 test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(150_000);
