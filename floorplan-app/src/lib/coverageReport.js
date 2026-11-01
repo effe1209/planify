@@ -9,7 +9,7 @@ import { jsPDF } from 'jspdf';
 import specs from '../data/ajax-specs.json';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
 import { aimDevice, ASSUMPTIONS, COVER_COLORS, coverFloor, deviceWarnings, doorsFor, sensorCodes } from './coverage';
-import { ACCENT, floorImage, footer, grossArea, INK, LINE, M, MUTED, safe, table } from './pdfExport';
+import { ACCENT, ACCENT_INK, floorImage, footer, grossArea, INK, LINE, M, MUTED, safe, table } from './pdfExport';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 
@@ -57,7 +57,7 @@ function paragraph(doc, y, text, { size = 9.5, color = INK } = {}) {
 function cover(doc, project, floors, devices) {
   const pw = doc.internal.pageSize.getWidth();
   doc.setFillColor(ACCENT).rect(0, 0, pw, 6, 'F');
-  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(ACCENT).text('PLANIFY · RELAZIONE DI COPERTURA', M, 28);
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(ACCENT_INK).text('PLANIFY · RELAZIONE DI COPERTURA', M, 28);
   doc.setFontSize(24).setTextColor(INK);
   doc.text(doc.splitTextToSize(safe(project.name || 'Impianto antintrusione'), pw - 2 * M), M, 42);
   const date = new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });

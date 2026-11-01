@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" width="240" height="64" role="img" aria-label="Planify">
-  <rect width="64" height="64" rx="14.3" fill="#1d1d1f"/>
-  <path d="M27 50H49V26H35V14H15V38" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M15 38A12 12 0 0 1 27 50" fill="none" stroke="#0a84ff" stroke-width="4.2" stroke-linecap="round"/>
-  <text x="80" y="43" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif" font-size="36" font-weight="600" letter-spacing="-0.8" fill="#1d1d1f">Planify</text>
-</svg>

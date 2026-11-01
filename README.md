@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="floorplan-app/public/favicon.svg" alt="Planify Logo" width="120" height="120" />
+  <img src="floorplan-app/public/planify-logo.png" alt="Planify Logo" width="120" height="120" />
 
   <h1>Planify AI 📐</h1>
   

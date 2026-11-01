@@ -381,7 +381,7 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
             const [lx, ly] = moving ? G.labelPoint(poly) : labels.get(s.id);
             return (
               <g key={s.id} opacity={moving ? 0.85 : 1}>
-                <path d={toPx(poly)} fill={roomColor(s.kind)} stroke={on ? '#0b3bb8' : '#1f4fd8'}
+                <path d={toPx(poly)} fill={roomColor(s.kind)} stroke={on ? '#344a00' : '#58760a'}
                   strokeWidth={on ? 3 : 2} strokeLinejoin="round" />
                 <text x={lx * PX} y={ly * PX - 2} className="pf-sketch-label">{s.name}</text>
                 <text x={lx * PX} y={ly * PX + 13} className="pf-sketch-area">{fmt(G.polygonArea(poly))} m²</text>

@@ -220,7 +220,7 @@ test('anche i muri esterni si spostano e cambiano la misura della casa', async (
   const before = await dims();
   const walls = page.locator('.pf-sheet svg rect[style*="col-resize"]');
   await expect(walls.first()).toBeVisible();
-  // i muri esterni a destra: dalla fascia blu più a destra verso sinistra, finché uno cambia la misura della casa
+  // i muri esterni a destra: dalla fascia verde più a destra verso sinistra, finché uno cambia la misura della casa
   const boxes = [];
   for (const w of await walls.all()) boxes.push(await w.boundingBox());
   boxes.sort((p, q) => q.x - p.x);
@@ -318,7 +318,7 @@ test('un muro si traccia trascinando nel locale e resta selezionato per tirarlo'
   await page.mouse.up();
   await expect.poll(count).toBe(before + 1);
   // il muro nuovo è selezionato (contorno pieno) e si tira col mouse
-  await expect(page.locator('.pf-sheet svg rect[style*="col-resize"][stroke="#1f4fd8"]').first()).toBeVisible();
+  await expect(page.locator('.pf-sheet svg rect[style*="col-resize"][stroke="#58760a"]').first()).toBeVisible();
   await page.keyboard.press('Control+z');
   await expect.poll(count).toBe(before);
   expect(errors).toEqual([]);
