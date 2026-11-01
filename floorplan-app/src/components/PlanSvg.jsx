@@ -1017,7 +1017,7 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
         return (
           <g key={d.id} transform={`translate(${d.x * s},${d.y * s})`}>
             <title>{`${AJAX_MODELS[d.model]?.name || d.model} — ${d.purpose}`}</title>
-            {sel && <circle r={r + 3.5} fill="none" stroke="#1f4fd8" strokeWidth="1.6" strokeDasharray="3 2" />}
+            {sel && <circle r={r + 3.5} fill="none" stroke="#58760a" strokeWidth="1.6" strokeDasharray="3 2" />}
             <circle r={r} fill={st.color} stroke="#fff" strokeWidth="1.6"
               style={editable ? { cursor: drag?.id === d.id ? 'grabbing' : 'grab' } : undefined}
               onPointerDown={(e) => start(e, d, 'move')} onPointerMove={(e) => move(e, d)} onPointerUp={end}
@@ -1027,7 +1027,7 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
               <text y={r + 9} fontSize="8" fill={INK} stroke="#fff" strokeWidth="2.6" paintOrder="stroke" pointerEvents="none">{codes[d.id]}</text>
             )}
             {sel && editable && aimed && (
-              <circle cx={hx} cy={hy} r="5" fill="#fff" stroke="#1f4fd8" strokeWidth="1.8" style={{ cursor: 'crosshair' }}
+              <circle cx={hx} cy={hy} r="5" fill="#fff" stroke="#58760a" strokeWidth="1.8" style={{ cursor: 'crosshair' }}
                 onPointerDown={(e) => start(e, d, 'rotate')} onPointerMove={(e) => move(e, d)} onPointerUp={end}
                 onClick={(e) => e.stopPropagation()}>
                 <title>Trascina per ruotare il sensore</title>
@@ -1176,8 +1176,8 @@ export default function PlanSvg({
           const on = r.id === hoverId || r.id === selectedId;
           return on ? (
             <RoomShape key={`hl-${r.id}`} className="pf-hl" room={r} s={s}
-              fill="#1f4fd8" fillOpacity={r.id === selectedId ? 0.16 : 0.08}
-              stroke={r.id === selectedId ? '#1f4fd8' : 'none'} strokeWidth={r.id === selectedId ? 2 : 0} pointerEvents="none" />
+              fill="#58760a" fillOpacity={r.id === selectedId ? 0.16 : 0.08}
+              stroke={r.id === selectedId ? '#58760a' : 'none'} strokeWidth={r.id === selectedId ? 2 : 0} pointerEvents="none" />
           ) : null;
         })}
 
@@ -1257,7 +1257,7 @@ export default function PlanSvg({
             {stairs.map((st) => (st.engine ? <EngineStair key={st.id} st={st} s={s} /> : <Stair key={st.id} st={st} s={s} />))}
             {!thumb && layers.labels && stairs.flatMap((st) => stairLabels(st).map((txt, i, all) => (
               <text key={`stl-${st.id}-${i}`} x={(st.x + st.w / 2) * s} y={(st.y + st.h / 2) * s + 3 + (i - (all.length - 1) / 2) * 11}
-                textAnchor="middle" fontSize="9" fontWeight="700" fontFamily={FONT} fill="#1f4fd8"
+                textAnchor="middle" fontSize="9" fontWeight="700" fontFamily={FONT} fill="#58760a"
                 stroke="#fff" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">
                 {txt}
               </text>
@@ -1353,7 +1353,7 @@ export default function PlanSvg({
           return (
             <g key={`lb-${r.id}`} pointerEvents="none" fontFamily={FONT} textAnchor="middle">
               {lb.name && (
-                <text x={cx} y={cy - 3} fontSize={lb.fs} fontWeight="600" fill={sel ? '#1f4fd8' : '#3d4654'} {...halo}>
+                <text x={cx} y={cy - 3} fontSize={lb.fs} fontWeight="600" fill={sel ? '#58760a' : '#3d4654'} {...halo}>
                   {lb.name}
                 </text>
               )}
@@ -1384,7 +1384,7 @@ export default function PlanSvg({
           const bad = sel && itemProblems(plan, i, it).length > 0;
           return (
             <rect key={`ih-${i}`} x={it.x * s} y={it.y * s} width={it.w * s} height={it.h * s} rx={2}
-              fill="transparent" stroke={sel ? (bad ? '#d92d20' : '#1f4fd8') : 'none'} strokeWidth="1.6"
+              fill="transparent" stroke={sel ? (bad ? '#d92d20' : '#58760a') : 'none'} strokeWidth="1.6"
               strokeDasharray={sel ? '4 3' : undefined} style={{ cursor: drag?.index === i ? 'grabbing' : 'grab' }}
               onPointerDown={(e) => {
                 e.stopPropagation();
@@ -1422,7 +1422,7 @@ export default function PlanSvg({
             return side === 'W' ? b.x + b.w - q : side === 'E' ? q - b.x : side === 'N' ? b.y + b.h - q : q - b.y;
           };
           return (
-            <rect {...rect} fill="#1f4fd8" fillOpacity={mezzDrag ? 0.35 : 0.14} stroke="#1f4fd8" strokeWidth="1.4"
+            <rect {...rect} fill="#58760a" fillOpacity={mezzDrag ? 0.35 : 0.14} stroke="#58760a" strokeWidth="1.4"
               style={{ cursor: vertical ? 'col-resize' : 'row-resize', touchAction: 'none' }}
               onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setMezzDrag({ base: planProp, size: null }); }}
               onPointerMove={(e) => {

@@ -48,7 +48,7 @@ export default function EditPlanPanel({
   return (
     <section className="pf-sec pf-editplan">
       <h2>Modifica pianta</h2>
-      {idle && <p className="pf-tip">Trascina un muro (in blu) per cambiare la misura dei locali, anche quelli esterni. Un clic lo seleziona. Annulla con Ctrl/Cmd+Z.</p>}
+      {idle && <p className="pf-tip">Trascina un muro (in verde) per cambiare la misura dei locali, anche quelli esterni. Un clic lo seleziona. Annulla con Ctrl/Cmd+Z.</p>}
       {warning && <p className="pf-warn" role="alert">{warning}</p>}
 
       {selectedWall && (

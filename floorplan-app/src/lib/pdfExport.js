@@ -29,7 +29,8 @@ import { fmt, fmtM } from './utils';
 export const INK = '#14181f';
 export const MUTED = '#6b7482';
 export const LINE = '#d5dae1';
-export const ACCENT = '#0071e3';
+export const ACCENT = '#d1f462';   // lime del marchio: riempimenti (barre); il testo sopra o accanto usa ACCENT_INK, che si legge su carta
+export const ACCENT_INK = '#4d6600';
 export const M = 16;   // margine pagina, mm
 const LAYERS = { furniture: true, labels: true, dims: true, grid: false, alarm: true };
 
@@ -165,7 +166,7 @@ export function tagBadge(doc, x, y, model) {
 function cover(doc, project, devices, bom) {
   const pw = doc.internal.pageSize.getWidth();
   doc.setFillColor(ACCENT).rect(0, 0, pw, 6, 'F');
-  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(ACCENT);
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(ACCENT_INK);
   doc.text('PLANIFY · PROGETTO', M, 28);
   doc.setFontSize(26).setTextColor(INK);
   doc.text(doc.splitTextToSize(safe(project.name || 'Progetto planimetria'), pw - 2 * M), M, 42);

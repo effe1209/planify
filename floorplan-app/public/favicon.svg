@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <style>.bg{fill:#1d1d1f}.plan{stroke:#fff}.door{stroke:#0a84ff}@media (prefers-color-scheme: dark){.bg{fill:#2c2c2e}}</style>
-  <rect class="bg" width="64" height="64" rx="14.3"/>
-  <!-- versione piccola: tratti più spessi, per restare leggibile a 16 px -->
-  <path class="plan" d="M28 51H50V25H36V13H14V37" fill="none" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path class="door" d="M14 37A14 14 0 0 1 28 51" fill="none" stroke-width="6" stroke-linecap="round"/>
-</svg>

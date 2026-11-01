@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { WALL, addOpening, moveOpening, movePartition, moveRoom, openingLine, partition, roomSlide, snap, stairRoom, wallRuns } from '../lib/walls';
 
-const BLUE = '#1f4fd8';
+const BLUE = '#58760a';   // selezione e maniglie: il verde del marchio, scuro per leggersi sul foglio bianco
 const GREEN = '#16a34a';
 const PAD = 7;   // px attorno al muro per afferrarlo con il dito
 

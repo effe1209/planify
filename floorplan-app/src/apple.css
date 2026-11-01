@@ -37,8 +37,11 @@
   --bg-panel: #2c2c2e;
   --text: #f5f5f7;
   --text-muted: #98989d;
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
+  --accent: #d1f462;          /* sul tema scuro il lime si legge bene anche come testo e linea */
+  --accent-hover: #dffa86;
+  --accent-ink: #172100;
+  --accent-text: #d1f462;
+  --accent-line: #d1f462;
   --border: var(--hairline);
 }
 
@@ -132,7 +135,7 @@
   color: var(--text);
 }
 .pf-top .pf-mini:hover, .pf-top .pf-icon-btn:hover { background: var(--fill); }
-.pf-top .pf-mini.is-accent { color: var(--accent); }
+.pf-top .pf-mini.is-accent { color: var(--accent-text); }
 .pf-top .pf-icon-btn { padding: 0; }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -220,11 +223,11 @@
 }
 
 /* elementi interni più morbidi */
-.pf-customizer { border-radius: 18px; padding: 16px; background: var(--card); box-shadow: 0 0 0 1px var(--accent), var(--shadow-float); border: none; }
+.pf-customizer { border-radius: 18px; padding: 16px; background: var(--card); box-shadow: 0 0 0 1px var(--accent-line), var(--shadow-float); border: none; }
 .pf-seedrow, .pf-details, .pf-type-card, .pf-style-card, .pf-shape, .pf-thumb { border-radius: var(--radius-md); }
 .pf-input input, .pf-plain, .pf-input-sm, .pf-add-furn select { border-radius: var(--radius-sm); background: var(--fill); border-color: transparent; }
 .pf-input input:focus, .pf-plain:focus, .pf-input-sm:focus, .pf-add-furn select:focus {
-  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .pf-chip { border-radius: 999px; background: var(--fill); border-color: transparent; padding: 6px 12px; }
 .pf-chip:hover { background: var(--fill-strong); }
@@ -326,7 +329,7 @@
   display: inline-block; min-width: 22px; padding: 1px 5px; margin-right: 6px; border-radius: 6px;
   background: var(--fill); font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-align: center;
 }
-.pf-floor.is-on .pf-floor-tab em { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.pf-floor.is-on .pf-floor-tab em { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
 .pf-floor-input { min-height: 32px; border-radius: 8px; }
 .pf-floor-actions { gap: 0; padding-right: 3px; }
 .pf-floor-actions .pf-btn-icon { min-width: 28px; min-height: 28px; }
@@ -380,7 +383,7 @@
 /* card interne della sidebar */
 .pf-thumb { border-radius: 16px; border-color: var(--hairline); background: var(--fill); transition: transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out); }
 .pf-thumb:hover { border-color: var(--hairline); box-shadow: var(--shadow-float); }
-.pf-thumb.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pf-thumb.is-on { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
 .pf-thumb svg { border-radius: 10px; }
 .pf-thumb-actions .pf-btn-icon { border-radius: 999px; background: var(--glass-strong); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 .pf-thumb-actions { transition: opacity 240ms var(--ease-out); }
@@ -403,7 +406,7 @@
 .pf-sketch-panel {
   border-radius: 20px; padding: 14px; border: none; background: var(--glass-strong);
   -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow-float); transform-origin: top right;
+  box-shadow: 0 0 0 1px var(--accent-line), var(--shadow-float); transform-origin: top right;
 }
 .pf-sketch-foot { background: var(--glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-top-color: var(--hairline); }
 
@@ -427,7 +430,7 @@
 }
 
 /* Casa su più piani */
-.pf-chip.is-on { background: var(--accent, #1f4fd8); color: #fff; }
+.pf-chip.is-on { background: var(--accent); color: var(--accent-ink); }
 .pf-house-floor { margin-top: 8px; }
 .pf-realign { margin-top: 10px; width: 100%; justify-content: center; gap: 6px; }
 
@@ -494,7 +497,7 @@
 .pf-thumb-btn svg { width: 15px; height: 15px; stroke-width: 2; }
 .pf-thumb-btn:hover { background: #fff; transform: scale(1.08); }
 .pf-thumb-btn:active { transform: scale(0.94); }
-.pf-thumb-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pf-thumb-btn:focus-visible { outline: 3px solid var(--accent-line); outline-offset: 2px; }
 /* salvata: stella piena su giallo, icona scura (12:1) */
 .pf-thumb-btn.is-star:not(.is-on):hover svg { fill: #ffcc00; stroke: #1d1d1f; }
 .pf-thumb-btn.is-star.is-on { color: #1d1d1f; background: #ffcc00; border-color: rgba(0, 0, 0, 0.18); box-shadow: 0 2px 10px rgba(255, 204, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.18); }
@@ -611,7 +614,7 @@
 /* import: messaggio di avanzamento e area di rilascio file */
 .pf-drop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; pointer-events: none;
   background: color-mix(in srgb, var(--bg, #fff) 55%, transparent); backdrop-filter: blur(6px); }
-.pf-drop > div { padding: 18px 28px; border-radius: 20px; background: var(--card, #fff); border: 1.5px dashed var(--accent, #0a84ff);
+.pf-drop > div { padding: 18px 28px; border-radius: 20px; background: var(--card, #fff); border: 1.5px dashed var(--accent-line);
   font-weight: 600; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }
 
 /* conformità: voci non conformi in rosso, collegamenti ai locali */
@@ -699,4 +702,8 @@
 .pf-cutbar { display: inline-flex; align-items: center; gap: 6px; }
 .pf-cutbar input[type="range"] { width: 110px; }
 .pf-render-bar { height: 6px; border-radius: 4px; background: var(--hairline); overflow: hidden; }
-.pf-render-bar i { display: block; height: 100%; background: var(--accent, #0071e3); transition: width .2s; }
+.pf-render-bar i { display: block; height: 100%; background: var(--accent-line); transition: width .2s; }
+
+/* I riempimenti lime su pannello bianco hanno poco stacco (1,25 : 1): un filo scuro ne definisce il bordo */
+.pf-primary, .pf-btn-add, .pf-chip.is-on, .pf-furnish .pf-chip.is-on, .pf-editbtn.is-on { outline: 1px solid rgba(23, 33, 0, 0.22); outline-offset: -1px; }
+.pf-app[data-theme="dark"] :is(.pf-primary, .pf-btn-add, .pf-chip.is-on, .pf-furnish .pf-chip.is-on, .pf-editbtn.is-on) { outline: none; }
