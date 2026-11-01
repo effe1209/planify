@@ -56,6 +56,7 @@ import { usePlanHistory } from './hooks/usePlanHistory';
 import { useEngine } from './hooks/useEngine';
 import { sketchToPlan } from './lib/sketchToPlan';
 import { buildDxf, parseDxfClientSide } from './lib/dxf';
+import { elevation, levelMarks, section } from './lib/elevation';
 import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
@@ -1443,8 +1444,23 @@ export default function App() {
       : {};
     const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const name = [slug(current.name) || 'planimetria', current.floors.length > 1 ? slug(floor.name) : ''].filter(Boolean).join('-');
-    saveBlob(new Blob([buildDxf(plan, opts)], { type: 'application/dxf' }), `${name}.dxf`);
-    say(devs.length ? 'File CAD esportato con sensori e copertura' : 'File CAD esportato');
+    // prospetti N/S/E/O e due sezioni del progetto, sotto la pianta, ognuno sui suoi layer (nel loft il taglio passa per la scala)
+    let views = null;
+    try {
+      const dims = plan.dimensions;
+      const st = plan.mezzanine?.stair;
+      const cutY = st && (st.up === 'E' || st.up === 'W') ? st.y + st.h / 2 : dims.length / 2;
+      const cutX = st && !(st.up === 'E' || st.up === 'W') ? st.x + st.w / 2 : dims.width / 2;
+      const drawings = [
+        ...['down', 'up', 'right', 'left'].map((sd) => elevation(current, sd, { north: current?.north ?? 0, roof: { ...ROOF_DEFAULTS } })),
+        section(current, 'x', cutY), section(current, 'y', cutX),
+      ].filter((v) => v.shapes.length);
+      if (drawings.length) views = { drawings, marks: levelMarks(current) };
+    } catch {
+      views = null;   // il DXF della pianta esce comunque
+    }
+    saveBlob(new Blob([buildDxf(plan, { ...opts, views })], { type: 'application/dxf' }), `${name}.dxf`);
+    say(devs.length ? 'File CAD esportato con sensori, copertura, prospetti e sezioni' : 'File CAD esportato con prospetti e sezioni');
   };
 
   const copy = async (text, msg) => {

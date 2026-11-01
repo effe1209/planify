@@ -6,6 +6,7 @@ import { FURNITURE_LABEL, ROOM_KIND_NAME } from '../constants.js';
 import * as G from './geometry.js';
 import { snapPolygon } from './sketchShapes.js';
 import { dimensionChains, tierIndex } from './dimensions.js';
+import { VIEW_LAYERS, drawViews, layoutViews } from './dxfViews.js';
 import { sketchToPlan } from './sketchToPlan.js';
 import { AJAX_MODELS, DEVICE_STYLE } from './ajax.js';
 import { aimDevice, CELL_STATE, reachAt, sensorModel } from './coverage.js';
@@ -180,24 +181,27 @@ const BLOCK_ATTRS = [['CODICE', 'Codice', false], ['MODELLO', 'Modello Ajax', tr
  * opts.devices: dispositivi Ajax del piano → blocchi AJAX_<sigla> con attributi (codice, modello, locale, altezza,
  * direzione), campo nominale dei rilevatori e, con opts.coverage (coverFloor), zone coperte / parziali / cieche.
  */
-export function buildDxf(plan, { devices = [], codes = {}, coverage = null } = {}) {
+export function buildDxf(plan, { devices = [], codes = {}, coverage = null, views = null } = {}) {
   const W = plan.dimensions.width;
   const L = plan.dimensions.length;
   const t = plan.wallThickness / plan.scale;
   const d = writer(L);
   const { put } = d;
+  // prospetti e sezioni (opts.views = { drawings, marks }): sotto la pianta, ognuno sui suoi layer
+  const lay = views?.drawings?.length ? layoutViews(views.drawings, L) : null;
+  const layers = lay ? [...DXF_LAYERS, ...VIEW_LAYERS] : DXF_LAYERS;
 
   // intestazione, tabelle, blocchi
   put(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 6,
-    9, '$EXTMIN', 10, -3, 20, -3, 30, 0, 9, '$EXTMAX', 10, n3(W + 3), 20, n3(L + 3), 30, 0, 0, 'ENDSEC');
+    9, '$EXTMIN', 10, -3, 20, n3(lay ? L - lay.bottom - 3 : -3), 30, 0, 9, '$EXTMAX', 10, n3(Math.max(W, lay?.maxX || 0) + 3), 20, n3(L + 3), 30, 0, 0, 'ENDSEC');
   put(0, 'SECTION', 2, 'TABLES');
   put(0, 'TABLE', 2, 'LTYPE', 70, 2);
   put(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Continua', 72, 65, 73, 0, 40, 0);
   put(0, 'LTYPE', 2, 'DASHED', 70, 0, 3, 'Tratteggiata __ __', 72, 65, 73, 2, 40, 0.3, 49, 0.2, 49, -0.1);
   put(0, 'ENDTAB');
-  put(0, 'TABLE', 2, 'LAYER', 70, DXF_LAYERS.length + 1);
+  put(0, 'TABLE', 2, 'LAYER', 70, layers.length + 1);
   put(0, 'LAYER', 2, '0', 70, 0, 62, 7, 6, 'CONTINUOUS');
-  for (const [name, color, lt] of DXF_LAYERS) put(0, 'LAYER', 2, name, 70, 0, 62, color, 6, lt);
+  for (const [name, color, lt] of layers) put(0, 'LAYER', 2, name, 70, 0, 62, color, 6, lt);
   put(0, 'ENDTAB');
   put(0, 'TABLE', 2, 'STYLE', 70, 1, 0, 'STYLE', 2, 'STANDARD', 70, 0, 40, 0, 41, 1, 50, 0, 71, 0, 42, 0.25, 3, 'txt', 4, '', 0, 'ENDTAB');
   put(0, 'ENDSEC');
@@ -301,6 +305,8 @@ export function buildDxf(plan, { devices = [], codes = {}, coverage = null } = {
     tick([-0.8, L]);
     d.text('QUOTE', [-1.25, L / 2], 0.2, `${L.toFixed(2).replace('.', ',')} m`);
   }
+
+  if (lay) drawViews(d, lay.placed, views.marks);
 
   // copertura calcolata: righe di celle uguali unite in rettangoli pieni
   if (coverage) {

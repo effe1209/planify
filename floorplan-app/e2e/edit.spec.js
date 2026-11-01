@@ -436,6 +436,31 @@ test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page 
   expect(errors).toEqual([]);
 });
 
+test('il DXF esportato ha pianta, quote, prospetti e sezioni sui loro layer', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Esporta/ }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30_000 }),
+    page.getByRole('menuitem', { name: /DXF \(CAD\)/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  const dxf = readFileSync(file, 'utf8');
+  copyFileSync(file, process.env.DXFOUT || '/tmp/loft-test.dxf');
+  for (const l of ['MURI', 'QUOTE', 'PROSPETTI_MURI', 'PROSPETTI_TETTO', 'SEZIONI_SOLAI', 'SEZIONI_SCALE', 'SEZIONI_PARAPETTI', 'SEZIONI_QUOTE']) {
+    expect(dxf, `layer ${l}`).toContain(`\n8\n${l}\n`);
+  }
+  expect(dxf).toContain('Sezione longitudinale');
+  expect(dxf).not.toContain('FUORI NORMA');   // il loft generato è a norma
+  expect(errors).toEqual([]);
+});
+
 test('il PDF del loft ha prospetti e sezioni con il soppalco', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(150_000);
