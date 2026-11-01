@@ -88,11 +88,19 @@ test('il modello 3D si esporta in GLB con materiali, arredi e luci', async ({ pa
     page.waitForEvent('download', { timeout: 60_000 }),
     page.locator('button', { hasText: 'GLB Blender' }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/\.glb$/);
+  expect(download.suggestedFilename()).toMatch(/-blender\.zip$/);   // un solo ZIP: modello, script per Cycles e istruzioni
   const file = await download.path();
   const { readFileSync } = await import('node:fs');
-  const buf = readFileSync(file);
-  expect(buf.toString('ascii', 0, 4)).toBe('glTF');
+  const { unzipStore } = await import('../src/lib/zip.js');
+  const files = unzipStore(new Uint8Array(readFileSync(file)));
+  const names = Object.keys(files);
+  expect(names.some((n) => n.endsWith('.glb'))).toBe(true);
+  expect(names.some((n) => n.endsWith('_blender.py'))).toBe(true);
+  expect(names).toContain('LEGGIMI.txt');
+  const py = new TextDecoder().decode(files[names.find((n) => n.endsWith('_blender.py'))]);
+  expect(py).toContain("scene.render.engine = 'CYCLES'");
+  expect(py).toContain('CAM_TRE-QUARTI');
+  const buf = Buffer.from(files[names.find((n) => n.endsWith('.glb'))]);
   const jsonLen = buf.readUInt32LE(12);
   const gltf = JSON.parse(buf.toString('utf8', 20, 20 + jsonLen));
   expect(gltf.meshes.length).toBeGreaterThan(50);
@@ -102,6 +110,10 @@ test('il modello 3D si esporta in GLB con materiali, arredi e luci', async ({ pa
   expect(gltf.nodes.some((n) => n.name === 'SOLE')).toBe(true);
   expect(gltf.extensions?.KHR_lights_punctual?.lights.length).toBeGreaterThan(1);
   expect(gltf.images?.length || 0).toBeGreaterThan(0);   // texture dello stile incorporate
+  expect(gltf.cameras?.length).toBeGreaterThanOrEqual(4);   // le inquadrature del render come camere
+  expect(gltf.nodes.some((n) => /^TETTO/.test(n.name || ''))).toBe(true);   // tetto
+  expect(gltf.nodes.some((n) => /^SOFFITTI/.test(n.name || ''))).toBe(true);   // soffitti
+  expect(gltf.nodes.some((n) => /^IMP_|PLAFONIERA|LAMPADARIO/.test(n.name || ''))).toBe(true);   // corpi illuminanti
 });
 
 test('il pulsante Modifica resta attivo e fisso in cima alla barra, si divide e si unisce un locale', async ({ page }, info) => {

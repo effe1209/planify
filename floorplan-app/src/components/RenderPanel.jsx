@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Camera, Loader2, X } from 'lucide-react';
+import { Camera, Download, Loader2, X } from 'lucide-react';
 import { BACKGROUNDS, SIZES, TIMES, cameraViews, shiftView } from '../lib/renderStudio';
 import { FLOOR_H } from '../lib/scene3d';
 import { saveBlob } from '../lib/utils';
@@ -27,6 +27,21 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
   const listed = views.filter((v) => whole || v.kind === 'outside' || v.level === level);
   const find = (id) => views.find((v) => v.id === id);
 
+  const toBlender = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { blenderPackage } = await import('../lib/blenderExport');
+      const px = SIZES.find((s2) => s2.id === size) || SIZES[1];
+      const res = await blenderPackage(project, { time, name, size: [px.w, px.h], samples: SAMPLE_PRESETS.find((p) => p.id === samples)?.samples });
+      saveBlob(new Blob([res.zip], { type: 'application/zip' }), `${name}-blender.zip`);
+      onDone?.(`Blender: ${res.meshes.toLocaleString('it-IT')} oggetti, ${res.lights} luci, ${res.cameras} camere in un solo ZIP`);
+    } catch (e) {
+      setError(`Esportazione per Blender non riuscita: ${e.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   const go = (id) => {
     setViewId(id);
     const v = find(id);
@@ -122,6 +137,10 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
       )}
       <button type="button" className="pf-tool pf-tool-accent" onClick={save} disabled={busy}>
         {busy ? <><Loader2 size={14} className="pf-spin" /> {quality === 'high' ? `Path tracing ${Math.round(progress * 100)}%` : 'Render in corso…'}</> : <><Camera size={14} /> Salva render PNG</>}
+      </button>
+      <button type="button" className="pf-tool" onClick={toBlender} disabled={busy}
+        title="ZIP con il modello (tetto, luci, allarme, camere), lo script che prepara Cycles all'ora scelta e le istruzioni">
+        <Download size={14} /> Esporta per Blender (ZIP)
       </button>
       {busy && quality === 'high' && <button type="button" className="pf-tool" onClick={() => abort.current?.abort()}>Interrompi</button>}
     </aside>

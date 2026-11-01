@@ -1425,9 +1425,11 @@ export default function App() {
     if (!three.current?.glb || exportingGlb) return;
     setExportingGlb(true);
     try {
-      const res = await three.current.glb({ electric: electricPlan || planElectric(current, { level: 2 }) });
-      saveBlob(new Blob([res.buffer], { type: 'model/gltf-binary' }), `${threeName()}.glb`);
-      say(`Modello per Blender esportato: ${res.meshes.toLocaleString('it-IT')} oggetti, ${res.lights} luci`);
+      // un solo ZIP con modello (tetto, luci, allarme, camere), script per Cycles e istruzioni (di serie il pomeriggio; il pannello Render lo fa all'ora scelta)
+      const { blenderPackage } = await import('./lib/blenderExport');
+      const res = await blenderPackage(current, { name: threeName().replace(/-3d.*$/, '') || 'planimetria' });
+      saveBlob(new Blob([res.zip], { type: 'application/zip' }), `${res.name}-blender.zip`);
+      say(`Blender: ${res.meshes.toLocaleString('it-IT')} oggetti, ${res.lights} luci, ${res.cameras} camere (ZIP con script per Cycles)`);
     } catch (err) {
       setError(`Esportazione GLB non riuscita: ${err.message}`);
     } finally {
