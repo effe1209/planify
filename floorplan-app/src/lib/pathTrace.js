@@ -234,11 +234,20 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
   const { canvasStats } = await import('./render3d');
   const notes = [];
+  let guided = null;
+  try {
+    const { guidedDenoiser } = await import('./ptDenoise');
+    guided = guidedDenoiser(THREE, renderer, { scene, camera, width, height, colorTexture: pt.target.texture });
+  } catch (e) {
+    notes.push(`filtro guidato non disponibile (${e.message})`);
+  }
   const draw = async (exp, filter) => {
     renderer.toneMappingExposure = exp;
     renderer.setRenderTarget(null);
     renderer.autoClear = true;
-    if (filter) {
+    if (filter === 'guided' && guided) {
+      guided.draw(exp);
+    } else if (filter) {
       const quad = new FullScreenQuad(new DenoiseMaterial({ map: pt.target.texture, sigma: 4, threshold: 0.05, kSigma: 1 }));
       quad.render(renderer);
       quad.material.dispose();
@@ -265,7 +274,7 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   const target = lampsOn ? 0.3 : 0.5;
   const good = (st) => st.shown >= 0.03 && st.median > 0.03 && st.median < 0.93;
   let best = null;
-  let filter = true;
+  let filter = guided ? 'guided' : 'smart';
   let exp = exposure;
   for (let attempt = 0; attempt < 14 && !best; attempt++) {
     const r = await draw(exp, filter);
@@ -277,12 +286,14 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
     // immagine bianca o vuota
     if (r.st.shown < 0.03 || r.st.median >= 0.93) { exp = Math.max(0.05, exp * 0.35); notes.push(`esposizione ridotta (${exp.toFixed(2)})`); }
     else { exp = Math.min(60, exp * 3); notes.push(`esposizione aumentata (${exp.toFixed(2)})`); }
-    if (attempt === 4 && filter) { filter = false; exp = exposure; notes.push('senza filtro del rumore'); }
+    if (attempt === 3 && filter === 'guided') { filter = 'smart'; exp = exposure; notes.push('filtro semplice del rumore'); }
+    else if (attempt === 6 && filter) { filter = false; exp = exposure; notes.push('senza filtro del rumore'); }
   }
   if (!best) best = { ...(await draw(exposure, false)), exp: exposure, filter: false };
+  guided?.dispose();
   const ok = good(best.st);
   onProgress?.(1);
   // pt.dispose() della libreria (0.0.23) punta a un campo che non esiste: si libera a mano
   try { pt._pathTracer?.dispose?.(); pt._lowResPathTracer?.dispose?.(); pt._quad?.dispose?.(); pt._quad?.material?.dispose?.(); } catch { /* già liberato */ }
-  return { data: best.data, w: width, h: height, samples: done, exposure: +best.exp.toFixed(2), denoised: best.filter, ok, notes };
+  return { data: best.data, w: width, h: height, samples: done, exposure: +best.exp.toFixed(2), denoised: !!best.filter, filterKind: best.filter || 'nessuno', ok, notes };
 }
