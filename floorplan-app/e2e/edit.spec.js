@@ -28,14 +28,20 @@ test('si sposta un muro interno trascinandolo, e si annulla', async ({ page }, i
   const walls = page.locator('.pf-sheet svg rect[style*="col-resize"]');
   await expect(walls.first()).toBeVisible();
   const before = await roomTexts(page);
-  const box = await walls.first().boundingBox();
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + 30, y, { steps: 6 });
-  await page.mouse.up();
-  await expect.poll(async () => JSON.stringify(await roomTexts(page))).not.toBe(JSON.stringify(before));
+  // un muro dopo l'altro finché uno si sposta (alcuni sono già al limite della misura minima)
+  let changed = false;
+  for (const w of await walls.all()) {
+    const box = await w.boundingBox();
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 24, y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+    if (JSON.stringify(await roomTexts(page)) !== JSON.stringify(before)) { changed = true; break; }
+  }
+  expect(changed).toBe(true);
   await page.keyboard.press('Control+z');
   await expect.poll(async () => JSON.stringify(await roomTexts(page))).toBe(JSON.stringify(before));
   expect(errors).toEqual([]);
@@ -51,7 +57,7 @@ test('una finestra si seleziona e si elimina', async ({ page }, info) => {
   const n = await windows.count();
   expect(n).toBeGreaterThan(2);
   await windows.nth(n - 1).click();
-  await expect(page.getByText(/selezionata/)).toBeVisible();
+  await expect(page.locator('.pf-editcard')).toBeVisible();
   await page.getByRole('button', { name: 'Elimina', exact: true }).click();
   await expect(windows).toHaveCount(n - 1);
 });
@@ -113,7 +119,7 @@ test('il pulsante Modifica resta attivo e fisso in cima alla barra, si divide e 
   // dividere: il locale più grande in due
   const names = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /m²$/.test(t)).length;
   const before = await names();
-  await page.getByRole('button', { name: /Dividi locale/ }).click();
+  await page.locator('.pf-segtools button', { hasText: 'Dividi' }).click();
   const rects = page.locator('.pf-sheet svg rect[style*="crosshair"]');
   await expect(rects.first()).toBeVisible();
   let big = null;
@@ -140,7 +146,7 @@ test('il vano scala si seleziona e si regolano tipo e verso su tutti i piani', a
   await expect(stair).toBeVisible({ timeout: 20_000 });
   const b = await stair.boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
-  await expect(page.getByText('Da dove si sale')).toBeVisible();
+  await expect(page.getByText('Si sale da')).toBeVisible();
   await expect(page.getByText(/uguale su \d+ piani/)).toBeVisible();
   await page.screenshot({ path: '/private/tmp/claude-501/-Users-francescofiaschi-Documents-planify-AI--claude-worktrees-youthful-euclid-796dbf/5f95163c-2450-4564-8f6e-e13bf6a006f3/scratchpad/stair-ui.png' });
   // una combinazione consentita si applica; si annulla con Ctrl+Z
@@ -190,4 +196,72 @@ test('la rotella fa zoom sul cursore e il tasto destro sposta la pianta', async 
   const after = await sheet.boundingBox();
   expect(Math.abs(after.x - before.x - 80)).toBeLessThan(4);
   expect(Math.abs(after.y - before.y - 40)).toBeLessThan(4);
+});
+
+test('anche i muri esterni si spostano e cambiano la misura della casa', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.locator('.pf-editbtn').click();
+  const dims = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /^\d+(,\d+)? m$/.test(t)).join('|');
+  const before = await dims();
+  // il muro esterno a destra: la fascia blu più a destra
+  const walls = page.locator('.pf-sheet svg rect[style*="col-resize"]');
+  await expect(walls.first()).toBeVisible();
+  let right = null;
+  for (const w of await walls.all()) { const b = await w.boundingBox(); if (!right || b.x > right.x) right = b; }
+  const x = right.x + right.width / 2;
+  const y = right.y + right.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 40, y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(dims).not.toBe(before);
+  await page.keyboard.press('Control+z');
+  await expect.poll(dims).toBe(before);
+  expect(errors).toEqual([]);
+});
+
+test('gli strumenti di modifica stanno in cima, piccoli e senza sovrapporsi', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.locator('.pf-editbtn').click();
+  const bar = await page.locator('.pf-editbar').boundingBox();
+  const buttons = await page.locator('.pf-segtools button').all();
+  expect(buttons.length).toBe(3);
+  const boxes = [];
+  for (const b of buttons) boxes.push(await b.boundingBox());
+  for (const b of boxes) {
+    expect(b.height).toBeLessThanOrEqual(32);
+    expect(b.y).toBeGreaterThanOrEqual(bar.y);
+    expect(b.y + b.height).toBeLessThanOrEqual(bar.y + bar.height + 1);
+  }
+  for (let i = 0; i + 1 < boxes.length; i++) expect(boxes[i].x + boxes[i].width).toBeLessThanOrEqual(boxes[i + 1].x + 0.5);
+});
+
+test('un PDF scansionato si ricalca con la bacchetta magica: un clic nel locale e c\'è la stanza', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../tests/fixtures/pianta_raster.pdf'));
+  const svg = page.locator('.pf-sketch-svg');
+  await expect(svg).toBeVisible({ timeout: 40_000 });
+  await expect(page.getByRole('radio', { name: 'Bacchetta' })).toHaveAttribute('aria-checked', 'true');
+  const box = await svg.boundingBox();
+  // il foglio parte da (0, 0) a 40 px al metro: il soggiorno va da 3,1 a 10 m in x e da 4,1 a 9 m in y
+  await page.mouse.click(box.x + 6 * 40, box.y + 6 * 40);
+  const areas = page.locator('.pf-sketch-area');
+  await expect(areas).toHaveCount(1, { timeout: 15_000 });
+  const m2 = parseFloat((await areas.first().textContent()).replace(',', '.'));
+  expect(m2).toBeGreaterThan(31);
+  expect(m2).toBeLessThan(37);
+  // il locale a destra, lungo e con due varchi, è un'altra stanza che si appoggia alla prima
+  await page.mouse.click(box.x + 11 * 40, box.y + 6 * 40);
+  await expect(areas).toHaveCount(2, { timeout: 15_000 });
+  await page.getByRole('button', { name: /Genera planimetria arredata/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 40_000 });
+  expect(errors).toEqual([]);
 });

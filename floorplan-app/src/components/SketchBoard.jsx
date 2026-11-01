@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler } from 'lucide-react';
+import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler, Wand2 } from 'lucide-react';
 import { ROOM_KINDS, ROOM_KIND_NAME, roomColor } from '../constants';
 import * as G from '../lib/geometry';
 import { CORRECTIONS, boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
 import { fmt, newId, storage } from '../lib/utils';
+import { wandRoom } from '../lib/wand';
 
 const PX = 40; // pixel per metro: un quadretto grande = 1 m
 const SKETCH_KINDS = ROOM_KINDS.filter((k) => k.id !== 'hotel_room');
@@ -32,6 +33,8 @@ function sharedWalls(shapes) {
   return out;
 }
 
+const WAND_TOOL = { id: 'wand', label: 'Bacchetta', Icon: Wand2, hint: 'Clicca dentro un locale della pianta: trova i muri da sola e disegna la stanza. Se una porta aperta lascia passare, riprova da un altro punto o usa il rettangolo.' };
+
 const BG_TOOLS = [
   { id: 'bg', label: 'Sposta sfondo', Icon: FileImage, hint: 'Trascina la pianta di sfondo per metterla sotto la griglia; poi ricalca le stanze.' },
   { id: 'cal', label: 'Misura nota', Icon: Ruler, hint: 'Traccia una linea su una misura che conosci (una quota, un muro) e scrivi quanto è lunga: lo sfondo va in scala.' },
@@ -41,11 +44,11 @@ const BG_TOOLS = [
  * background = la pagina di un PDF scansionato da ricalcare ({ url, paper: [l, h] in metri sul foglio, scale }):
  * si disegna in scala reale sotto la griglia, si sposta con «Sposta sfondo», scala e trasparenza si regolano.
  */
-export default function SketchBoard({ initialShapes = [], background = null, onGenerate, onClose }) {
+export default function SketchBoard({ initialShapes = [], background = null, onGenerate, onClose, onPage }) {
   const [bg, setBg] = useState(() => background && { scale: background.scale || 100, opacity: 0.5, x: 0, y: 0, show: true });
   const [doc, setDoc] = useState({ shapes: initialShapes, past: [] });
   const { shapes } = doc;
-  const [tool, setTool] = useState(initialShapes.length ? 'select' : 'box');
+  const [tool, setTool] = useState(background ? 'wand' : initialShapes.length ? 'select' : 'box');
   const [kind, setKind] = useState('living');
   const [correction, setCorrection] = useState(() => storage.get('planify.sketchCorrection', 'auto'));
   const [selectedId, setSelectedId] = useState(null);
@@ -101,7 +104,59 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const tools = background ? [...TOOLS, ...BG_TOOLS] : TOOLS;
+  const tools = background ? [WAND_TOOL, ...TOOLS, ...BG_TOOLS] : TOOLS;
+
+  // la pagina del PDF come mappa di grigi, per la bacchetta magica (si carica al primo clic)
+  const grayRef = useRef(null);
+  const loadGray = async () => {
+    if (grayRef.current?.key === background.url) return grayRef.current;
+    const img = new Image();
+    img.src = background.url;
+    await img.decode();
+    const k = Math.min(1, 2200 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * k));
+    const h = Math.max(1, Math.round(img.naturalHeight * k));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const gray = new Uint8Array(w * h);
+    for (let i = 0; i < gray.length; i++) gray[i] = (data[i * 4] * 299 + data[i * 4 + 1] * 587 + data[i * 4 + 2] * 114) / 1000;
+    grayRef.current = { key: background.url, w, h, gray };
+    return grayRef.current;
+  };
+  const wand = async (p) => {
+    say('Cerco i muri del locale…');
+    try {
+      const g = await loadGray();
+      const mx = (background.paper[0] * bg.scale) / g.w;   // metri per pixel dell'immagine
+      const my = (background.paper[1] * bg.scale) / g.h;
+      const res = wandRoom(g.gray, g.w, g.h, (p[0] - bg.x) / mx, (p[1] - bg.y) / my, mx);
+      if (res.error) { say(res.error, 'error'); return; }
+      const toM = ([x, y]) => [bg.x + x * mx, bg.y + y * my];
+      const r5 = (v) => Math.round(v / 0.05) * 0.05;
+      let poly;
+      if (res.poly) {
+        poly = res.poly.map((pt) => toM(pt).map(r5)).map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000]);
+      } else {
+        const [ax, ay] = toM([res.rect.x0, res.rect.y0]);
+        const [bx, by] = toM([res.rect.x1, res.rect.y1]);
+        // i bordi si agganciano a quelli delle stanze già disegnate
+        const sa = snapPoint([ax, ay], shapes);
+        const sb = snapPoint([bx, by], shapes);
+        const a = [sa.guides.x != null ? sa.pt[0] : r5(ax), sa.guides.y != null ? sa.pt[1] : r5(ay)];
+        const b = [sb.guides.x != null ? sb.pt[0] : r5(bx), sb.guides.y != null ? sb.pt[1] : r5(by)];
+        const box = boxToPolygon(a, b);
+        if (box.error) { say(box.error, 'error'); return; }
+        poly = box.poly;
+      }
+      addShape(poly);
+    } catch (err) {
+      say(`Non riesco a leggere la pagina: ${err.message}`, 'error');
+    }
+  };
 
   const toMeters = (e) => {
     const r = svgRef.current.getBoundingClientRect();
@@ -127,7 +182,9 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
       /* puntatore non catturabile (es. già rilasciato): si continua senza cattura */
     }
     const p = toMeters(e);
-    if (tool === 'bg') {
+    if (tool === 'wand') {
+      wand(p);
+    } else if (tool === 'bg') {
       setDraft({ type: 'bg', start: p, orig: [bg.x, bg.y] });
     } else if (tool === 'cal') {
       setDraft({ type: 'cal', a: p, b: p });
@@ -261,6 +318,13 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
       {background && bg && (
         <div className="pf-sketch-kinds pf-sketch-bg" aria-label="Sfondo PDF">
           <span>Sfondo PDF:</span>
+          {background.pages > 1 && (
+            <label className="pf-sketch-bg-field">pagina
+              <select value={background.page || 1} aria-label="Pagina del PDF" onChange={(e) => onPage?.(Number(e.target.value), shapes)}>
+                {Array.from({ length: background.pages }, (_, i) => <option key={i} value={i + 1}>{i + 1} di {background.pages}</option>)}
+              </select>
+            </label>
+          )}
           <label className="pf-sketch-bg-field">scala 1:
             <input type="number" min="10" max="1000" step="5" value={bg.scale} aria-label="Scala del disegno"
               onChange={(e) => setBg((b) => ({ ...b, scale: Math.max(10, Number(e.target.value) || 100) }))} />

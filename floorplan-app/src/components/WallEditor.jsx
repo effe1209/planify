@@ -22,7 +22,7 @@ export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
   const wt = plan.wallThickness;
   const runs = useMemo(() => (drag ? drag.runs : wallRuns(plan)), [plan, drag]);
   // durante il trascinamento tutto resta quello di partenza: l'elemento che ha la presa non deve sparire
-  const movable = useMemo(() => drag?.movable || runs.map((r) => (r.exterior ? null : partition(plan, r.orient, r.line, r.a, r.b))).map((p) => (p && !p.error ? p : null)),
+  const movable = useMemo(() => drag?.movable || runs.map((r) => partition(plan, r.orient, r.line, r.a, r.b, [r.lo, r.hi])).map((p) => (p && !p.error ? p : null)),
     [plan, runs, drag?.movable]);
   const stair = useMemo(() => stairRoom(plan), [plan]);
   const key = (r) => `${r.orient}${r.line}:${Math.min(r.a ?? -1, r.b ?? -1)}-${Math.max(r.a ?? -1, r.b ?? -1)}`;
@@ -42,6 +42,10 @@ export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
     const m = toMeters(e);
     const raw = drag.part.orient === 'v' ? m.x - drag.start.x : m.y - drag.start.y;
     const res = movePartition(drag.base, drag.part, raw);
+    if (res.error) {
+      if (!drag.warned) { edit.onError?.(res.error); setDrag({ ...drag, warned: true }); }
+      return;
+    }
     if (res.delta === drag.delta) return;
     setDrag({ ...drag, delta: res.delta, moved: res.delta !== 0 });
     onPreview(res.delta ? res.plan : null);
@@ -51,7 +55,7 @@ export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
     const { moved, delta, part, base: b, run } = drag;
     setDrag(null);
     onPreview(null);
-    if (moved && delta) edit.onApply(movePartition(b, part, delta));
+    if (moved && delta) edit.onMoveWall?.(run, part, delta, b);
     else edit.onSelectWall?.(edit.selectedWall && key(edit.selectedWall) === key(run) ? null : run);   // un clic: seleziona il muro
   };
 
