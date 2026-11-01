@@ -7,18 +7,18 @@ import { serializeSvg } from '../lib/sheet';
 const S = 38;          // pixel per metro
 const PAD = 54;
 const INK = '#1f2630';
-const FILL = { wall: '#ece8df', below: '#d6d3cc', slab: '#8d939c', glass: '#bfe0f5', door: '#9a7b5a', roof: '#a8604a', room: '#fbfaf6' };
+const FILL = { wall: '#ece8df', below: '#d6d3cc', slab: '#8d939c', glass: '#bfe0f5', door: '#9a7b5a', roof: '#a8604a', room: '#fbfaf6', furn: '#d9c7a6', stair: '#b9b2a4' };
 
 const num = (v) => fmt(v, 2);
 
 /* Un disegno (prospetto o sezione) in SVG: terreno, forme, quote dei piani. */
 function Drawing({ d, marks, svgRef }) {
-  const w = Math.max(1, d.maxX - d.minX) * S + PAD * 2 + 30;
+  const w = Math.max(1, d.maxX - d.minX) * S + PAD * 2 + 30 + (d.dims?.length ? 100 : 0);
   const h = (d.maxY - d.minY) * S + PAD * 2;
   const X = (x) => PAD + 22 + (x - d.minX) * S;
   const Y = (y) => PAD + (d.maxY - y) * S;
   const poly = (pts) => pts.map(([x, y]) => `${X(x)},${Y(y)}`).join(' ');
-  const order = ['below', 'room', 'wall', 'glass', 'door', 'roof', 'slab'];
+  const order = ['below', 'room', 'furn', 'stair', 'wall', 'glass', 'door', 'roof', 'slab'];
   const shapes = [...d.shapes].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   return (
     <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={d.title}
@@ -37,6 +37,22 @@ function Drawing({ d, marks, svgRef }) {
           <g key={`t${i}`} fontSize="10.5" fill="#3d4654" textAnchor="middle">
             <text x={X((x0 + x1) / 2)} y={Y((y0 + y1) / 2)}>{s.name}</text>
             <text x={X((x0 + x1) / 2)} y={Y((y0 + y1) / 2) + 13} fontSize="9.5" fill="#6b7482">h {num(s.h)} m</text>
+          </g>
+        );
+      })}
+      {(d.dims || []).map((q, i) => {
+        // quote verticali in cm sul lato destro, in rosso se fuori norma
+        const x = X(d.maxX) + 26 + (i % 3) * 30;
+        const col = q.bad ? '#c62828' : INK;
+        return (
+          <g key={`q${i}`} fontSize="10" fill={col} stroke={col}>
+            <line x1={X(d.maxX) + 6} x2={x + 5} y1={Y(q.y0)} y2={Y(q.y0)} strokeWidth="0.5" strokeDasharray="2 2" />
+            <line x1={X(d.maxX) + 6} x2={x + 5} y1={Y(q.y1)} y2={Y(q.y1)} strokeWidth="0.5" strokeDasharray="2 2" />
+            <line x1={x} x2={x} y1={Y(q.y0)} y2={Y(q.y1)} strokeWidth="1" />
+            <line x1={x - 3} x2={x + 3} y1={Y(q.y0) + 3} y2={Y(q.y0) - 3} strokeWidth="1" />
+            <line x1={x - 3} x2={x + 3} y1={Y(q.y1) + 3} y2={Y(q.y1) - 3} strokeWidth="1" />
+            <text x={x - 4} y={(Y(q.y0) + Y(q.y1)) / 2} stroke="none" textAnchor="middle" fontWeight={q.bad ? 700 : 400}
+              transform={`rotate(-90 ${x - 4} ${(Y(q.y0) + Y(q.y1)) / 2})`}>{`${q.label} ${Math.round((q.y1 - q.y0) * 100)} cm${q.bad ? ' ⚠' : ''}`}</text>
           </g>
         );
       })}

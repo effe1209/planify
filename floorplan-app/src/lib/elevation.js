@@ -7,10 +7,14 @@
 import { DEFAULT_HEIGHT, SLAB, WINDOW_H } from './compliance';
 import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
 import { bearing, sectorOf } from './orientation';
+import { furnitureZ } from './scene3d';
 
 export const SILL = 0.9;
 export const DOOR_H = 2.1;
 const WALL_T = 0.2;
+// altezze del soppalco (le stesse di compliance.js): sotto, sopra, parapetto
+const MEZZ_NORM = { under: 2.4, above: 2.2, parapet: 1.0 };
+const RED = '#c62828';
 
 /* Piani abitati dal basso: [{ floor, level, base, h }] con base = quota del pavimento (piano terra = 0). */
 export function stack(project) {
@@ -146,6 +150,7 @@ export function section(project, axis, c, { roof = null } = {}) {
   const view = axis === 'x' ? VIEW.down : VIEW.left;
   const levels = stack(project);
   const shapes = [];
+  const dims = [];   // quote verticali: { y0, y1, label, bad }
   if (!levels.length) return { shapes, minX: 0, maxX: 0, minY: 0, maxY: 0, title: '' };
   let min = Infinity, max = -Infinity, top = 0;
   for (const s of levels) {
@@ -162,6 +167,7 @@ export function section(project, axis, c, { roof = null } = {}) {
     const edges = [...new Set(cut.flatMap((q) => [Math.round(q.a0 * 100) / 100, Math.round(q.a1 * 100) / 100]))];
     for (const e of edges) shapes.push({ kind: 'wall', pts: [[e - WALL_T / 2, s.base], [e + WALL_T / 2, s.base], [e + WALL_T / 2, s.base + s.h], [e - WALL_T / 2, s.base + s.h]] });
     if (s !== levels[0]) shapes.push({ kind: 'slab', pts: [[lo - WALL_T / 2, s.base - SLAB], [hi + WALL_T / 2, s.base - SLAB], [hi + WALL_T / 2, s.base], [lo - WALL_T / 2, s.base]] });
+    sectionDetails(s, axis, c, shapes, dims);
     if (s.level >= 0) top = Math.max(top, s.base + s.h);
   }
   if (roof) {
@@ -173,10 +179,82 @@ export function section(project, axis, c, { roof = null } = {}) {
   const all = shapes.flatMap((s) => s.pts);
   const minY = Math.min(0, ...levels.map((s) => s.base - (s === levels[0] ? 0 : SLAB)));
   return {
-    shapes, minX: Math.min(min, ...all.map((p) => p[0])), maxX: Math.max(max, ...all.map((p) => p[0])), minY,
+    shapes, dims, minX: Math.min(min, ...all.map((p) => p[0])), maxX: Math.max(max, ...all.map((p) => p[0])), minY,
     maxY: Math.max(top, ...all.map((p) => p[1])),
     title: axis === 'x' ? 'Sezione longitudinale A–A' : 'Sezione trasversale B–B',
   };
+}
+
+const box = (a0, a1, y0, y1) => [[a0, y0], [a1, y0], [a1, y1], [a0, y1]];
+
+/*
+ * Dentro un piano tagliato: arredi tagliati, e nel loft il soppalco (solaio, parapetto, scala a gradini, pareti del bagnetto)
+ * con le quote delle altezze libere; le altezze fuori norma vanno in rosso.
+ * axis 'x': profilo lungo x per il taglio a y = c; axis 'y': profilo lungo y per il taglio a x = c.
+ */
+function sectionDetails(s, axis, c, shapes, dims) {
+  const plan = s.floor.plan;
+  const ax = (o) => (axis === 'x' ? [o.x, o.x + o.w, o.y, o.y + o.h] : [o.y, o.y + o.h, o.x, o.x + o.w]);   // [lungo, lungo+, trasversale, trasversale+]
+  const mz = plan.mezzanine;
+  const e = mz ? s.base + mz.elev : null;
+  for (const f of plan.furniture || []) {
+    const [a0, a1, b0, b1] = ax(f);
+    if (!(c > b0 && c < b1) || f.type === 'rug') continue;
+    const [z0, z1] = furnitureZ(f.type);
+    const lift = f.elev ? s.base + f.elev : s.base;
+    shapes.push({ kind: 'furn', pts: box(a0, a1, lift + z0, lift + z1), name: f.type });
+  }
+  if (!mz) return;
+  const [m0, m1, n0, n1] = ax(mz);
+  if (!(c > n0 && c < n1)) return;
+  const st = ax(mz.stair);
+  const onStair = c > st[2] && c < st[3];
+  const run = mz.stair.up === 'E' || mz.stair.up === 'W' ? 'x' : 'y';
+  const along = run === axis;   // la rampa corre lungo il profilo
+  // solaio, interrotto dal vano della scala dove il taglio la attraversa lungo il suo percorso
+  const gaps = onStair && along ? [[st[0], st[1]]] : [];
+  let from = m0;
+  for (const [g0, g1] of [...gaps, [m1, m1]]) {
+    if (g0 > from + 1e-6) shapes.push({ kind: 'slab', pts: box(from, g0, e - mz.slab, e) });
+    from = Math.max(from, g1);
+  }
+  // parapetto sui lati aperti che il taglio attraversa
+  for (const side of mz.open || []) {
+    const edge = axis === 'x' ? (side === 'W' ? m0 : side === 'E' ? m1 : null) : (side === 'N' ? m0 : side === 'S' ? m1 : null);
+    if (edge == null) continue;
+    shapes.push({ kind: 'glass', pts: box(edge - 0.02, edge + 0.02, e, e + mz.parapet) });
+    shapes.push({ kind: 'slab', pts: box(edge - 0.03, edge + 0.03, e + mz.parapet - 0.04, e + mz.parapet) });
+  }
+  // scala: gradini lungo il profilo, oppure l'altezza della rampa nel punto del taglio
+  if (onStair) {
+    const n = mz.stair.risers || 13;
+    if (along) {
+      const rising = mz.stair.up === 'E' || mz.stair.up === 'S' ? 1 : -1;
+      const len = st[1] - st[0];
+      for (let i = 0; i < n; i++) {
+        const t0 = (i * len) / n;
+        const t1 = ((i + 1) * len) / n;
+        const [x0, x1] = rising > 0 ? [st[0] + t0, st[0] + t1] : [st[1] - t1, st[1] - t0];
+        shapes.push({ kind: 'stair', pts: box(x0, x1, s.base, s.base + (mz.elev * (i + 1)) / n) });
+      }
+    } else {
+      const t = ((c - st[2]) / (st[3] - st[2]));
+      const k = Math.min(1, (mz.stair.up === 'E' || mz.stair.up === 'S' ? t : 1 - t));
+      shapes.push({ kind: 'stair', pts: box(st[0], st[1], s.base, s.base + mz.elev * Math.max(0.1, k)) });
+    }
+  }
+  // pareti del bagnetto sul soppalco
+  for (const q of mz.bath?.walls || []) {
+    const [a0, a1, b0, b1] = ax(q);
+    if (c > b0 && c < b1) shapes.push({ kind: 'wall', pts: box(a0, a1, e, e + 2.2) });
+  }
+  // altezze libere: sotto il soppalco, sopra (fino al soffitto) e parapetto
+  const ceil = s.base + s.h;
+  const under = mz.elev - mz.slab;
+  const above = s.h - mz.elev;
+  dims.push({ y0: s.base, y1: s.base + under, label: 'sotto', bad: under < MEZZ_NORM.under - 1e-6 });
+  dims.push({ y0: e, y1: ceil, label: 'sopra', bad: above < MEZZ_NORM.above - 1e-6 });
+  dims.push({ y0: e, y1: e + mz.parapet, label: 'parapetto', bad: mz.parapet < MEZZ_NORM.parapet - 1e-6 });
 }
 
 /* Quote dei piani per le scritte laterali: [{ label, y }] con +0,00 = piano terra. */

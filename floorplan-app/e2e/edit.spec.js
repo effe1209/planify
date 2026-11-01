@@ -333,6 +333,21 @@ test('il loft è una tipologia selezionata, resta tale cambiando misura e ha le 
   expect(errors).toEqual([]);
 });
 
+test('la sezione del loft mostra il soppalco con le altezze in cm', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /Prospetti/ }).click();
+  await expect(page.locator('.pf-sheets-grid svg text', { hasText: /sotto 240 cm/ }).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('.pf-sheets-grid svg text', { hasText: /parapetto 100 cm/ }).first()).toBeVisible();
+  await page.locator('svg[aria-label^="Sezione longitudinale"]').screenshot({ path: process.env.SHOT || '/tmp/sezione-loft.png' });
+  expect(errors).toEqual([]);
+});
+
 test('nella vista Sopra si aggiungono arredi al soppalco', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   const errors = await open(page);

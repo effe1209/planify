@@ -29,8 +29,8 @@ Da inviare dopo la correzione di soppalco, porta scorrevole e TV. Lavorare su `n
 - Non pubblicare senza un «sì, pubblica» esplicito. Se cambia `planner.py`, ricordare il deploy manuale di Render.
 
 ## Domande da fare prima di cominciare
-1. Formato di stampa e scala predefiniti (A3 1:50, A4 1:100)? Le quote in cm o in m?
-2. Il cartiglio deve avere logo e dati dello studio? Quali campi (committente, progettista, n. pratica)?
-3. Render: bastano viste automatiche o serve scegliere la telecamera a mano nel 3D?
-4. Le sezioni vanno anche nel PDF del progetto e nel DXF (2D)? Con quali layer?
-5. Per il loft: la sezione deve segnalare in rosso le altezze fuori norma?
+1. Formato di stampa e scala predefiniti (A3 1:50, A4 1:100)? Le quote in cm o in m? le quote in cm formato predefinito A4 1:100.
+2. Il cartiglio deve avere logo e dati dello studio? Quali campi (committente, progettista, n. pratica)? deve avere il logo di planify attualmente però voglio la predisposizione per poterlo cambiare nel caso qualcuno chieda di poter usare il suo logo.
+3. Render: bastano viste automatiche o serve scegliere la telecamera a mano nel 3D? voglio sia le viste automatiche che scegliere la videocamera.
+4. Le sezioni vanno anche nel PDF del progetto e nel DXF (2D)? Con quali layer? Si voglio tutte le viste nel pdf e dxf con tutti i layer quando esporto in dxf.
+5. Per il loft: la sezione deve segnalare in rosso le altezze fuori norma? si.
