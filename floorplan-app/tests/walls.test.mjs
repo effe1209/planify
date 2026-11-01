@@ -86,3 +86,72 @@ assert.ok(moves >= 10, `spostamenti provati: ${moves}`);
   assert.ok(addOpening(p, 'window', inside, inside.lo + 1).error);
 }
 console.log(`walls ok (${moves} spostamenti)`);
+
+/* ── fase B: dividere, unire, aprire, spostare il vano scala, scegliere il tipo di scala ── */
+import { canMerge, checkStair, mergeRooms, moveRoom, openWall, roomSlide, setStair, splitRoom, stairRoom } from '../src/lib/walls.js';
+const houses = JSON.parse(readFileSync(new URL('./fixtures/houses.json', import.meta.url)));
+const noOverlap = (q, tag) => {
+  for (let a = 0; a < q.rooms.length; a++) for (let b = a + 1; b < q.rooms.length; b++) assert.ok(overlapArea(q.rooms[a], q.rooms[b]) < 1e-3, `${tag}: sovrapposti ${q.rooms[a].name} / ${q.rooms[b].name}`);
+};
+
+// dividere: area invariata, due locali, una porta tra i due; unire riporta un locale solo
+{
+  const p = plans[0];
+  const big = [...p.rooms].filter((r) => r.kind !== 'stairs').sort((a, b) => b.w * b.h - a.w * a.h)[0];
+  const orient = big.w >= big.h ? 'v' : 'h';
+  const res = splitRoom(p, big.id, orient, orient === 'v' ? big.x + big.w / 2 : big.y + big.h / 2);
+  assert.ok(!res.error, res.error);
+  const q = res.plan;
+  assert.equal(q.rooms.length, p.rooms.length + 1);
+  assert.ok(Math.abs(totalArea(q) - totalArea(p)) < 1e-6);
+  noOverlap(q, 'split');
+  assert.equal(q.doors.length, p.doors.length + 1, 'porta tra le due parti');
+  assert.ok(canMerge(q, big.id, res.moved[1]));
+  const back = mergeRooms(q, big.id, res.moved[1]);
+  assert.ok(!back.error, back.error);
+  assert.equal(back.plan.rooms.length, p.rooms.length);
+  assert.ok(Math.abs(totalArea(back.plan) - totalArea(p)) < 1e-6);
+  assert.deepEqual(deriveWalls(back.plan.rooms, p.dimensions.width, p.dimensions.length).map(key).sort(), p.walls.map(key).sort(), 'i muri tornano quelli di prima');
+  assert.ok(splitRoom(p, big.id, orient, big.x + 0.2).plan, 'taglio portato dentro i limiti');
+  assert.ok(splitRoom(p, p.rooms.find((r) => r.kind === 'stairs')?.id ?? -1, 'v', 1).error);
+}
+
+// aprire un muro: i due locali diventano una zona, il muro sparisce
+{
+  const p = plans[0];
+  const run = wallRuns(p).find((r) => !r.exterior && p.rooms.find((x) => x.id === r.a).kind === 'living' || (!r.exterior && p.rooms.find((x) => x.id === r.b)?.kind === 'kitchen'));
+  const res = openWall(p, run.a, run.b);
+  assert.ok(!res.error, res.error);
+  assert.ok(res.plan.walls.length < p.walls.length || res.plan.walls.map(key).join() !== p.walls.map(key).join());
+  assert.ok(openWall(res.plan, run.a, run.b).error, 'già zona unica');
+}
+
+// scale delle case generate: la combinazione attuale è valida (le porte non cadono sulla rampa)
+let slid = 0;
+for (const [hi, floors] of houses.entries()) {
+  for (const [fi, p] of floors.entries()) {
+    const found = stairRoom(p);
+    if (!found) continue;
+    assert.ok(checkStair(p, {}).ok, `scala attuale non valida (casa ${hi}, piano ${fi}): ${checkStair(p, {}).why} ${JSON.stringify(checkStair(p, {}).debug)}`);
+    for (const axis of ['x', 'y']) {
+      const slide = roomSlide(p, found.room.id, axis);
+      if (slide.error || slide.max < 0.1) continue;
+      const res = moveRoom(p, found.room.id, axis, Math.min(0.3, slide.max));
+      const q = res.plan;
+      assert.ok(res.delta > 0);
+      slid++;
+      noOverlap(q, `scala casa ${hi} piano ${fi}`);
+      assert.ok(Math.abs(totalArea(q) - totalArea(p)) < 1e-6, 'area invariata');
+      assert.equal(q.stairs[0].core[axis], +(p.stairs[0].core[axis] + res.delta).toFixed(3));
+      assert.deepEqual(deriveWalls(q.rooms, q.dimensions.width, q.dimensions.length).map(key).sort(), q.walls.map(key).sort());
+      for (const o of [...q.doors, ...q.windows]) assert.ok(runOf(q, o), 'apertura senza muro dopo lo spostamento della scala');
+    }
+    // tipo e verso: si accettano solo combinazioni che entrano e senza porte sulla rampa
+    const alt = ['u', 'l', 'straight'].filter((t) => t !== found.stair.type).map((t) => checkStair(p, { type: t }));
+    for (const c of alt) assert.ok(c.ok || typeof c.why === 'string');
+    const same = setStair(p, { type: found.stair.type });
+    assert.equal(same.plan.stairs[0].type, found.stair.type);
+  }
+}
+assert.ok(slid >= 1, `spostamenti della scala provati: ${slid}`);
+console.log(`walls fase B ok (${slid} scale spostate)`);

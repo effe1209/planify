@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut,
+  Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -15,7 +15,7 @@ import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import FurnishPanel from './components/FurnishPanel';
 import EditPlanPanel from './components/EditPlanPanel';
-import { flipDoor, removeOpening, resizeOpening } from './lib/walls';
+import { flipDoor, mergeRooms, moveRoom, openWall, removeOpening, resizeOpening, roomSlide, setStair, splitRoom, stairRoom } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
 import { rotateItem, snapItem } from './lib/furnitureEdit';
@@ -180,6 +180,8 @@ export default function App() {
   const [pan, setPan] = useState({ x: 0, y: 0 });   // spostamento della pianta con la manina
   const [panning, setPanning] = useState(false);
   const panOn = useRef(false);
+  const viewRef = useRef({ pan: { x: 0, y: 0 }, z: 1 });   // spostamento e zoom correnti, letti dai gestori della pianta
+  const spaceDown = useRef(false);                          // barra spaziatrice premuta: il sinistro sposta anche sopra gli arredi
   const [hoverId, setHoverId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [flash, setFlash] = useState('');
@@ -241,16 +243,33 @@ export default function App() {
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return undefined;
+    /* Zoom attorno a un punto dello stage (relativo al centro): il punto sotto il cursore resta fermo. */
+    const zoomAt = (px, py, factor, from = viewRef.current.pan) => {
+      const z1 = viewRef.current.z;
+      const z2 = clamp(z1 * factor, 0.2, 4);
+      const k = z2 / z1;
+      setZoom(z2);
+      setPan({ x: px - (px - from.x) * k, y: py - (py - from.y) * k });
+    };
+    let trackpadUntil = 0;   // la rotella del mouse è a scatti grandi, il trackpad a due dita a passi piccoli e continui
     const onWheel = (e) => {
-      if (!(e.ctrlKey || e.metaKey)) {
-        // senza Ctrl la rotella (o il trackpad a due dita) sposta la pianta
-        if (!panOn.current) return;
-        e.preventDefault();
-        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
-        return;
-      }
+      if (!panOn.current) return;
       e.preventDefault();
-      setZoom((z) => clamp((z ?? fitRef.current) * (e.deltaY < 0 ? 1.1 : 1 / 1.1), 0.2, 3));
+      const r = el.getBoundingClientRect();
+      const px = e.clientX - r.left - r.width / 2;
+      const py = e.clientY - r.top - r.height / 2;
+      const pinch = e.ctrlKey || e.metaKey;   // il pizzico sul trackpad arriva come rotella con Ctrl
+      const now = performance.now();
+      const bigStep = e.deltaMode === 1 || (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50);
+      if (!pinch && !bigStep) trackpadUntil = now + 400;
+      if (pinch) {
+        zoomAt(px, py, Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.01)));
+      } else if (now < trackpadUntil) {
+        // due dita sul trackpad: si sposta la pianta
+        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+      } else {
+        zoomAt(px, py, e.deltaY < 0 ? 1.12 : 1 / 1.12);   // rotella del mouse: zoom sul punto del cursore
+      }
     };
     // manina: trascina con il tasto sinistro sullo sfondo, oppure con il destro/centrale ovunque
     let drag = null;
@@ -267,7 +286,7 @@ export default function App() {
         if (touches.size === 2) { pinch = pinchState(); drag = null; moved = true; setPanning(true); return; }
       }
       if (!panOn.current || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
-      if (e.button === 0) {
+      if (e.button === 0 && !spaceDown.current) {
         // il tasto sinistro sposta solo se non si sta afferrando un arredo, un dispositivo o un campo
         const t = e.target;
         if (t.closest?.('button, input, select, textarea, a')) return;
@@ -275,14 +294,20 @@ export default function App() {
       }
       drag = { x: e.clientX, y: e.clientY, btn: e.button };
       moved = false;
-      if (e.button !== 0) e.preventDefault();
+      if (e.button !== 0 || spaceDown.current) e.preventDefault();
     };
     const onMove = (e) => {
       if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pinch && touches.size >= 2) {
         const now = pinchState();
-        setZoom((z) => clamp((z ?? fitRef.current) * (now.d / pinch.d), 0.2, 3));
-        setPan((p) => ({ x: p.x + now.x - pinch.x, y: p.y + now.y - pinch.y }));
+        const r = el.getBoundingClientRect();
+        const z1 = viewRef.current.z;
+        const z2 = clamp(z1 * (now.d / pinch.d), 0.2, 4);
+        const k = z2 / z1;
+        const c0 = { x: pinch.x - r.left - r.width / 2, y: pinch.y - r.top - r.height / 2 };
+        const c1 = { x: now.x - r.left - r.width / 2, y: now.y - r.top - r.height / 2 };
+        setZoom(z2);
+        setPan((p) => ({ x: c1.x - (c0.x - p.x) * k, y: c1.y - (c0.y - p.y) * k }));
         pinch = now;
         return;
       }
@@ -307,10 +332,21 @@ export default function App() {
       if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; }
     };
     const onContext = (e) => { if (panOn.current) e.preventDefault(); };
+    const typing = (e) => !!e.target.closest?.('input, textarea, select, [contenteditable="true"]');
+    const onKeyDown = (e) => {
+      if (!panOn.current || typing(e) || e.metaKey || e.ctrlKey) return;
+      if (e.code === 'Space') { spaceDown.current = true; el.classList.add('is-space'); e.preventDefault(); return; }
+      if (e.key === '+' || e.key === '=') zoomAt(0, 0, 1.2);
+      else if (e.key === '-' || e.key === '_') zoomAt(0, 0, 1 / 1.2);
+      else if (e.key === '0') { setZoom(null); setPan({ x: 0, y: 0 }); }
+    };
+    const onKeyUp = (e) => { if (e.code === 'Space') { spaceDown.current = false; el.classList.remove('is-space'); } };
     el.addEventListener('wheel', onWheel, { passive: false });
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('click', onClickCapture, true);
     el.addEventListener('contextmenu', onContext);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
@@ -319,6 +355,8 @@ export default function App() {
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('click', onClickCapture, true);
       el.removeEventListener('contextmenu', onContext);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
@@ -329,6 +367,7 @@ export default function App() {
   const fit = box && stage.w ? clamp(Math.min((stage.w - 40) / box.w, (stage.h - 40) / box.h), 0.2, 1.6) : 1;
   useEffect(() => { fitRef.current = fit; }, [fit]);
   const z = zoom ?? fit;
+  viewRef.current = { pan, z };
   const resetView = () => { setZoom(null); setPan({ x: 0, y: 0 }); };
   useEffect(() => { setPan({ x: 0, y: 0 }); }, [current?.id, floor?.id]);
 
@@ -663,10 +702,17 @@ export default function App() {
   const [wallEdit, setWallEdit] = useState(false);
   const [addMode, setAddMode] = useState(null);
   const [selectedOpening, setSelectedOpening] = useState(null);   // { kind: 'door' | 'window', index }
+  const [selectedWall, setSelectedWall] = useState(null);         // muro interno scelto con un clic (unire, aprire)
+  const [selectedStair, setSelectedStair] = useState(false);
+  const [splitDir, setSplitDir] = useState('v');
   const editable = !!plan && !readOnly && !plan.rooms.some((r) => r.poly) && !plan.wallLines?.length
     && !['garden'].includes(floor?.meta?.type);
-  // il piano cambia (altro piano, altro progetto): la modifica si chiude
-  useEffect(() => { setWallEdit(false); setAddMode(null); setSelectedOpening(null); }, [current?.id, floor?.id]);
+  // la modifica resta attiva finché non si preme di nuovo il pulsante; cambiando piano o progetto si azzera solo la selezione
+  useEffect(() => { setAddMode(null); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }, [current?.id, floor?.id]);
+  const toggleEdit = () => {
+    setWallEdit((on) => !on);
+    setAddMode(null); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); setSelectedId(null);
+  };
   /* Registra la modifica come un passo di annulla; i locali che hanno cambiato misura si riarredano con il motore (un solo passo). */
   const applyPlanEdit = async (res) => {
     const edited = res.plan;
@@ -684,9 +730,59 @@ export default function App() {
       }
     }
     editPlan(() => next);
-    if (res.opening) setSelectedOpening(res.opening);
+    setSelectedOpening(res.opening || null);
+    setSelectedWall(null);
     setAddMode(null);
     if (res.dropped?.length) say(res.dropped[0]);
+  };
+  const tryEdit = (res) => { if (res.error) setError(res.error); else { setError(null); applyPlanEdit(res); } };
+  const splitAt = (roomId, dir, at) => tryEdit(splitRoom(plan, roomId, dir, at));
+  const mergeSelected = () => tryEdit(mergeRooms(plan, selectedWall.a, selectedWall.b));
+  const openSelected = () => tryEdit(openWall(plan, selectedWall.a, selectedWall.b));
+  /* Piani con il vano scala nello stesso punto di questo: la scala si cambia su tutti insieme. */
+  const stairFloors = () => {
+    const core = plan && stairRoom(plan)?.stair.core;
+    if (!core || !current) return [];
+    return current.floors.filter((f) => typeof f.level === 'number' && f.plan && stairRoom(f.plan)
+      && ['x', 'y', 'w', 'h'].every((k) => Math.abs(stairRoom(f.plan).stair.core[k] - core[k]) < 0.05));
+  };
+  const commitFloors = (results) => {   // piante nuove di più piani in un solo passo di annulla
+    pushUndo();
+    editProject((p) => ({ ...p, floors: p.floors.map((f) => { const r = results.find((x) => x.f.id === f.id); return r ? { ...f, plan: r.plan } : f; }) }));
+  };
+  const applyStair = (patch) => {
+    const fl = stairFloors();
+    const results = fl.map((f) => ({ f, ...setStair(f.plan, patch) }));
+    const bad = results.find((r) => r.error);
+    if (bad) { setError(`${fl.length > 1 ? `${bad.f.name}: ` : ''}${bad.error}`); return; }
+    setError(null);
+    commitFloors(results);
+  };
+  const moveStairs = async ({ axis, delta }) => {
+    const fl = stairFloors();
+    const infos = fl.map((f) => { const id = stairRoom(f.plan).room.id; return { f, id, slide: roomSlide(f.plan, id, axis) }; });
+    const bad = infos.find((i) => i.slide.error);
+    if (bad) { setError(`${fl.length > 1 ? `${bad.f.name}: ` : ''}${bad.slide.error}`); return; }
+    const d = Math.max(Math.max(...infos.map((i) => i.slide.min)), Math.min(Math.min(...infos.map((i) => i.slide.max)), delta));
+    if (!d) { setError('Su un altro piano la scala non può spostarsi di più'); return; }
+    setError(null);
+    const results = infos.map((i) => ({ f: i.f, res: moveRoom(i.f.plan, i.id, axis, d, i.slide) }));
+    setFurnishing(true);
+    try {
+      for (const r of results) {
+        r.plan = r.res.plan;
+        if (r.res.moved?.length && r.plan.furniture?.length && base && engineHas('furnish_plan')) {
+          try {
+            const out = await readJson(await postJson(base, '/furnish-plan', { plan: r.plan, style: r.f.meta?.style || form.style, room_ids: r.res.moved }));
+            r.plan = { ...r.plan, furniture: out.furniture };
+          } catch { say('Scala spostata, ma gli arredi vicini non sono stati aggiornati'); }
+        }
+      }
+    } finally {
+      setFurnishing(false);
+    }
+    commitFloors(results);
+    setSelectedStair(true);
   };
   const openingEdit = (fn) => { if (selectedOpening) { editPlan((p) => fn(p, selectedOpening)); } };
   const setFloorStyle = (id) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, style: id } })));
@@ -1726,7 +1822,10 @@ export default function App() {
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`} north={current?.north ?? 0}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
                   editable={!readOnly && !showElectric && !showPlumbing && !wallEdit} selectedItem={selectedItem}
-                  wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? { selected: selectedOpening, addMode, onSelect: setSelectedOpening, onApply: applyPlanEdit, onError: setError } : null} codes={schedule?.codes[floor.id]}
+                  wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? {
+                    selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
+                    onSelectStair: setSelectedStair, onApply: applyPlanEdit, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
+                  } : null} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
                   onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
@@ -1770,6 +1869,14 @@ export default function App() {
 
         {/* ───────── Dettagli, personalizzazione e cronologia ───────── */}
         <aside className="pf-inspector" aria-hidden={!panels.right} inert={!panels.right}>
+          {editable && (
+            <div className="pf-editbar">
+              <button type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
+                title="Attiva o disattiva la modifica di muri, aperture, locali e scale: resta attiva finché non la ripremi">
+                <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
+              </button>
+            </div>
+          )}
           {plan && stats ? (
             <>
               {selectedItem != null && (
@@ -1788,14 +1895,16 @@ export default function App() {
                   onChange={(patch) => changeDevice(selectedDevice.id, patch)} onRemove={() => removeDevice(selectedDevice.id)}
                   onClose={() => setSelectedDevice(null)} />
               )}
-              {editable && !selectedRoom && (
-                <EditPlanPanel plan={plan} on={wallEdit} addMode={addMode} selected={selectedOpening} busy={furnishing}
-                  onToggle={() => { setWallEdit(!wallEdit); setAddMode(null); setSelectedOpening(null); setSelectedId(null); }}
-                  onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); }}
+              {editable && wallEdit && (
+                <EditPlanPanel plan={plan} addMode={addMode} splitDir={splitDir} selected={selectedOpening} selectedWall={selectedWall}
+                  selectedStair={selectedStair} stairsHere={stairFloors().length}
+                  onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
+                  onSplitDir={setSplitDir}
                   onResize={(w) => openingEdit((p, o) => resizeOpening(p, o.kind, o.index, w))}
                   onFlip={() => openingEdit((p, o) => flipDoor(p, o.index))}
                   onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}
-                  onClose={() => setSelectedOpening(null)} />
+                  onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
+                  onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />
               )}
               {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
                 <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}
