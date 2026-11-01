@@ -331,3 +331,242 @@ export function addOpening(plan, kind, run, at) {
   next.stats = { ...(plan.stats || {}), [key]: list.length };
   return { plan: next, index: list.length - 1 };
 }
+
+/* ── fase B: dividere, unire, aprire, spostare locali e scale ── */
+
+const nextId = (plan) => Math.max(0, ...plan.rooms.map((r) => r.id)) + 1;
+const roomOf = (plan, id) => plan.rooms.find((r) => r.id === id);
+const editable = (r) => r && r.kind !== 'garden' && !r.poly;
+
+/* Divide un locale con un muro: orient 'v' (taglio verticale a x = at) o 'h' (y = at). Il nuovo locale prende il nome «… 2», ha una porta verso l'altro. */
+export function splitRoom(plan, roomId, orient, at) {
+  const r = roomOf(plan, roomId);
+  if (!editable(r)) return { error: 'Questo locale non si può dividere' };
+  if (r.kind === 'stairs') return { error: 'Il vano scala non si divide' };
+  const vertical = orient === 'v';
+  const part = Math.min(minSide(r), 1.5);   // ogni parte almeno così larga (soggiorno e camere si dividono in zone più piccole)
+  const lo = (vertical ? r.x : r.y) + part;
+  const hi = (vertical ? r.x + r.w : r.y + r.h) - part;
+  if (hi < lo - TOL) return { error: `Il locale è troppo ${vertical ? 'stretto per un muro verticale' : 'basso per un muro orizzontale'}: prova ${vertical ? 'orizzontale' : 'verticale'} o un altro locale` };
+  const cut = Math.max(lo, Math.min(hi, snap(at)));
+  const id = nextId(plan);
+  const first = vertical ? { ...r, w: round3(cut - r.x) } : { ...r, h: round3(cut - r.y) };
+  const second = vertical
+    ? { ...r, id, name: `${r.name} 2`, x: round3(cut), w: round3(r.x + r.w - cut), zone: id }
+    : { ...r, id, name: `${r.name} 2`, y: round3(cut), h: round3(r.y + r.h - cut), zone: id };
+  first.area = round3(first.w * first.h);
+  second.area = round3(second.w * second.h);
+  delete second.label;
+  const inSecond = (f) => (vertical ? f.x + f.w / 2 >= cut : f.y + f.h / 2 >= cut);
+  const furniture = (plan.furniture || []).map((f) => (f.room === roomId && inSecond(f) ? { ...f, room: id } : f));
+  const rooms = plan.rooms.flatMap((x) => (x.id === roomId ? [first, second] : [x]));
+  const base = { ...plan, rooms, furniture };
+  const done = finish(base, [roomId, id]);
+  // una porta tra le due parti, al centro del nuovo muro
+  const run = wallRuns(done.plan).find((w) => w.orient === orient && Math.abs(w.line - cut) < 0.02
+    && ((w.a === roomId && w.b === id) || (w.a === id && w.b === roomId)));
+  let out = done.plan;
+  let opening = null;
+  if (run) {
+    const added = addOpening(out, 'door', run, (run.lo + run.hi) / 2);
+    if (added.plan) { out = added.plan; opening = { kind: 'door', index: added.index }; }
+  }
+  return { plan: out, moved: [roomId, id], dropped: done.dropped, opening };
+}
+
+/* Due locali che si toccano lungo un muro: coppia { a, b, vertical, line }, o null. */
+function neighbours(plan, a, b) {
+  const A = roomOf(plan, a);
+  const B = roomOf(plan, b);
+  if (!A || !B) return null;
+  const touchV = Math.abs(A.x + A.w - B.x) < TOL || Math.abs(B.x + B.w - A.x) < TOL;
+  const touchH = Math.abs(A.y + A.h - B.y) < TOL || Math.abs(B.y + B.h - A.y) < TOL;
+  return { A, B, touchV, touchH };
+}
+
+/* I due locali separati da un muro formano un rettangolo? (bordo comune lungo quanto i lati di entrambi) */
+export function canMerge(plan, a, b) {
+  const n = neighbours(plan, a, b);
+  if (!n || !editable(n.A) || !editable(n.B)) return false;
+  if (n.A.kind === 'stairs' || n.B.kind === 'stairs') return false;
+  const sameY = Math.abs(n.A.y - n.B.y) < TOL && Math.abs(n.A.h - n.B.h) < TOL;
+  const sameX = Math.abs(n.A.x - n.B.x) < TOL && Math.abs(n.A.w - n.B.w) < TOL;
+  return (n.touchV && sameY) || (n.touchH && sameX);
+}
+
+/* Unisce due locali in uno: resta il più grande (nome, uso), l'altro sparisce con le sue porte sul muro tolto. */
+export function mergeRooms(plan, a, b) {
+  if (!canMerge(plan, a, b)) return { error: 'I due locali non formano un rettangolo: allinea prima i muri' };
+  const A = roomOf(plan, a);
+  const B = roomOf(plan, b);
+  const [keep, drop] = A.w * A.h >= B.w * B.h ? [A, B] : [B, A];
+  const x = Math.min(A.x, B.x);
+  const y = Math.min(A.y, B.y);
+  const w = round3(Math.max(A.x + A.w, B.x + B.w) - x);
+  const h = round3(Math.max(A.y + A.h, B.y + B.h) - y);
+  const merged = { ...keep, x, y, w, h, area: round3(w * h) };
+  delete merged.label;
+  const { width: W, length: L } = plan.dimensions;
+  const vertical = Math.abs(A.x + A.w - B.x) < TOL || Math.abs(B.x + B.w - A.x) < TOL;
+  const line = vertical ? (Math.abs(A.x + A.w - B.x) < TOL ? B.x : A.x) : (Math.abs(A.y + A.h - B.y) < TOL ? B.y : A.y);
+  const onSeam = (o) => { const q = openingLine(o, W, L); return q.orient === (vertical ? 'v' : 'h') && Math.abs(q.line - line) < 0.02; };
+  const rooms = plan.rooms.filter((r) => r.id !== drop.id).map((r) => (r.id === keep.id ? merged : r));
+  const furniture = (plan.furniture || []).map((f) => (f.room === drop.id ? { ...f, room: keep.id } : f));
+  const base = { ...plan, rooms, furniture, doors: plan.doors.filter((o) => !onSeam(o)), windows: plan.windows.filter((o) => !onSeam(o)) };
+  const done = finish(base, [keep.id]);
+  return { plan: done.plan, moved: [keep.id], dropped: done.dropped };
+}
+
+/* Apre il muro tra due locali (zona unica, come soggiorno e cucina): il muro e le sue porte spariscono, i locali restano. */
+export function openWall(plan, a, b) {
+  const n = neighbours(plan, a, b);
+  if (!n || !(n.touchV || n.touchH)) return { error: 'Questi locali non si toccano' };
+  if (n.A.kind === 'stairs' || n.B.kind === 'stairs') return { error: 'Il muro del vano scala non si apre' };
+  const keepZone = group(n.A);
+  const from = group(n.B);
+  if (keepZone === from) return { error: 'Sono già una zona unica' };
+  const { width: W, length: L } = plan.dimensions;
+  const runs = wallRuns(plan).filter((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+  const onSeam = (o) => {
+    const q = openingLine(o, W, L);
+    const mid = q.start + o.w / 2;
+    return runs.some((r) => r.orient === q.orient && Math.abs(r.line - q.line) < 0.02 && mid >= r.lo - 0.02 && mid <= r.hi + 0.02);
+  };
+  const rooms = plan.rooms.map((r) => (group(r) === from ? { ...r, zone: keepZone } : r));
+  const base = { ...plan, rooms, doors: plan.doors.filter((o) => !onSeam(o)), windows: plan.windows.filter((o) => !onSeam(o)) };
+  const done = finish(base, [a, b]);
+  return { plan: done.plan, moved: [a, b], dropped: done.dropped };
+}
+
+/* ── spostare un locale (il vano scala) lungo un asse, scambiando spazio con i locali ai due lati ── */
+
+/* Quanto si può far scorrere il locale lungo `axis` ('x' | 'y'): { min, max, lead, trail } o { error }. */
+export function roomSlide(plan, roomId, axis) {
+  const S = roomOf(plan, roomId);
+  if (!editable(S)) return { error: 'Questo locale non si sposta' };
+  const x = axis === 'x';
+  const lo = x ? S.y : S.x;
+  const hi = x ? S.y + S.h : S.x + S.w;
+  const end = x ? S.x + S.w : S.y + S.h;
+  const start = x ? S.x : S.y;
+  const rooms = plan.rooms.filter((r) => r.id !== roomId && r.kind !== 'garden');
+  const at = (r, side) => Math.abs((x ? (side ? r.x + r.w : r.x) : (side ? r.y + r.h : r.y)) - (side ? start : end)) < TOL;
+  const lead = rooms.filter((r) => at(r, 0));
+  const trail = rooms.filter((r) => at(r, 1));
+  const within = (r) => (x ? r.y : r.x) >= lo - TOL && (x ? r.y + r.h : r.x + r.w) <= hi + TOL;
+  const cover = (list) => same(unionOf(list.map((r) => (x ? [r.y, r.y + r.h] : [r.x, r.x + r.w]))), [[lo, hi]]);
+  const ok = (list) => list.length && list.every(within) && cover(list);
+  if (!ok(lead) || !ok(trail)) return { error: 'Il locale non ha su due lati opposti locali che possano cedere e prendere spazio' };
+  if ([...lead, ...trail].some((r) => r.kind === 'stairs')) return { error: 'Accanto c’è un altro vano scala' };
+  const size = (r) => (x ? r.w : r.h) - minSide(r);
+  return { min: -Math.min(...trail.map(size)), max: Math.min(...lead.map(size)), lead: lead.map((r) => r.id), trail: trail.map((r) => r.id) };
+}
+
+/* Sposta il locale di `delta` m (agganciato, entro i limiti): i locali davanti si accorciano, quelli dietro si allungano. */
+export function moveRoom(plan, roomId, axis, delta, slide = roomSlide(plan, roomId, axis)) {
+  if (slide.error) return slide;
+  const d = Math.max(slide.min, Math.min(slide.max, snap(delta)));
+  const x = axis === 'x';
+  const S = roomOf(plan, roomId);
+  const { width: W, length: L } = plan.dimensions;
+  const lead = new Set(slide.lead);
+  const trail = new Set(slide.trail);
+  const rooms = plan.rooms.map((r) => {
+    if (r.id === roomId) return { ...r, [x ? 'x' : 'y']: round3((x ? r.x : r.y) + d) };
+    if (lead.has(r.id)) return x ? { ...r, x: round3(r.x + d), w: round3(r.w - d), area: round3((r.w - d) * r.h) } : { ...r, y: round3(r.y + d), h: round3(r.h - d), area: round3(r.w * (r.h - d)) };
+    if (trail.has(r.id)) return x ? { ...r, w: round3(r.w + d), area: round3((r.w + d) * r.h) } : { ...r, h: round3(r.h + d), area: round3(r.w * (r.h + d)) };
+    return r;
+  });
+  // aperture sul bordo del locale (i quattro lati) vanno con lui
+  const span = x ? [S.y, S.y + S.h] : [S.x, S.x + S.w];
+  const lines = x ? [S.x, S.x + S.w] : [S.y, S.y + S.h];
+  const shift = (o) => {
+    const q = openingLine(o, W, L);
+    const mid = q.start + o.w / 2;
+    if (q.orient === (x ? 'v' : 'h')) {
+      // muri che attraversano l'asse del movimento: cambiano linea
+      return lines.some((l) => Math.abs(q.line - l) < 0.02) && mid >= span[0] - 0.02 && mid <= span[1] + 0.02
+        ? placeOpening(o, q.orient, q.line + d, q.start, W, L) : o;
+    }
+    // muri paralleli al movimento (sopra e sotto il locale): scorrono lungo il muro
+    const own = x ? [S.x, S.x + S.w] : [S.y, S.y + S.h];
+    const lineAt = x ? [S.y, S.y + S.h] : [S.x, S.x + S.w];
+    return lineAt.some((l) => Math.abs(q.line - l) < 0.02) && mid >= own[0] - 0.02 && mid <= own[1] + 0.02
+      ? placeOpening(o, q.orient, q.line, q.start + d, W, L) : o;
+  };
+  const furniture = (plan.furniture || []).map((f) => (f.room === roomId ? { ...f, [x ? 'x' : 'y']: round3(f[x ? 'x' : 'y'] + d) } : f));
+  const stairs = (plan.stairs || []).map((st) => (st.room === roomId
+    ? { ...st, [x ? 'x' : 'y']: round3(st[x ? 'x' : 'y'] + d), core: { ...st.core, [x ? 'x' : 'y']: round3(st.core[x ? 'x' : 'y'] + d) } } : st));
+  const moved = { ...plan, rooms, furniture, stairs, doors: plan.doors.map(shift), windows: plan.windows.map(shift) };
+  return { ...finish(moved, [...slide.lead, ...slide.trail]), delta: d };
+}
+
+/* ── scala: tipo, ingresso e verso, con la verifica che le porte del vano restino libere ── */
+
+const STAIR_MIN = { u: [2.3, 3.4], l: [3.2, 3.4], straight: [2.2, 4.6] };   // (larghezza, profondità) minime del vano (come STAIR_SLOT)
+const U_RUN = 3.2;
+
+/* Tratto libero (da, a) lungo il muro `side` del vano dove non ci sono gradini, o null: porta di _stair_free del motore. */
+export function stairFree(kind, entry, hand, geo, side) {
+  const ns = entry === 'N' || entry === 'S';
+  const D = ns ? geo.h : geo.w;
+  const A = ns ? geo.w : geo.h;
+  const fw = Math.min(1.0, A / 2);
+  const ends = ns ? ['N', 'S'] : ['E', 'W'];
+  const whole = side === 'N' || side === 'S' ? [geo.x, geo.x + geo.w] : [geo.y, geo.y + geo.h];
+  if (ends.includes(side)) {
+    if (kind === 'u') return side === entry && D - U_RUN >= 1.1 ? whole : null;
+    if (kind === 'l' && side !== entry) return null;
+    if (ns) return hand === 'E' ? [geo.x, geo.x + geo.w - fw] : [geo.x + fw, geo.x + geo.w];
+    return hand === 'S' ? [geo.y, geo.y + geo.h - fw] : [geo.y + fw, geo.y + geo.h];
+  }
+  if (kind !== 'u' && side === hand) return null;
+  const freeLen = kind === 'u' ? D - U_RUN : kind === 'l' ? D - fw - 0.1 : D;
+  const [lo, hi] = ns ? [geo.y, geo.y + geo.h] : [geo.x, geo.x + geo.w];
+  return entry === 'N' || entry === 'W' ? [lo, lo + freeLen] : [hi - freeLen, hi];
+}
+
+/* Il vano scala di una pianta: { room, stair } o null. */
+export function stairRoom(plan) {
+  const st = plan.stairs?.[0];
+  const room = st && roomOf(plan, st.room);
+  return room ? { room, stair: st } : null;
+}
+
+/* Combinazioni valide di tipo / ingresso / verso per il vano di questa pianta, con il motivo se non va: { ok, why }. */
+export function checkStair(plan, patch) {
+  const found = stairRoom(plan);
+  if (!found) return { ok: false, why: 'Nessun vano scala' };
+  const { room, stair } = found;
+  const type = patch.type ?? stair.type;
+  const entry = patch.entry ?? stair.entry;
+  let hand = patch.hand ?? stair.hand;
+  const ns = entry === 'N' || entry === 'S';
+  if (ns ? !['E', 'W'].includes(hand) : !['N', 'S'].includes(hand)) hand = ns ? 'W' : 'N';   // il verso segue il nuovo asse
+  const core = stair.core;
+  const [a, d] = STAIR_MIN[type];
+  const A = ns ? core.w : core.h;
+  const D = ns ? core.h : core.w;
+  if (A < a - 0.01 || D < d - 0.01) return { ok: false, why: `Il vano (${core.w.toFixed(1)} × ${core.h.toFixed(1)} m) è troppo piccolo per questa scala` };
+  const geo = { x: core.x + 0.1, y: core.y + 0.1, w: core.w - 0.2, h: core.h - 0.2 };
+  const { width: W, length: L } = plan.dimensions;
+  for (const run of wallRuns(plan).filter((r) => r.a === room.id || r.b === room.id)) {
+    const side = run.orient === 'v' ? (Math.abs(run.line - room.x) < 0.02 ? 'W' : 'E') : (Math.abs(run.line - room.y) < 0.02 ? 'N' : 'S');
+    for (const o of plan.doors) {   // le finestre possono stare dietro i gradini
+      const q = openingLine(o, W, L);
+      if (q.orient !== run.orient || Math.abs(q.line - run.line) > 0.02 || q.start < run.lo - 0.02 || q.start + o.w > run.hi + 0.02) continue;
+      const free = stairFree(type, entry, hand, geo, side);
+      const lo = q.start;
+      if (!free || lo < free[0] - 0.06 || lo + o.w > free[1] + 0.06) return { ok: false, why: 'Una porta del vano finirebbe sulla rampa', debug: { side, free, lo, w: o.w, type, entry, hand } };
+    }
+  }
+  return { ok: true, patch: { type, entry, hand } };
+}
+
+/* Applica tipo / ingresso / verso alla scala di questa pianta (scala e core). */
+export function setStair(plan, patch) {
+  const c = checkStair(plan, patch);
+  if (!c.ok) return { error: c.why };
+  const stairs = plan.stairs.map((st, i) => (i ? st : { ...st, ...c.patch, core: { ...st.core, ...c.patch } }));
+  return { plan: { ...plan, stairs } };
+}
