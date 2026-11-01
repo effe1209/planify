@@ -1049,7 +1049,7 @@ export default function PlanSvg({
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
-  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0,
+  coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0, bare = false,
   wallEdit = null, level = 'all', onMezzResize = null,
 }) {
   const uid = useId().replace(/:/g, '');
@@ -1471,7 +1471,7 @@ export default function PlanSvg({
         )}
       </g>
 
-      {!thumb && (
+      {!thumb && !bare && (   // bare: la tavola tecnica ha già nord, scala e cartiglio suoi
         <g fontFamily={FONT}>
           <g transform={`translate(${box.w - 46},52)`} stroke={INK} fill="none" strokeWidth="1.1">
             <circle r="15" />

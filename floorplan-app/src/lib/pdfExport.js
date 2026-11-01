@@ -19,6 +19,8 @@ import { scheduleFor } from './schedule';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
+import { A4, CARTOUCHE_H, LEGEND_W, drawingArea, fitScale, roomLegend } from './techSheet';
+import { getBranding } from './branding';
 import { fmt, fmtM } from './utils';
 
 export const INK = '#14181f';
@@ -357,17 +359,127 @@ function plumbingSummary(doc, project, data) {
     { onNewPage: () => doc.addPage('a4', 'portrait') });
 }
 
-/* Tavola quotata del piano: vista tecnica con le quote interne e i codici dei serramenti. */
-async function technicalPage(doc, floor, codes, extra) {
-  const pw = doc.internal.pageSize.getWidth();
-  const ph = doc.internal.pageSize.getHeight();
-  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK);
-  doc.text(safe(`${levelLabel(floor.level)}  ${floor.name} · pianta quotata`), M, 16);
-  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
-  doc.text(safe('Quote interne in metri (luce netta tra i muri) · codici dei serramenti come nell\'abaco'), M, 22);
-  const img = await floorImage(floor, [], { ...extra, codes, layers: { ...LAYERS, technical: true, alarm: false } });
-  const z = Math.min((pw - 2 * M) / img.w, (ph - 44) / img.h);
-  doc.addImage(img.data, 'PNG', M, 27, img.w * z, img.h * z, undefined, 'FAST');
+/* Il logo come data-URL con le sue misure (null se non si carica: il cartiglio usa il solo nome). */
+async function loadLogo(src) {
+  if (!src) return null;
+  try {
+    const data = src.startsWith('data:') ? src : await fetch(src).then((r) => (r.ok ? r.blob() : Promise.reject(new Error('logo')))).then((blob) => new Promise((ok, ko) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(fr.result);
+      fr.onerror = ko;
+      fr.readAsDataURL(blob);
+    }));
+    const img = await new Promise((ok, ko) => {
+      const im = new Image();
+      im.onload = () => ok(im);
+      im.onerror = ko;
+      im.src = data;
+    });
+    return { data, w: img.naturalWidth, h: img.naturalHeight };
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * Tavola tecnica A4 orizzontale: pianta quotata a scala vera (1:100, o più piccola se non entra), legenda dei locali,
+ * serramenti del piano, nord, scala grafica e cartiglio con il marchio (logo sostituibile, vedi lib/branding.js).
+ */
+async function technicalPage(doc, floor, codes, extra, ctx) {
+  const { project, branding, logo, schedule, sheet, sheets } = ctx;
+  const plan = floor.plan;
+  const area = drawingArea();
+  doc.setDrawColor(INK).setLineWidth(0.5).rect(A4.margin, A4.margin, A4.w - 2 * A4.margin, A4.h - 2 * A4.margin);
+  const img = await floorImage(floor, [], { ...extra, codes, bare: true, layers: { ...LAYERS, technical: true, alarm: false } }, 4);
+  const fit = fitScale(img.w, img.h, plan.scale, area);
+  doc.addImage(img.data, 'PNG', area.x + (area.w - fit.w) / 2, area.y + (area.h - fit.h) / 2, fit.w, fit.h, undefined, 'FAST');
+
+  // colonna di destra
+  const x0 = A4.w - A4.margin - LEGEND_W;
+  const x1 = A4.w - A4.margin;
+  doc.setDrawColor(INK).setLineWidth(0.3).line(x0, A4.margin, x0, A4.h - A4.margin);
+  const cx = x0 + 11;
+  const north = ((extra.north ?? 0) * Math.PI) / 180;
+  doc.setDrawColor(INK).setLineWidth(0.3).circle(cx, 25, 6.5);
+  const tip = [cx + Math.sin(north) * 5, 25 - Math.cos(north) * 5];
+  doc.setFillColor(INK).triangle(tip[0], tip[1], cx - Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 - Math.sin(north) * 2 + Math.cos(north) * 3.5,
+    cx + Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + Math.sin(north) * 2 + Math.cos(north) * 3.5, 'F');
+  doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text('N', cx, 14.8, { align: 'center' });
+  // scala grafica: 0-1-2-5 m alla scala di stampa
+  const mm = 1000 / fit.n;
+  const bx = x0 + 17;
+  doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(INK);
+  [[0, 1], [1, 2], [2, 5]].forEach(([m0, m1], i) => {
+    doc.setFillColor(i % 2 ? '#ffffff' : INK).setDrawColor(INK).setLineWidth(0.2).rect(bx + m0 * mm, 22, (m1 - m0) * mm, 2, 'FD');
+  });
+  [0, 1, 2, 5].forEach((m) => doc.text(m === 5 ? '5 m' : String(m), bx + m * mm, 28, { align: 'center' }));
+  doc.setFontSize(7).setTextColor(MUTED).text(safe(`Scala 1:${fit.n}${fit.fits ? '' : ' (non unificata)'}`), bx, 16);
+
+  // legenda locali
+  let y = 38;
+  const { rooms, total } = roomLegend(plan);
+  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('LOCALI', x0 + 4, y);
+  doc.setDrawColor(INK).setLineWidth(0.2).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
+  y += 6;
+  const limit = A4.h - A4.margin - CARTOUCHE_H - 40;
+  doc.setFont('helvetica', 'normal').setFontSize(7.5);
+  for (const r of rooms) {
+    if (y > limit) { doc.setTextColor(MUTED).text('...', x0 + 4, y); y += 4; break; }
+    doc.setTextColor(INK).text(safe(r.name), x0 + 4, y);
+    doc.text(`${fmt(r.area)} m²`.replace('²', '2'), x1 - 4, y, { align: 'right' });
+    y += 4;
+  }
+  doc.setFont('helvetica', 'bold').text('Totale', x0 + 4, y + 1);
+  doc.text(`${fmt(total)} m2`, x1 - 4, y + 1, { align: 'right' });
+  y += 8;
+
+  // serramenti di questo piano
+  const used = new Set([...(codes?.doors || []), ...(codes?.windows || [])].filter(Boolean));
+  const rows = schedule.rows.filter((r) => used.has(r.code));
+  if (rows.length && y < limit + 12) {
+    doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('SERRAMENTI', x0 + 4, y);
+    doc.setDrawColor(INK).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
+    y += 6;
+    doc.setFont('helvetica', 'normal').setFontSize(7.5);
+    for (const r of rows) {
+      if (y > limit + 22) break;
+      doc.setTextColor(INK).text(safe(r.code), x0 + 4, y);
+      doc.setTextColor(INK).text(safe(r.type), x0 + 13, y);
+      doc.text(`${Math.round(r.w * 100)} x ${Math.round(r.h * 100)} cm`, x1 - 4, y, { align: 'right' });
+      y += 4;
+    }
+  }
+
+  // cartiglio
+  const cy = A4.h - A4.margin - CARTOUCHE_H;
+  doc.setDrawColor(INK).setLineWidth(0.5).line(x0, cy, x1, cy);
+  doc.setLineWidth(0.2);
+  if (logo) {
+    const maxH = 11;
+    const w = Math.min(34, (maxH * logo.w) / logo.h);
+    doc.addImage(logo.data, undefined, x0 + 4, cy + 3, w, (w * logo.h) / logo.w, undefined, 'FAST');
+  }
+  doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(INK).text(safe(branding.name), x1 - 4, cy + 9, { align: 'right' });
+  doc.line(x0, cy + 16, x1, cy + 16);
+  const field = (label, value, yy, bold = false) => {
+    doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(MUTED).text(label, x0 + 4, yy);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal').setFontSize(8).setTextColor(INK).text(safe(value) || '', x0 + 24, yy);
+  };
+  field('PROGETTO', project.name || 'Progetto', cy + 21, true);
+  field('TAVOLA', `${levelLabel(floor.level)} ${floor.name} - pianta quotata`, cy + 26);
+  field('COMMITTENTE', branding.client, cy + 31);
+  field('PROGETTISTA', branding.designer, cy + 36);
+  field('N. PRATICA', branding.ref, cy + 41);
+  doc.line(x0, cy + 43.5, x1, cy + 43.5);
+  doc.line(x0 + 25, cy + 43.5, x0 + 25, A4.h - A4.margin);
+  doc.line(x0 + 50, cy + 43.5, x0 + 50, A4.h - A4.margin);
+  const cell = (label, value, xx) => {
+    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(MUTED).text(label, xx + 2, cy + 46.5);
+    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text(value, xx + 2, cy + 50.5);
+  };
+  cell('SCALA', `1:${fit.n}`, x0);
+  cell('FORMATO', 'A4', x0 + 25);
+  cell('TAV.', `${sheet} / ${sheets}`, x0 + 50);
 }
 
 /* Abaco dei serramenti di tutto il progetto. */
@@ -435,6 +547,11 @@ export async function exportProjectPdf(project) {
   const electric = project.electric ? planElectric(project, { level: project.electric.level }) : null;
   const plumbing = project.plumbing ? planPlumbing(project, { generator: project.plumbing.generator }) : null;
   const schedule = scheduleFor(project);
+  const branding = getBranding(project);
+  const logo = await loadLogo(branding.logo);
+  const sheetTotal = project.floors.filter((x) => x.plan && schedule.codes[x.id] && x.plan.rooms.some((r) => r.kind !== 'garden')).length;
+  let sheetNo = 0;
+  const techPages = new Set();
   for (const f of project.floors.filter((x) => x.plan)) {
     doc.addPage('a4', 'landscape');
     await floorPage(doc, f, devices, { stairs: byFloor[f.id], house });
@@ -445,7 +562,8 @@ export async function exportProjectPdf(project) {
     }
     if (schedule.codes[f.id] && f.plan.rooms.some((r) => r.kind !== 'garden')) {
       doc.addPage('a4', 'landscape');
-      await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house });
+      await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++sheetNo, sheets: sheetTotal });
+      techPages.add(doc.getNumberOfPages());   // la tavola ha il suo cartiglio: niente piè di pagina sopra
     }
     const pl = plumbing?.floors[f.id];
     if (pl?.points.length) {
@@ -471,7 +589,7 @@ export async function exportProjectPdf(project) {
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
-    footer(doc, project, i, pages);
+    if (!techPages.has(i)) footer(doc, project, i, pages);
   }
 
   const name = (project.name || 'progetto-planify').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

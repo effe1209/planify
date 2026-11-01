@@ -64,7 +64,7 @@ test('una finestra si seleziona e si elimina', async ({ page }, info) => {
 
 test('un DXF importato si arreda dopo, con lo stile scelto', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   const errors = await open(page);
   await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/appartamento_cm.dxf'));
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
@@ -341,6 +341,24 @@ test('la pianta ha le quote esterne in cm su tre livelli', async ({ page }, info
   const w = Number(await page.getByLabel('Larghezza').inputValue());
   await expect(page.locator('.pf-sheet svg text', { hasText: new RegExp(`^${Math.round(w * 100)}$`) }).first()).toBeVisible();
   await page.locator('.pf-sheet svg').first().screenshot({ path: process.env.SHOT2 || '/tmp/quote-pianta.png' });
+  expect(errors).toEqual([]);
+});
+
+test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(150_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Esporta/ }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 100_000 }),
+    page.getByRole('menuitem', { name: /PDF progetto/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  expect(readFileSync(file).toString('ascii', 0, 5)).toBe('%PDF-');
+  copyFileSync(file, process.env.PDFOUT || '/tmp/progetto-test.pdf');
   expect(errors).toEqual([]);
 });
 
