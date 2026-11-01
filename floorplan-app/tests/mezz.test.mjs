@@ -1,0 +1,70 @@
+/* Soppalco ridimensionabile, tappeti e sedie nel 3D. */
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { mezzLimits, mezzRatio, resizeMezz } from '../src/lib/mezz.js';
+import { rugsFor } from '../src/lib/rugs.js';
+import { checkCompliance } from '../src/lib/compliance.js';
+import { buildScene } from '../src/lib/scene3d.js';
+import { THEMES } from '../src/lib/themes.js';
+
+const room = (id, name, kind, x, y, w, h) => ({ id, name, kind, x, y, w, h });
+const mezz = { x: 8.4, y: 0, w: 3.6, h: 8, elev: 2.6, slab: 0.2, parapet: 1, open: ['W'],
+  stair: { x: 4.35, y: 6.9, w: 4.05, h: 0.9, up: 'E', type: 'straight', risers: 15 },
+  bath: { walls: [{ x: 10.6, y: 4, w: 1.4, h: 0.1 }, { x: 10.6, y: 5.4, w: 1.4, h: 0.1 }], door: { x: 10.6, y: 4.4, w: 0.1, h: 0.8 } } };
+const plan = {
+  dimensions: { width: 12, length: 8 }, scale: 50, wallThickness: 10, height: 5, mezzanine: mezz,
+  rooms: [room(1, 'Soggiorno', 'living', 0, 0, 8.4, 8), room(2, 'Bagno', 'bath', 8.4, 0, 3.6, 3), room(3, 'Cucina', 'kitchen', 8.4, 3, 3.6, 5)],
+  doors: [{ x: 0.35, y: 8, w: 0.9, rot: 0, entrance: true }], windows: [], walls: [],
+  furniture: [
+    { type: 'bed', x: 10, y: 1, w: 2, h: 1.6, facing: 'W', room: 1, elev: 2.6 },
+    { type: 'sofa', x: 3.5, y: 7.0, w: 0.8, h: 0.7, facing: 'N', room: 1 },
+    { type: 'table', x: 2, y: 2, w: 1.8, h: 0.9, facing: 'S', room: 1 },
+    { type: 'rug', x: 3, y: 4, w: 2.4, h: 1.6, facing: 'S', room: 1 },
+  ],
+};
+
+// limiti: min con il bagnetto 3 m, max entro metà del loft
+const lim = mezzLimits(plan);
+assert.equal(lim.min, 3);
+assert.ok(lim.max <= 0.5 * 12 * 8 / 8 + 1e-6 && lim.max > 3.6, JSON.stringify(lim));
+
+// allargare dal lato aperto: il bordo si sposta, la rampa lo segue, il muro esterno resta
+const big = resizeMezz(plan, 4.5);
+assert.ok(!big.error, big.error);
+assert.equal(big.plan.mezzanine.w, 4.5);
+assert.equal(big.plan.mezzanine.x + big.plan.mezzanine.w, 12);
+assert.ok(Math.abs(big.plan.mezzanine.stair.x - (4.35 - 0.9)) < 1e-6);
+assert.ok(mezzRatio(plan, 4.5) > 1 / 3);
+// l'arredo del soppalco contro il muro non si muove; il divano sotto la rampa nuova si toglie
+const bed = big.plan.furniture.find((f) => f.type === 'bed');
+assert.ok(bed.x >= big.plan.mezzanine.x && bed.x + bed.w <= 12);
+assert.ok(big.dropped.includes('sofa'), JSON.stringify(big.dropped));
+// stringere oltre il minimo non si può: resta al minimo
+assert.equal(resizeMezz(plan, 1).plan.mezzanine.w, 3);
+// oltre il massimo si ferma al massimo
+assert.equal(resizeMezz(plan, 20).plan.mezzanine.w, lim.max);
+
+// con il bordo aperto a est (soppalco sul lato ovest) l'asse è lo stesso ma al contrario
+const west = { ...plan, mezzanine: { ...mezz, x: 0, open: ['E'], stair: { ...mezz.stair, x: 3.6, up: 'W' }, bath: undefined } };
+const w2 = resizeMezz(west, 4.2);
+assert.ok(!w2.error && w2.plan.mezzanine.x === 0 && w2.plan.mezzanine.w === 4.2 && Math.abs(w2.plan.mezzanine.stair.x - 4.2) < 1e-6, JSON.stringify(w2.plan?.mezzanine));
+
+// a limite di norma: oltre 1/3 avviso, oltre metà errore
+const ids = (r) => r.items.map((i) => i.id);
+assert.ok(!ids(checkCompliance(plan, { type: 'loft', height: 5 })).includes('mezz-area'));
+assert.ok(ids(checkCompliance(big.plan, { type: 'loft', height: 5 })).includes('mezz-area'));
+
+// tappeti: quello messo a mano e quello sotto il tavolino; non sul soppalco
+const withCoffee = { ...plan, furniture: [...plan.furniture, { type: 'coffee_table', x: 5, y: 4.5, w: 1.2, h: 0.6, room: 1 }] };
+assert.equal(rugsFor(withCoffee).length, 2);
+assert.equal(rugsFor({ ...plan, furniture: plan.furniture.filter((f) => f.type !== 'rug') }).length, 0, 'il letto sul soppalco non ha tappeto');
+
+// 3D: tappeto basso, sedie attorno al tavolo (4 per lato lungo → 2 per 1,8 m + 2), bagnetto con muri bassi 2,2 m
+const g = buildScene(THREE, { ...withCoffee, furniture: [...withCoffee.furniture] }, THEMES.modern);
+const flat = g.children.filter((c) => c.geometry?.parameters?.height === 0.012);
+assert.equal(flat.length, 2, `tappeti ${flat.length}`);
+const chairSeats = g.children.filter((c) => c.geometry?.parameters?.height === 0.04 && Math.abs(c.position.y - 0.45) < 0.01);
+assert.ok(chairSeats.length >= 6, `sedute ${chairSeats.length}`);
+const bathWalls = g.children.filter((c) => c.userData.layer === 'MURI' && Math.abs(c.geometry.parameters.height - 2.2) < 1e-6);
+assert.equal(bathWalls.length, 2);
+console.log('mezz ok');

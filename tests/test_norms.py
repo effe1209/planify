@@ -47,10 +47,17 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
             up = [f for f in plan["furniture"] if f.get("elev")]
             assert any(f["type"] == "bed" for f in up) and all(ov(f, mz) for f in up), (w, l, seed)
             assert any(f["type"] == "wardrobe" for f in up), (w, l, seed)   # zona notte completa: letto e armadio
-            if (f := [x for x in up if x["type"] == "toilet"]):
+            if [x for x in up if x["type"] == "toilet"]:
                 assert any(x["type"] == "sink" for x in up), (w, l, seed)   # il sanitario viene con il lavabo
+                bt = mz["bath"]   # e sta in un bagnetto chiuso da pareti, con la porta
+                assert len(bt["walls"]) >= 3 and bt["door"]["w"] * bt["door"]["h"] > 0.05, (w, l, seed)
+            else:
+                assert "bath" not in mz, (w, l, seed)
             assert not [f for f in plan["furniture"] if not f.get("elev") and ov(f, mz["stair"])], (w, l, seed)
             assert not [n for n in plan["notes"] if "non" in n.lower() and "raggiungibile" in n.lower()]
+    big = planner.generate(14, 10, "open-space", num_rooms=1, seed=1)   # soggiorno grande: tavolino in proporzione
+    ct = next(f for f in big["furniture"] if f["type"] == "coffee_table")
+    assert max(ct["w"], ct["h"]) >= 1.3 and min(ct["w"], ct["h"]) >= 0.7, ct
     small = planner.generate(6.5, 5, "loft", num_rooms=1, seed=1)
     assert "mezzanine" not in small and any("soppalco non entra" in n for n in small["notes"])   # sotto 7 × 5 m: loft a un livello
     assert "mezzanine" not in planner.generate(12, 8, "open-space", num_rooms=1, seed=1)   # il monolocale non ha soppalco

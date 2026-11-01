@@ -396,6 +396,9 @@ class Layout:
             m = self.mezz
             m.update(rect=m["rect"].transposed(), stair=m["stair"].transposed(), up=TRANSPOSE_SIDE[m["up"]],
                      open=[TRANSPOSE_SIDE[x] for x in m["open"]])
+            if m.get("walls"):
+                m["walls"] = [q.transposed() for q in m["walls"]]
+                m["door"] = m["door"].transposed()
 
     # -- specchiatura (varianti della stessa pianta) -----------------------------
     def flip(self, fx: bool, fy: bool):
@@ -433,6 +436,9 @@ class Layout:
         if self.mezz:
             m = self.mezz
             m["rect"], m["stair"] = fr(m["rect"]), fr(m["stair"])
+            if m.get("walls"):
+                m["walls"] = [fr(q) for q in m["walls"]]
+                m["door"] = fr(m["door"])
             def side(x):
                 if fx: x = FLIP_X.get(x, x)
                 if fy: x = FLIP_Y.get(x, x)
@@ -1017,8 +1023,15 @@ def _place_lounge(P: Placer, room: Room, sofa: Item):
     half = (sofa.rect.h if sofa.facing in "NS" else sofa.rect.w) / 2
     near = (sofa.rect.cx + dx * (half + 0.6), sofa.rect.cy + dy * (half + 0.6))
     horiz = sofa.facing in "NS"
-    w, h = (1.0, 0.55) if horiz else (0.55, 1.0)
-    P.place_free(room, "coffee_table", w, h, near=near, gap=0.35, zone_gap=0.2, step=0.1)
+    # il tavolino cresce con il divano e con il soggiorno: circa due terzi del divano, fino a 1,6 × 0,85 m
+    inn = P.inner(room)
+    sofa_len = sofa.rect.w if horiz else sofa.rect.h
+    long_ = clamp(snap(sofa_len * 0.62), 1.0, 1.6 if inn.w * inn.h >= 22 else 1.3)
+    deep = clamp(snap(long_ * 0.55), 0.55, 0.85)
+    for ln, dp in ((long_, deep), (max(1.0, long_ - 0.3), max(0.55, deep - 0.15)), (1.0, 0.55)):
+        w, h = (ln, dp) if horiz else (dp, ln)
+        if P.place_free(room, "coffee_table", w, h, near=near, gap=0.35, zone_gap=0.2, step=0.1):
+            break
 
 
 def _place_armchair(P: Placer, room: Room):
@@ -2846,17 +2859,25 @@ def furnish_mezzanine(lay: Layout) -> None:
     else:
         return
     # armadio: il più lungo che lascia ancora posto a un sanitario (WC + lavabo, ~1,4 m lungo il muro)
-    wc_len = 1.4
-    wl = next((w for w in (2.4, 1.8, 1.2) if y + w + wc_len <= stop + 1e-6), None)
+    wc_len = 1.5
+    wl = next((w for w in (2.4, 1.8, 1.2) if y + w + 0.2 + wc_len <= stop + 1e-6), None)
     if wl is None:
         wl = next((w for w in (1.8, 1.2) if y + w <= stop + 1e-6), None)
     if wl:
         put("wardrobe", depth, wl, y)
         y += wl + 0.2
-    if y + wc_len <= stop + 1e-6 and x1 - x0 >= 1.5:
-        put("toilet", 0.65, 0.4, y)
-        put("sink", 0.45, 0.5, y + 0.4 + 0.2)
-        y += wc_len
+    cd, cl = 1.4, 1.5   # bagnetto chiuso: profondità dal muro esterno e lunghezza lungo il muro
+    if y + cl <= stop + 1e-6 and x1 - x0 >= cd + 0.9:
+        put("toilet", 0.65, 0.4, y + 0.2)
+        put("sink", 0.45, 0.5, y + 0.2 + 0.4 + 0.15)
+        cx0 = x1 - cd if side == "E" else x0
+        dx = cx0 if side == "E" else cx0 + cd - 0.1    # il muro verso il soppalco (con la porta)
+        tk = 0.1
+        gap0 = y + (cl - DOOR_W_BATH) / 2
+        m["walls"] = [Rect(cx0, y, cd, tk), Rect(cx0, y + cl - tk, cd, tk),
+                      Rect(dx, y, tk, gap0 - y), Rect(dx, gap0 + DOOR_W_BATH, tk, y + cl - gap0 - DOOR_W_BATH)]
+        m["door"] = Rect(dx, gap0, tk, DOOR_W_BATH)
+        y += cl
     elif y + 1.2 <= stop - 0.6 and clear >= 0.85:
         desk = put("desk", 0.55, 1.2, y)
         ch = Rect(desk.rect.x - 0.52 if side == "E" else desk.rect.x2 + 0.02, desk.rect.cy - 0.25, 0.5, 0.5)
@@ -3952,10 +3973,13 @@ def _export_mezzanine(lay: Layout) -> dict:
         return {}
     r, st = m["rect"], m["stair"]
     box = lambda q: {"x": round(q.x, 3), "y": round(q.y, 3), "w": round(q.w, 3), "h": round(q.h, 3)}
-    return {"height": m["height"], "mezzanine": {
+    out = {
         **box(r), "elev": m["elev"], "slab": MEZZ_SLAB, "parapet": m["parapet"], "open": m["open"],
         "stair": {**box(st), "up": m["up"], "type": "straight", "risers": m.get("risers", MEZZ_RISERS)},
-    }}
+    }
+    if m.get("walls"):   # bagnetto chiuso sul soppalco: tramezzi (con il varco della porta) e porta
+        out["bath"] = {"walls": [box(q) for q in m["walls"]], "door": box(m["door"])}
+    return {"height": m["height"], "mezzanine": out}
 
 
 def serialize(lay: Layout, palette: dict, seed: int) -> dict:

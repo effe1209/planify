@@ -14,6 +14,8 @@ import Rug from './Rug';
 import Decor from './Decor';
 import { decorFor } from '../lib/decor';
 import { itemProblems, snapItem } from '../lib/furnitureEdit';
+import { rugsFor } from '../lib/rugs';
+import { mezzAxis, mezzLimits, resizeMezz } from '../lib/mezz';
 import PlumbingLayer from './PlumbingLayer';
 import CoverageLayer from './CoverageLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
@@ -850,45 +852,6 @@ function HouseMark({ plan, s, house }) {
   );
 }
 
-function rugsFor(plan) {
-  const rooms = new Map(plan.rooms.map((r) => [r.id, r]));
-  const out = [];
-  const clipTo = (r, room) => {
-    const m = 0.25;
-    const x0 = Math.max(r.x, room.x + m);
-    const y0 = Math.max(r.y, room.y + m);
-    const x1 = Math.min(r.x + r.w, room.x + room.w - m);
-    const y1 = Math.min(r.y + r.h, room.y + room.h - m);
-    return x1 - x0 > 0.8 && y1 - y0 > 0.8 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
-  };
-  for (const it of plan.furniture) {
-    const room = rooms.get(it.room);
-    if (!room) continue;
-    let rug = null;
-    if (it.type === 'coffee_table') {
-      rug = { x: it.x - 0.55, y: it.y - 0.55, w: it.w + 1.1, h: it.h + 1.1 };
-    } else if (it.type === 'bed' && it.w >= 1.3 && it.h >= 1.3) {
-      // dalla metà del letto verso i piedi, 50 cm oltre i lati
-      const f = it.facing || 'S';
-      const hx = f === 'E' ? it.w / 2 : 0;
-      const hy = f === 'S' ? it.h / 2 : 0;
-      const w = f === 'E' || f === 'W' ? it.w / 2 + 0.6 : it.w + 1.0;
-      const h = f === 'S' || f === 'N' ? it.h / 2 + 0.6 : it.h + 1.0;
-      rug = {
-        x: f === 'E' || f === 'W' ? it.x + hx - (f === 'W' ? 0.6 : 0) : it.x - 0.5,
-        y: f === 'S' || f === 'N' ? it.y + hy - (f === 'N' ? 0.6 : 0) : it.y - 0.5,
-        w, h,
-      };
-    }
-    const clipped = rug && clipTo(rug, room);
-    // stanze di forma libera: il tappeto si disegna solo se sta tutto dentro (a 25 cm dal muro)
-    const inside = (r) => !room.poly || [[r.x - 0.25, r.y - 0.25], [r.x + r.w + 0.25, r.y - 0.25],
-      [r.x + r.w + 0.25, r.y + r.h + 0.25], [r.x - 0.25, r.y + r.h + 0.25]].every((p) => pointInPolygon(p, room.poly));
-    if (clipped && inside(clipped)) out.push(clipped);
-  }
-  return out;
-}
-
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
@@ -1046,12 +1009,13 @@ export default function PlanSvg({
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
   coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0,
-  wallEdit = null, level = 'all',
+  wallEdit = null, level = 'all', onMezzResize = null,
 }) {
   const uid = useId().replace(/:/g, '');
   // modifica di muri e aperture: durante il trascinamento si mostra l'anteprima al posto della pianta
   const [preview, setPreview] = useState(null);
   const plan = preview || planProp;
+  const [mezzDrag, setMezzDrag] = useState(null);   // trascinamento del bordo aperto del soppalco
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
   const gRef = useRef(null);
   const [drag, setDrag] = useState(null);   // { index, start, orig, x, y }
@@ -1186,7 +1150,7 @@ export default function PlanSvg({
         {showFurn && (
           <g filter={ref(tech ? 'mono' : 'fshadow')} opacity={furnOpacity}>
             {/* camminamenti e siepi sotto, poi il resto (attenuati nella tavola elettrica) */}
-            {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => !it.elev && !coveredByStairs(it, stairs))
+            {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => !it.elev && it.type !== 'rug' && !coveredByStairs(it, stairs))
               .sort(([a], [b]) => (GROUND.has(b.type) ? 1 : 0) - (GROUND.has(a.type) ? 1 : 0))
               .map(([it, i]) => <Furn key={`f-${i}`} item={it} scale={s} theme={theme} />)}
           </g>
@@ -1208,6 +1172,9 @@ export default function PlanSvg({
                   .map(([it, i]) => <Furn key={`mf-${i}`} item={it} scale={s} theme={theme} />)}
               </g>
             )}
+            {plan.mezzanine.bath && level !== 'below' && plan.mezzanine.bath.walls.map((q, i) => (
+              <rect key={`mb-${i}`} x={q.x * s} y={q.y * s} width={q.w * s} height={q.h * s} fill="#1f2933" />
+            ))}
             <Stair st={{ ...plan.mezzanine.stair, id: 'mezzanine', role: 'none' }} s={s} />
             {!thumb && layers.labels && (() => {
               const mz = plan.mezzanine;
@@ -1356,7 +1323,7 @@ export default function PlanSvg({
         ))}
 
         {/* arredi: clic per selezionare, trascinamento per spostare (aggancio a griglia e muri) */}
-        {editable && showFurn && plan.furniture.map((raw, i) => {
+        {editable && showFurn && plan.furniture.map((raw, i) => [raw, i]).sort(([a], [b]) => (b.type === 'rug' ? 1 : 0) - (a.type === 'rug' ? 1 : 0)).map(([raw, i]) => {   // i tappeti sotto: non coprono i mobili che hanno sopra
           const it = placed(raw, i);
           if (GROUND.has(it.type)) return null;
           if (plan.mezzanine && ((level === 'below' && it.elev) || (level === 'above' && !it.elev))) return null;
@@ -1386,6 +1353,42 @@ export default function PlanSvg({
           );
         })}
 
+        {editable && !thumb && level === 'above' && plan.mezzanine && onMezzResize && (() => {
+          // maniglia sul bordo aperto del soppalco: si tira per allargarlo o stringerlo (la rampa lo segue)
+          const mz = plan.mezzanine;
+          const { side, vertical } = mezzAxis(plan);
+          const at = side === 'W' ? mz.x : side === 'E' ? mz.x + mz.w : side === 'N' ? mz.y : mz.y + mz.h;
+          const pad = 8;
+          const rect = vertical
+            ? { x: at * s - pad, y: mz.y * s, width: pad * 2, height: mz.h * s }
+            : { x: mz.x * s, y: at * s - pad, width: mz.w * s, height: pad * 2 };
+          const sizeAt = (e, base) => {
+            const m = toMeters(e);
+            const b = base.mezzanine;
+            const q = vertical ? m.x : m.y;
+            return side === 'W' ? b.x + b.w - q : side === 'E' ? q - b.x : side === 'N' ? b.y + b.h - q : q - b.y;
+          };
+          return (
+            <rect {...rect} fill="#1f4fd8" fillOpacity={mezzDrag ? 0.35 : 0.14} stroke="#1f4fd8" strokeWidth="1.4"
+              style={{ cursor: vertical ? 'col-resize' : 'row-resize', touchAction: 'none' }}
+              onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setMezzDrag({ base: planProp, size: null }); }}
+              onPointerMove={(e) => {
+                if (!mezzDrag) return;
+                const res = resizeMezz(mezzDrag.base, sizeAt(e, mezzDrag.base));
+                if (res.error || res.unchanged) { if (res.unchanged) { setPreview(null); setMezzDrag({ ...mezzDrag, size: null }); } return; }
+                setMezzDrag({ ...mezzDrag, size: res.size });
+                setPreview(res.plan);
+              }}
+              onPointerUp={() => {
+                const d = mezzDrag;
+                setMezzDrag(null);
+                setPreview(null);
+                if (d?.size != null) onMezzResize(d.size);
+              }}
+              onPointerCancel={() => { setMezzDrag(null); setPreview(null); }}
+              onClick={(e) => e.stopPropagation()} />
+          );
+        })()}
         {wallEdit && !thumb && <WallEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />}
 
         {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
