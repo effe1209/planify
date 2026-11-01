@@ -492,7 +492,7 @@
 .pf-thumb { position: relative; padding: 0; cursor: default; }
 .pf-thumb-open { width: 100%; background: none; border: none; padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; align-items: center; color: inherit; }
 .pf-thumb-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.pf-thumb-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
+.pf-thumb-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; opacity: 1; }
 .pf-thumb:hover .pf-thumb-actions, .pf-thumb:focus-within .pf-thumb-actions { opacity: 1; }
 .pf-thumb-actions .pf-btn-icon { background: var(--bg-panel); box-shadow: var(--shadow-sm); }
 .pf-btn-icon.is-starred { color: #f59e0b; }
