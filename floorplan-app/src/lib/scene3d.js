@@ -681,8 +681,9 @@ export function addGround(THREE, scene, model) {
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(center.x, grade - 0.01, center.z);
   ground.receiveShadow = true;
+  ground.userData.layer = 'TERRENO';
   scene.add(ground);
-  return { bb, center, size };
+  return { bb, center, size, ground };
 }
 
 /*

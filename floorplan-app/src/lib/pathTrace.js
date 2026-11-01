@@ -42,7 +42,7 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   // la grana (bump) è per il tempo reale; nel path tracing la danno già i rimbalzi, e le texture in più rallentano l'impacchettamento
   built.model.traverse((o) => { if (o.isMesh) [].concat(o.material).forEach((m) => { if (m.bumpMap) { m.bumpMap = null; m.needsUpdate = true; } }); });
   // il path tracing è fisicamente corretto: un interno con poche finestre è scuro, la macchina fotografica compensa con l'esposizione
-  renderer.toneMappingExposure = t.exposure * (lampsOn ? 1.6 : 2.6);
+  renderer.toneMappingExposure = (built.exposure || t.exposure) * 2.3;   // il tempo reale ha già trovato l'esposizione giusta per questa scena
 
   // cielo come ambiente: più azzurro in alto, terreno chiaro in basso; di sera è scuro
   const sky = new GradientEquirectTexture(32);

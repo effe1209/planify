@@ -75,6 +75,7 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   scene.add(model);
   const bounds = addGround(THREE, scene, model);
   const { center, size, bb } = bounds;
+  if (bounds.ground && t.ground < 1) bounds.ground.material.color.multiplyScalar(t.ground);   // di sera il prato non è chiaro come di giorno
   const W = size.x, L = size.z, H = bb.max.y;
 
   // luce: sole attraverso le finestre, ambiente (cielo) e riempimento morbido

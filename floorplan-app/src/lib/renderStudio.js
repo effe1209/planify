@@ -15,11 +15,11 @@ export const SIZES = [
 
 /* Sole: azimut dal nord del foglio (gradi, in senso orario), altezza sull'orizzonte, colore e intensità; cielo e luce d'ambiente. */
 export const TIMES = [
-  { id: 'morning', label: 'Mattina', az: 100, el: 24, color: '#ffe6c2', sun: 2.6, hemi: 0.22, env: 0.3, exposure: 0.8, bloom: 0.12, lamps: false, sky: '#d3e5f5' },
-  { id: 'noon', label: 'Mezzogiorno', az: 180, el: 62, color: '#fffaf0', sun: 3.2, hemi: 0.25, env: 0.32, exposure: 0.75, bloom: 0.1, lamps: false, sky: '#bfdaf3' },
-  { id: 'afternoon', label: 'Pomeriggio', az: 215, el: 38, color: '#fff3e0', sun: 2.9, hemi: 0.22, env: 0.3, exposure: 0.8, bloom: 0.12, lamps: false, sky: '#d2e2f1' },
-  { id: 'sunset', label: 'Tramonto', az: 270, el: 9, color: '#ff9f5a', sun: 2.4, hemi: 0.14, env: 0.18, exposure: 0.95, bloom: 0.22, lamps: true, sky: '#f1b98e' },
-  { id: 'evening', label: 'Sera', az: 215, el: 14, color: '#8ea6ff', sun: 0.3, hemi: 0.08, env: 0.08, exposure: 1.2, bloom: 0.3, lamps: true, sky: '#1e2a47' },
+  { id: 'morning', label: 'Mattina', az: 100, el: 24, color: '#ffe6c2', sun: 2.6, hemi: 0.22, env: 0.3, exposure: 0.8, bloom: 0.12, lamps: false, ground: 1, sky: '#d3e5f5' },
+  { id: 'noon', label: 'Mezzogiorno', az: 180, el: 62, color: '#fffaf0', sun: 3.2, hemi: 0.25, env: 0.32, exposure: 0.75, bloom: 0.1, lamps: false, ground: 1, sky: '#bfdaf3' },
+  { id: 'afternoon', label: 'Pomeriggio', az: 215, el: 38, color: '#fff3e0', sun: 2.9, hemi: 0.22, env: 0.3, exposure: 0.8, bloom: 0.12, lamps: false, ground: 1, sky: '#d2e2f1' },
+  { id: 'sunset', label: 'Tramonto', az: 270, el: 9, color: '#ff9f5a', sun: 2.4, hemi: 0.14, env: 0.18, exposure: 0.95, bloom: 0.22, lamps: true, ground: 0.6, sky: '#f1b98e' },
+  { id: 'evening', label: 'Sera', az: 215, el: 14, color: '#8ea6ff', sun: 0.3, hemi: 0.16, env: 0.16, exposure: 1.2, bloom: 0.3, lamps: true, ground: 0.2, sky: '#1e2a47' },
 ];
 
 export const BACKGROUNDS = [

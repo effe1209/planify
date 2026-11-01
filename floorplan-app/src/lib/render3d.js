@@ -30,7 +30,8 @@ export async function houseImage(project, {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = t.exposure;
+    let exposure = t.exposure;
+    renderer.toneMappingExposure = exposure;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
     const v = view || cameraViews(project, { aspect: width / height })[0];
@@ -43,6 +44,49 @@ export async function houseImage(project, {
     const camera = new THREE.PerspectiveCamera(v.fov, width / height, 0.05, 400);
     camera.position.set(...v.position);
     camera.lookAt(new THREE.Vector3(...v.target));
+
+    // esposizione automatica: si prova il render in piccolo, si misura la luminosità di ciò che non è sfondo e si corregge
+    // l'esposizione finché l'immagine non è né nera né bruciata (stile scuro, sera, GPU diversa: non importa)
+    {
+      const pw = 256;
+      const ph = Math.max(2, Math.round((256 * height) / width));
+      const probeCanvas = document.createElement('canvas');
+      probeCanvas.width = pw;
+      probeCanvas.height = ph;
+      const pctx = probeCanvas.getContext('2d', { willReadFrequently: true });
+      // colore dello sfondo in sRGB 0-255 (per non contarlo nella luminosità)
+      const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
+      renderer.setSize(pw, ph, false);
+      camera.aspect = pw / ph;
+      camera.updateProjectionMatrix();
+      for (let i = 0; i < 3; i++) {
+        renderer.toneMappingExposure = exposure;
+        renderer.render(scene, camera);
+        pctx.clearRect(0, 0, pw, ph);
+        pctx.drawImage(canvas, 0, 0, pw, ph);
+        const px = pctx.getImageData(0, 0, pw, ph).data;
+        const lum = [];
+        for (let k = 0; k < px.length; k += 4) {
+          if (px[k + 3] < 200) continue;   // trasparente
+          if (!bg.alpha && Math.abs(px[k] - bgSrgb[0]) < 6 && Math.abs(px[k + 1] - bgSrgb[1]) < 6 && Math.abs(px[k + 2] - bgSrgb[2]) < 6) continue;   // sfondo
+          lum.push((0.2126 * px[k] + 0.7152 * px[k + 1] + 0.0722 * px[k + 2]) / 255);
+        }
+        if (lum.length < px.length / 4 * 0.03) break;
+        lum.sort((x, y) => x - y);
+        const med = lum[Math.floor(lum.length / 2)];
+        const target = built.lampsOn ? 0.2 : 0.52;   // la sera resta più scura, ma mai nera
+        if (Math.abs(med - target) < 0.04) break;
+        // la risposta è circa una potenza: si corregge con un esponente per non oscillare
+        // di giorno l'esposizione può cambiare molto (stili scuri); di sera resta vicina a quella della scena, che deve restare notte
+        const [lo, hi] = built.lampsOn ? [t.exposure * 0.6, t.exposure * 1.5] : [0.35, 6];
+        exposure = THREE.MathUtils.clamp(exposure * (target / Math.max(0.02, med)) ** 1.3, lo, hi);
+      }
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.toneMappingExposure = exposure;
+      built.exposure = exposure;
+    }
 
     if (quality === 'high') {
       const { pathTraceImage } = await import('./pathTrace');

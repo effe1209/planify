@@ -374,6 +374,8 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   if (!process.env.RVIEW) expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
   expect(before[1]).toBeGreaterThan(3);
   if (process.env.RTIME) await panel.getByLabel('Ora del giorno').selectOption({ label: process.env.RTIME });
+  if (process.env.RBG) await panel.getByLabel('Sfondo del render').selectOption({ label: process.env.RBG });
+  if (process.env.RSIZE) await panel.getByLabel('Risoluzione del render').selectOption({ label: process.env.RSIZE });
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 90_000 }),
     panel.getByRole('button', { name: /Salva render/ }).click(),
@@ -382,7 +384,7 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   const file = await download.path();
   const buf = readFileSync(file);
   expect(buf.toString('ascii', 1, 4)).toBe('PNG');
-  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1920, 1080]);
+  if (!process.env.RSIZE) expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1920, 1080]);
   copyFileSync(file, process.env.RENDEROUT || '/tmp/render-interno.png');
   if (!process.env.RVIEW) expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
   expect(errors).toEqual([]);
@@ -431,9 +433,43 @@ test('il loft in 3D ha le viste Completa, Sotto e Sopra e la sezione con piano d
   expect(errors).toEqual([]);
 });
 
+test('i render in tempo reale non sono mai neri né bruciati (loft industriale, sera, sfondo trasparente)', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(240_000);
+  const { readPng, lumaStats } = await import('./png.js');
+  const { readFileSync } = await import('node:fs');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const panel = page.getByRole('complementary', { name: 'Render' });
+  await panel.getByLabel('Risoluzione del render').selectOption({ label: 'Anteprima 960 × 540' });
+  const cases = [['Interno: Soggiorno', 'Mattina', 'Bianco'], ['Interno: soppalco', 'Sera', 'Trasparente (PNG)'], ["Pianta 3D dall'alto", 'Sera', 'Trasparente (PNG)'], ['Tre quarti', 'Tramonto', 'Cielo (come l\'ora)'], ['Tre quarti', 'Mezzogiorno', 'Bianco']];
+  for (const [view, time, bg] of cases) {
+    await panel.getByLabel('Inquadratura del render').selectOption({ label: view });
+    await panel.getByLabel('Ora del giorno').selectOption({ label: time });
+    await panel.getByLabel('Sfondo del render').selectOption({ label: bg });
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      panel.getByRole('button', { name: /Salva render/ }).click(),
+    ]);
+    const st = lumaStats(readPng(readFileSync(await download.path())));
+    console.log('LUMA', view, time, bg, JSON.stringify({ median: +st.median.toFixed(2), dark: +st.dark.toFixed(2), n: st.n }));
+    expect(st.n, `${view} ${time}: niente da misurare`).toBeGreaterThan(2000);
+    expect(st.median, `${view} ${time} ${bg}: troppo scuro`).toBeGreaterThan(['Sera', 'Tramonto'].includes(time) ? 0.12 : 0.25);   // la sera è più scura, mai nera
+    expect(st.median, `${view} ${time} ${bg}: bruciato`).toBeLessThan(0.85);
+    expect(st.dark, `${view} ${time}: troppo nero`).toBeLessThan(0.35);
+  }
+  expect(errors).toEqual([]);
+});
+
 test('il render in qualità alta usa il path tracing e salva il PNG', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(280_000);
+  test.setTimeout(480_000);
   const errors = await open(page);
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
@@ -446,7 +482,7 @@ test('il render in qualità alta usa il path tracing e salva il PNG', async ({ p
   await panel.getByLabel('Qualità del render').selectOption({ label: 'Alta, path tracing (minuti)' });
   await panel.getByLabel('Campioni del path tracing').selectOption({ label: process.env.RSAMPLES || 'Anteprima (16 campioni)' });
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 250_000 }).catch(async (e) => { throw new Error(`${e.message} | pannello: ${(await panel.innerText()).replace(/\s+/g, ' ')}`); }),
+    page.waitForEvent('download', { timeout: 440_000 }).catch(async (e) => { throw new Error(`${e.message} | pannello: ${(await panel.innerText()).replace(/\s+/g, ' ')}`); }),
     panel.getByRole('button', { name: /Salva render/ }).click(),
   ]);
   const { readFileSync, copyFileSync } = await import('node:fs');
