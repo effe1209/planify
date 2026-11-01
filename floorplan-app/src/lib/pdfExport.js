@@ -10,6 +10,9 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { jsPDF } from 'jspdf';
 import PlanSvg from '../components/PlanSvg';
+import { Drawing } from '../components/SheetsView';
+import { elevation, levelMarks, section } from './elevation';
+import { ROOF_DEFAULTS } from './roof';
 import { TYPE_NAME } from '../constants';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
 import { APPLIANCES, KIND_ORDER, KINDS, LEVELS, planElectric } from './electric';
@@ -19,6 +22,8 @@ import { scheduleFor } from './schedule';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
+import { A4, CARTOUCHE_H, LEGEND_W, drawingArea, fitScale, roomLegend } from './techSheet';
+import { getBranding } from './branding';
 import { fmt, fmtM } from './utils';
 
 export const INK = '#14181f';
@@ -62,6 +67,79 @@ export async function floorImage(floor, devices, extra, k = 3) {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/* Un elemento React con un SVG → PNG (stesso giro di floorImage). */
+async function svgToPng(element, k = 3) {
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  flushSync(() => root.render(element));
+  const { xml, w, h } = serializeSvg(host.querySelector('svg'));
+  root.unmount();
+  const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('Rendering del disegno non riuscito'));
+      im.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * k);
+    canvas.height = Math.round(h * k);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { data: canvas.toDataURL('image/png'), w, h };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/*
+ * Prospetti N/S/E/O (con il tetto) e due sezioni (senza tetto, per vedere dentro). Nel loft il taglio passa per la scala
+ * del soppalco, così la sezione mostra gradini, solaio, parapetto e le altezze libere (rosse se fuori norma).
+ */
+async function elevationPages(doc, project, north) {
+  const levels = levelMarks(project);
+  if (!levels.length) return;
+  const first = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).sort((a, b) => a.level - b.level)
+    .find((f) => f.plan.mezzanine) || project.floors.find((f) => typeof f.level === 'number' && f.plan?.rooms?.length);
+  const dims = first.plan.dimensions;
+  let cutY = dims.length / 2;
+  let cutX = dims.width / 2;
+  const st = first.plan.mezzanine?.stair;
+  if (st) {
+    if (st.up === 'E' || st.up === 'W') cutY = st.y + st.h / 2;
+    else cutX = st.x + st.w / 2;
+  }
+  const roof = { ...ROOF_DEFAULTS };
+  const drawings = [
+    ...['down', 'up', 'right', 'left'].map((s) => elevation(project, s, { north, roof })),
+    section(project, 'x', cutY),
+    section(project, 'y', cutX),
+  ].filter((d) => d.shapes.length);
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const put = async (list, cols, title, sub) => {
+    if (!list.length) return;
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text(safe(title), M, 16);
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED).text(safe(sub), M, 22);
+    const rows = Math.ceil(list.length / cols);
+    const cw = (pw - 2 * M - 6 * (cols - 1)) / cols;
+    const chh = (ph - 28 - 16 - 6 * (rows - 1)) / rows;
+    for (let i = 0; i < list.length; i++) {
+      const img = await svgToPng(createElement(Drawing, { d: list[i], marks: levels }), 3);
+      const z = Math.min(cw / img.w, chh / img.h);
+      const x = M + (i % cols) * (cw + 6) + (cw - img.w * z) / 2;
+      const y = 27 + Math.floor(i / cols) * (chh + 6);
+      doc.addImage(img.data, 'PNG', x, y, img.w * z, img.h * z, undefined, 'FAST');
+    }
+  };
+  await put(drawings.slice(0, 4), 2, 'Prospetti', 'Quattro facciate con il tetto; quote dei piani a sinistra, +0,00 = piano terra');
+  await put(drawings.slice(4), 1, 'Sezioni', st ? 'Tagli per la scala del soppalco: altezze libere in cm, in rosso se fuori norma' : 'Sezione longitudinale e trasversale con le altezze dei locali');
 }
 
 export const grossArea = (plan) => plan.stats?.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0);
@@ -357,17 +435,127 @@ function plumbingSummary(doc, project, data) {
     { onNewPage: () => doc.addPage('a4', 'portrait') });
 }
 
-/* Tavola quotata del piano: vista tecnica con le quote interne e i codici dei serramenti. */
-async function technicalPage(doc, floor, codes, extra) {
-  const pw = doc.internal.pageSize.getWidth();
-  const ph = doc.internal.pageSize.getHeight();
-  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK);
-  doc.text(safe(`${levelLabel(floor.level)}  ${floor.name} · pianta quotata`), M, 16);
-  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
-  doc.text(safe('Quote interne in metri (luce netta tra i muri) · codici dei serramenti come nell\'abaco'), M, 22);
-  const img = await floorImage(floor, [], { ...extra, codes, layers: { ...LAYERS, technical: true, alarm: false } });
-  const z = Math.min((pw - 2 * M) / img.w, (ph - 44) / img.h);
-  doc.addImage(img.data, 'PNG', M, 27, img.w * z, img.h * z, undefined, 'FAST');
+/* Il logo come data-URL con le sue misure (null se non si carica: il cartiglio usa il solo nome). */
+async function loadLogo(src) {
+  if (!src) return null;
+  try {
+    const data = src.startsWith('data:') ? src : await fetch(src).then((r) => (r.ok ? r.blob() : Promise.reject(new Error('logo')))).then((blob) => new Promise((ok, ko) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(fr.result);
+      fr.onerror = ko;
+      fr.readAsDataURL(blob);
+    }));
+    const img = await new Promise((ok, ko) => {
+      const im = new Image();
+      im.onload = () => ok(im);
+      im.onerror = ko;
+      im.src = data;
+    });
+    return { data, w: img.naturalWidth, h: img.naturalHeight };
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * Tavola tecnica A4 orizzontale: pianta quotata a scala vera (1:100, o più piccola se non entra), legenda dei locali,
+ * serramenti del piano, nord, scala grafica e cartiglio con il marchio (logo sostituibile, vedi lib/branding.js).
+ */
+async function technicalPage(doc, floor, codes, extra, ctx) {
+  const { project, branding, logo, schedule, sheet, sheets } = ctx;
+  const plan = floor.plan;
+  const area = drawingArea();
+  doc.setDrawColor(INK).setLineWidth(0.5).rect(A4.margin, A4.margin, A4.w - 2 * A4.margin, A4.h - 2 * A4.margin);
+  const img = await floorImage(floor, [], { ...extra, codes, bare: true, layers: { ...LAYERS, technical: true, alarm: false } }, 4);
+  const fit = fitScale(img.w, img.h, plan.scale, area);
+  doc.addImage(img.data, 'PNG', area.x + (area.w - fit.w) / 2, area.y + (area.h - fit.h) / 2, fit.w, fit.h, undefined, 'FAST');
+
+  // colonna di destra
+  const x0 = A4.w - A4.margin - LEGEND_W;
+  const x1 = A4.w - A4.margin;
+  doc.setDrawColor(INK).setLineWidth(0.3).line(x0, A4.margin, x0, A4.h - A4.margin);
+  const cx = x0 + 11;
+  const north = ((extra.north ?? 0) * Math.PI) / 180;
+  doc.setDrawColor(INK).setLineWidth(0.3).circle(cx, 25, 6.5);
+  const tip = [cx + Math.sin(north) * 5, 25 - Math.cos(north) * 5];
+  doc.setFillColor(INK).triangle(tip[0], tip[1], cx - Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 - Math.sin(north) * 2 + Math.cos(north) * 3.5,
+    cx + Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + Math.sin(north) * 2 + Math.cos(north) * 3.5, 'F');
+  doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text('N', cx, 14.8, { align: 'center' });
+  // scala grafica: 0-1-2-5 m alla scala di stampa
+  const mm = 1000 / fit.n;
+  const bx = x0 + 17;
+  doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(INK);
+  [[0, 1], [1, 2], [2, 5]].forEach(([m0, m1], i) => {
+    doc.setFillColor(i % 2 ? '#ffffff' : INK).setDrawColor(INK).setLineWidth(0.2).rect(bx + m0 * mm, 22, (m1 - m0) * mm, 2, 'FD');
+  });
+  [0, 1, 2, 5].forEach((m) => doc.text(m === 5 ? '5 m' : String(m), bx + m * mm, 28, { align: 'center' }));
+  doc.setFontSize(7).setTextColor(MUTED).text(safe(`Scala 1:${fit.n}${fit.fits ? '' : ' (non unificata)'}`), bx, 16);
+
+  // legenda locali
+  let y = 38;
+  const { rooms, total } = roomLegend(plan);
+  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('LOCALI', x0 + 4, y);
+  doc.setDrawColor(INK).setLineWidth(0.2).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
+  y += 6;
+  const limit = A4.h - A4.margin - CARTOUCHE_H - 40;
+  doc.setFont('helvetica', 'normal').setFontSize(7.5);
+  for (const r of rooms) {
+    if (y > limit) { doc.setTextColor(MUTED).text('...', x0 + 4, y); y += 4; break; }
+    doc.setTextColor(INK).text(safe(r.name), x0 + 4, y);
+    doc.text(`${fmt(r.area)} m²`.replace('²', '2'), x1 - 4, y, { align: 'right' });
+    y += 4;
+  }
+  doc.setFont('helvetica', 'bold').text('Totale', x0 + 4, y + 1);
+  doc.text(`${fmt(total)} m2`, x1 - 4, y + 1, { align: 'right' });
+  y += 8;
+
+  // serramenti di questo piano
+  const used = new Set([...(codes?.doors || []), ...(codes?.windows || [])].filter(Boolean));
+  const rows = schedule.rows.filter((r) => used.has(r.code));
+  if (rows.length && y < limit + 12) {
+    doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('SERRAMENTI', x0 + 4, y);
+    doc.setDrawColor(INK).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
+    y += 6;
+    doc.setFont('helvetica', 'normal').setFontSize(7.5);
+    for (const r of rows) {
+      if (y > limit + 22) break;
+      doc.setTextColor(INK).text(safe(r.code), x0 + 4, y);
+      doc.setTextColor(INK).text(safe(r.type), x0 + 13, y);
+      doc.text(`${Math.round(r.w * 100)} x ${Math.round(r.h * 100)} cm`, x1 - 4, y, { align: 'right' });
+      y += 4;
+    }
+  }
+
+  // cartiglio
+  const cy = A4.h - A4.margin - CARTOUCHE_H;
+  doc.setDrawColor(INK).setLineWidth(0.5).line(x0, cy, x1, cy);
+  doc.setLineWidth(0.2);
+  if (logo) {
+    const maxH = 11;
+    const w = Math.min(34, (maxH * logo.w) / logo.h);
+    doc.addImage(logo.data, undefined, x0 + 4, cy + 3, w, (w * logo.h) / logo.w, undefined, 'FAST');
+  }
+  doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(INK).text(safe(branding.name), x1 - 4, cy + 9, { align: 'right' });
+  doc.line(x0, cy + 16, x1, cy + 16);
+  const field = (label, value, yy, bold = false) => {
+    doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(MUTED).text(label, x0 + 4, yy);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal').setFontSize(8).setTextColor(INK).text(safe(value) || '', x0 + 24, yy);
+  };
+  field('PROGETTO', project.name || 'Progetto', cy + 21, true);
+  field('TAVOLA', `${levelLabel(floor.level)} ${floor.name} - pianta quotata`, cy + 26);
+  field('COMMITTENTE', branding.client, cy + 31);
+  field('PROGETTISTA', branding.designer, cy + 36);
+  field('N. PRATICA', branding.ref, cy + 41);
+  doc.line(x0, cy + 43.5, x1, cy + 43.5);
+  doc.line(x0 + 25, cy + 43.5, x0 + 25, A4.h - A4.margin);
+  doc.line(x0 + 50, cy + 43.5, x0 + 50, A4.h - A4.margin);
+  const cell = (label, value, xx) => {
+    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(MUTED).text(label, xx + 2, cy + 46.5);
+    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text(value, xx + 2, cy + 50.5);
+  };
+  cell('SCALA', `1:${fit.n}`, x0);
+  cell('FORMATO', 'A4', x0 + 25);
+  cell('TAV.', `${sheet} / ${sheets}`, x0 + 50);
 }
 
 /* Abaco dei serramenti di tutto il progetto. */
@@ -430,11 +618,48 @@ export async function exportProjectPdf(project) {
   } catch {
     /* WebGL non disponibile: il PDF esce senza la vista 3D */
   }
+  // le inquadrature automatiche: pianta 3D, fronte e i due interni più significativi (soggiorno/soppalco e camera)
+  try {
+    const { houseImage } = await import('./render3d');
+    const { cameraViews } = await import('./renderStudio');
+    const all = cameraViews(project, { aspect: 16 / 9 });
+    const living = all.find((v) => v.kind === 'inside' && /soppalco|soggiorno|salotto|open/i.test(v.label)) || all.find((v) => v.kind === 'inside');
+    const bedroom = all.find((v) => v.kind === 'inside' && /camera|letto/i.test(v.label) && v !== living);
+    const picks = [all.find((v) => v.id === 'plan3d'), all.find((v) => v.id === 'front'), living, bedroom].filter(Boolean);
+    const shots = [];
+    for (const v of picks) {
+      const img = await houseImage(project, { width: 1280, height: 720, view: v });
+      if (img) shots.push({ v, img });
+    }
+    if (shots.length) {
+      doc.addPage('a4', 'landscape');
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Viste del progetto', M, 16);
+      doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED).text(safe('Inquadrature automatiche: dall\'alto, fronte e dentro i locali a 1,6 m'), M, 22);
+      const cw = (pw - 2 * M - 6) / 2;
+      const chh = (ph - 28 - 16 - 14) / 2;
+      const z = Math.min(cw / 1280, chh / 720);
+      shots.forEach(({ v, img }, i) => {
+        const x = M + (i % 2) * (cw + 6);
+        const y = 27 + Math.floor(i / 2) * (chh + 12);
+        doc.addImage(img.data, 'PNG', x, y, 1280 * z, 720 * z, undefined, 'FAST');
+        doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text(safe(v.label), x, y + 720 * z + 4.5);
+      });
+    }
+  } catch {
+    /* WebGL non disponibile: il PDF esce senza le viste */
+  }
   const { byFloor } = projectStairs(project);
   const house = houseFor(project);
   const electric = project.electric ? planElectric(project, { level: project.electric.level }) : null;
   const plumbing = project.plumbing ? planPlumbing(project, { generator: project.plumbing.generator }) : null;
   const schedule = scheduleFor(project);
+  const branding = getBranding(project);
+  const logo = await loadLogo(branding.logo);
+  const sheetTotal = project.floors.filter((x) => x.plan && schedule.codes[x.id] && x.plan.rooms.some((r) => r.kind !== 'garden')).length;
+  let sheetNo = 0;
+  const techPages = new Set();
   for (const f of project.floors.filter((x) => x.plan)) {
     doc.addPage('a4', 'landscape');
     await floorPage(doc, f, devices, { stairs: byFloor[f.id], house });
@@ -445,13 +670,19 @@ export async function exportProjectPdf(project) {
     }
     if (schedule.codes[f.id] && f.plan.rooms.some((r) => r.kind !== 'garden')) {
       doc.addPage('a4', 'landscape');
-      await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house });
+      await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++sheetNo, sheets: sheetTotal });
+      techPages.add(doc.getNumberOfPages());   // la tavola ha il suo cartiglio: niente piè di pagina sopra
     }
     const pl = plumbing?.floors[f.id];
     if (pl?.points.length) {
       doc.addPage('a4', 'landscape');
       await plumbingPage(doc, f, pl, plumbing, { stairs: byFloor[f.id], house, plumbingLines: project.plumbing.lines !== false });
     }
+  }
+  try {
+    await elevationPages(doc, project, project.north || 0);
+  } catch {
+    /* un disegno non riuscito non deve bloccare il PDF */
   }
   if (electric?.bom.length) electricSummary(doc, project, electric);
   if (plumbing?.bom.length) plumbingSummary(doc, project, plumbing);
@@ -471,7 +702,7 @@ export async function exportProjectPdf(project) {
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
-    footer(doc, project, i, pages);
+    if (!techPages.has(i)) footer(doc, project, i, pages);
   }
 
   const name = (project.name || 'progetto-planify').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

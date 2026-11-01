@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import RenderPanel from './components/RenderPanel';
 import {
   AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
   Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
-  Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
+  Camera, Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
@@ -55,6 +56,7 @@ import { usePlanHistory } from './hooks/usePlanHistory';
 import { useEngine } from './hooks/useEngine';
 import { sketchToPlan } from './lib/sketchToPlan';
 import { buildDxf, parseDxfClientSide } from './lib/dxf';
+import { elevation, levelMarks, section } from './lib/elevation';
 import { serializeSvg, sheetBox } from './lib/sheet';
 import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
@@ -1442,8 +1444,23 @@ export default function App() {
       : {};
     const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const name = [slug(current.name) || 'planimetria', current.floors.length > 1 ? slug(floor.name) : ''].filter(Boolean).join('-');
-    saveBlob(new Blob([buildDxf(plan, opts)], { type: 'application/dxf' }), `${name}.dxf`);
-    say(devs.length ? 'File CAD esportato con sensori e copertura' : 'File CAD esportato');
+    // prospetti N/S/E/O e due sezioni del progetto, sotto la pianta, ognuno sui suoi layer (nel loft il taglio passa per la scala)
+    let views = null;
+    try {
+      const dims = plan.dimensions;
+      const st = plan.mezzanine?.stair;
+      const cutY = st && (st.up === 'E' || st.up === 'W') ? st.y + st.h / 2 : dims.length / 2;
+      const cutX = st && !(st.up === 'E' || st.up === 'W') ? st.x + st.w / 2 : dims.width / 2;
+      const drawings = [
+        ...['down', 'up', 'right', 'left'].map((sd) => elevation(current, sd, { north: current?.north ?? 0, roof: { ...ROOF_DEFAULTS } })),
+        section(current, 'x', cutY), section(current, 'y', cutX),
+      ].filter((v) => v.shapes.length);
+      if (drawings.length) views = { drawings, marks: levelMarks(current) };
+    } catch {
+      views = null;   // il DXF della pianta esce comunque
+    }
+    saveBlob(new Blob([buildDxf(plan, { ...opts, views })], { type: 'application/dxf' }), `${name}.dxf`);
+    say(devs.length ? 'File CAD esportato con sensori, copertura, prospetti e sezioni' : 'File CAD esportato con prospetti e sezioni');
   };
 
   const copy = async (text, msg) => {
@@ -1788,11 +1805,33 @@ export default function App() {
                 </>
               )}
               {view3d && (
+                <button type="button" className={`pf-tool ${view3d.cut ? 'is-on' : ''}`} aria-pressed={!!view3d.cut}
+                  onClick={() => setView3d({ ...view3d, cut: view3d.cut ? null : { axis: 'x', t: 0.5, flip: false } })}
+                  title="Sezione 3D: un piano di taglio verticale toglie metà casa per vedere dentro">Sezione</button>
+              )}
+              {view3d?.cut && (
+                <span className="pf-cutbar">
+                  <select className="pf-select-sm" aria-label="Direzione della sezione 3D" value={view3d.cut.axis}
+                    onChange={(e) => setView3d({ ...view3d, cut: { ...view3d.cut, axis: e.target.value } })}>
+                    <option value="x">Trasversale</option>
+                    <option value="z">Longitudinale</option>
+                  </select>
+                  <input type="range" min="0" max="1" step="0.01" value={view3d.cut.t} aria-label="Posizione del piano di sezione"
+                    onChange={(e) => setView3d({ ...view3d, cut: { ...view3d.cut, t: Number(e.target.value) } })} />
+                  <button type="button" className="pf-tool" onClick={() => setView3d({ ...view3d, cut: { ...view3d.cut, flip: !view3d.cut.flip } })}
+                    title="Tiene l'altra metà">Inverti</button>
+                </span>
+              )}
+              {view3d && (
                 <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
                   onClick={() => setView3d({ ...view3d, low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
               )}
               {view3d && (
                 <>
+                  <button type="button" className={`pf-tool ${view3d.render ? 'is-on' : ''}`} aria-pressed={!!view3d.render}
+                    onClick={() => setView3d({ ...view3d, render: !view3d.render })} title="Render: inquadrature automatiche e libere, ora del giorno, sfondo, fino a 4K">
+                    <Camera size={15} /> <span className="pf-tl">Render</span>
+                  </button>
                   <button type="button" className="pf-tool" onClick={export3dPng} title="Immagine della vista 3D così come la vedi">
                     <ImageIcon size={15} /> <span className="pf-tl">PNG 3D</span>
                   </button>
@@ -1897,8 +1936,14 @@ export default function App() {
               </ErrorBoundary>
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
-                <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
-                  spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
+                <div className="pf-3d-wrap">
+                  <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                    spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
+                  {view3d.render && (
+                    <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
+                      roof={view3d.roof} lowWalls={view3d.low} name={threeName()} onClose={() => setView3d({ ...view3d, render: false })} onDone={say} />
+                  )}
+                </div>
               </ErrorBoundary>
             ) : globalView && current?.floors.length > 1 ? (
               <ErrorBoundary key={`all-${current.id}`}>
@@ -1949,7 +1994,7 @@ export default function App() {
               )
             )}
 
-            {plan?.mezzanine && !view3d && !sheets && !sketch && !(globalView && current?.floors.length > 1) && (
+            {plan?.mezzanine && !sheets && !sketch && !(globalView && current?.floors.length > 1) && (
               <div className="pf-levels pf-segtools" role="radiogroup" aria-label="Livello del loft">
                 {[['all', 'Completa', 'Loft intero, soppalco sopra il piano sotto'], ['below', 'Sotto', 'Solo il livello a terra'], ['above', 'Sopra', 'Solo il soppalco']].map(([id, label, tip]) => (
                   <button key={id} type="button" role="radio" aria-checked={loftLevel === id} title={tip}

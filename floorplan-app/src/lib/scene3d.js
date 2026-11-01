@@ -358,7 +358,12 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   // arredi
   // arredi del soppalco (it.elev): stessi volumi, alzati alla quota del suo pavimento
   const raise = (it, from) => {
-    if (it.elev) for (let i = from; i < root.children.length; i++) root.children[i].position.y += it.elev;
+    if (it.elev) {
+      for (let i = from; i < root.children.length; i++) {
+        root.children[i].position.y += it.elev;
+        root.children[i].userData.mezz = true;   // il livello «Sotto» del loft li nasconde
+      }
+    }
   };
   for (const it of plan.furniture) {
     if (it.type === 'rug') continue;   // il tappeto è già disegnato sopra
@@ -418,7 +423,11 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   const mz = plan.mezzanine;
   const flights = [...(stairs ?? (plan.stairs || []).filter((st) => st.entry)),
     ...(mz ? [{ ...mz.stair, id: 'mezzanine', type: 'straight' }] : [])];
-  if (mz) buildMezzanine(THREE, root, mz, M, K, theme, box, planDims);
+  if (mz) {
+    const mzFrom = root.children.length;
+    buildMezzanine(THREE, root, mz, M, K, theme, box, planDims);
+    for (let i = mzFrom; i < root.children.length; i++) root.children[i].userData.mezz = true;
+  }
   const stepMat = new THREE.MeshStandardMaterial({ color: theme.wood || '#cdb89a', roughness: 0.7 });
   for (const st of flights) {
     for (const b of stairSteps(st, st.id === 'mezzanine' ? mz.elev : WALL_H + SLAB_T)) {

@@ -6,7 +6,7 @@ import { THEMES } from '../lib/themes';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, style = 'modern', lowWalls = false, spread = 0, onReady }) {
+export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
   const sceneRef = useRef(null);   // { THREE, model, buildRoof, roofFloor }: il tetto si cambia senza ricostruire la scena
@@ -15,6 +15,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
   const [ready, setReady] = useState(0);
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
+  const prevLevel = useRef('all');
   const builtRef = useRef(null);   // gruppi di sensori, impianto e luci attualmente nella scena
 
   /* Mostra o nasconde sensori, impianto, cavi, coni e luci; a luci accese la scena si abbassa come di sera. */
@@ -74,7 +75,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, spread })
           : buildScene(THREE, plan, THEMES[style] || THEMES.modern, { lowWalls });
         scene.add(model);
-        sceneRef.current = { THREE, model, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null };
+        sceneRef.current = { THREE, model, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null };
         setReady((n) => n + 1);
         // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
         const { bb, center, size } = addGround(THREE, scene, model);
@@ -113,7 +114,9 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
         controls.minDistance = 2;
         controls.maxDistance = ext * 6;
-        window.__planify3d = { THREE, camera, controls, model };   // per i test dell'interfaccia (inquadrature precise)
+        sceneRef.current.camera = camera;
+        sceneRef.current.controls = controls;
+        window.__planify3d = { THREE, camera, controls, model, renderer };   // per i test dell'interfaccia (inquadrature precise)
 
         const resize = () => {
           const w = el.clientWidth || 600;
@@ -138,6 +141,15 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         };
         loop();
         onReady?.({
+          // telecamera della vista: per il render con «vista attuale» e per spostarla sulle inquadrature automatiche
+          camera: () => ({ position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov }),
+          setCamera: (v) => {
+            camera.position.set(...v.position);
+            controls.target.set(...v.target);
+            camera.fov = v.fov;
+            camera.updateProjectionMatrix();
+            controls.update();
+          },
           png: () => {
             renderer.render(scene, camera);
             return renderer.domElement.toDataURL('image/png');
@@ -198,6 +210,45 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, project, style, lowWalls, spread, north]);
+
+  /*
+   * Livelli del loft e sezione 3D, senza ricostruire la scena. «Sotto» nasconde il soppalco e tutto ciò che sta sopra;
+   * «Sopra» taglia via tutto sotto il solaio del soppalco (piano di taglio); la sezione è un piano verticale
+   * (longitudinale o trasversale) che toglie metà casa.
+   */
+  useEffect(() => {
+    const st = sceneRef.current;
+    if (!st?.renderer) return;
+    const { THREE, model, renderer, FLOOR_H } = st;
+    model.traverse((o) => { if (o.userData.mezz) o.visible = loftLevel !== 'below'; });
+    const planes = [];
+    const mzFloor = project ? project.floors.find((f) => f.plan?.mezzanine) : (plan?.mezzanine ? { plan, level: 0 } : null);
+    if (loftLevel === 'above' && mzFloor) {
+      const mz = mzFloor.plan.mezzanine;
+      const y0 = typeof mzFloor.level === 'number' ? mzFloor.level * (FLOOR_H + (spread || 0)) : 0;
+      planes.push(new THREE.Plane(new THREE.Vector3(0, 1, 0), -(y0 + mz.elev - mz.slab - 0.02)));
+    }
+    if (cut) {
+      const bb = new THREE.Box3().setFromObject(model);
+      const sign = cut.flip ? -1 : 1;
+      const n = cut.axis === 'x' ? new THREE.Vector3(sign, 0, 0) : new THREE.Vector3(0, 0, sign);
+      const lo = cut.axis === 'x' ? bb.min.x : bb.min.z;
+      const hi = cut.axis === 'x' ? bb.max.x : bb.max.z;
+      const pos = lo + (hi - lo) * Math.min(1, Math.max(0, cut.t));
+      planes.push(new THREE.Plane(n, -sign * pos));
+    }
+    renderer.clippingPlanes = planes;
+    // passando a «Sopra» la telecamera sale a guardare il soppalco dall'alto, oltre il muro davanti
+    if (loftLevel === 'above' && prevLevel.current !== 'above' && mzFloor && st.camera) {
+      const mz = mzFloor.plan.mezzanine;
+      const y0 = typeof mzFloor.level === 'number' ? mzFloor.level * (FLOOR_H + (spread || 0)) : 0;
+      const c = new THREE.Vector3(mz.x + mz.w / 2, y0 + mz.elev, mz.y + mz.h / 2);
+      st.controls.target.copy(c);
+      st.camera.position.set(c.x - 3, c.y + Math.max(9, mz.h * 1.1), c.z + Math.max(7, mz.h * 0.8));
+      st.controls.update();
+    }
+    prevLevel.current = loftLevel;
+  }, [loftLevel, cut?.axis, cut?.t, cut?.flip, !!cut, ready, plan, project, spread]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // tetto: si toglie e si rimette senza muovere l'inquadratura
   useEffect(() => {

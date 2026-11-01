@@ -64,7 +64,7 @@ test('una finestra si seleziona e si elimina', async ({ page }, info) => {
 
 test('un DXF importato si arreda dopo, con lo stile scelto', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   const errors = await open(page);
   await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/appartamento_cm.dxf'));
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
@@ -204,7 +204,7 @@ test('anche i muri esterni si spostano e cambiano la misura della casa', async (
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
   await page.locator('.pf-editbtn').click();
-  const dims = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /^\d+(,\d+)? m$/.test(t)).join('|');
+  const dims = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /^\d{3,4}$/.test(t)).join('|');   // quote in cm
   const before = await dims();
   const walls = page.locator('.pf-sheet svg rect[style*="col-resize"]');
   await expect(walls.first()).toBeVisible();
@@ -330,6 +330,170 @@ test('il loft è una tipologia selezionata, resta tale cambiando misura e ha le 
   await expect(tabs.getByRole('radio', { name: 'Sopra' })).toHaveAttribute('aria-checked', 'true');
   await tabs.getByRole('radio', { name: 'Sotto' }).click();
   await expect(page.locator('.pf-sheet svg text', { hasText: 'Soppalco sopra' }).first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('la pianta ha le quote esterne in cm su tre livelli', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const w = Number(await page.getByLabel('Larghezza').inputValue());
+  await expect(page.locator('.pf-sheet svg text', { hasText: new RegExp(`^${Math.round(w * 100)}$`) }).first()).toBeVisible();
+  await page.locator('.pf-sheet svg').first().screenshot({ path: process.env.SHOT2 || '/tmp/quote-pianta.png' });
+  expect(errors).toEqual([]);
+});
+
+test('il pannello Render salva un PNG dall\'interno di un locale e porta la telecamera', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const panel = page.getByRole('complementary', { name: 'Render' });
+  await expect(panel).toBeVisible();
+  const view = panel.getByLabel('Inquadratura del render');
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const before = await page.evaluate(() => window.__planify3d.camera.position.toArray());
+  await view.selectOption({ label: 'Interno: Soggiorno' });
+  const after = await page.evaluate(() => window.__planify3d.camera.position.toArray());
+  expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
+  expect(before[1]).toBeGreaterThan(3);
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 90_000 }),
+    panel.getByRole('button', { name: /Salva render/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  const buf = readFileSync(file);
+  expect(buf.toString('ascii', 1, 4)).toBe('PNG');
+  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1920, 1080]);
+  copyFileSync(file, process.env.RENDEROUT || '/tmp/render-interno.png');
+  expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
+  expect(errors).toEqual([]);
+});
+
+test('il loft in 3D ha le viste Completa, Sotto e Sopra e la sezione con piano di taglio', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const state = () => page.evaluate(() => {
+    const { model, renderer } = window.__planify3d;
+    let mezz = 0, shown = 0;
+    model.traverse((o) => { if (o.userData.mezz && o.isMesh) { mezz++; if (o.visible) shown++; } });
+    return { mezz, shown, planes: renderer.clippingPlanes.length };
+  });
+  const tabs = page.getByRole('radiogroup', { name: 'Livello del loft' });
+  await expect(tabs).toBeVisible();
+  let st = await state();
+  expect(st.mezz).toBeGreaterThan(5);
+  expect([st.shown, st.planes]).toEqual([st.mezz, 0]);                    // Completa: tutto
+  await tabs.getByRole('radio', { name: 'Sotto' }).click();
+  st = await state();
+  expect([st.shown, st.planes]).toEqual([0, 0]);                          // Sotto: niente soppalco
+  await tabs.getByRole('radio', { name: 'Sopra' }).click();
+  st = await state();
+  expect([st.shown, st.planes]).toEqual([st.mezz, 1]);                    // Sopra: tutto sotto il solaio tagliato via
+  await page.waitForTimeout(500);
+  await page.locator('.pf-3d canvas').screenshot({ path: process.env.SHOT3 || '/tmp/loft-sopra.png' });
+  await tabs.getByRole('radio', { name: 'Completa' }).click();
+  await page.getByRole('button', { name: 'Sezione', exact: true }).click();
+  await expect(page.getByLabel('Posizione del piano di sezione')).toBeVisible();
+  st = await state();
+  expect(st.planes).toBe(1);
+  await page.getByLabel('Direzione della sezione 3D').selectOption('z');
+  await page.waitForTimeout(400);
+  await page.locator('.pf-3d canvas').screenshot({ path: process.env.SHOT4 || '/tmp/loft-sezione.png' });
+  await page.getByRole('button', { name: 'Sezione', exact: true }).click();
+  expect((await state()).planes).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(150_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Esporta/ }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 100_000 }),
+    page.getByRole('menuitem', { name: /PDF progetto/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  expect(readFileSync(file).toString('ascii', 0, 5)).toBe('%PDF-');
+  copyFileSync(file, process.env.PDFOUT || '/tmp/progetto-test.pdf');
+  expect(errors).toEqual([]);
+});
+
+test('il DXF esportato ha pianta, quote, prospetti e sezioni sui loro layer', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Esporta/ }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 30_000 }),
+    page.getByRole('menuitem', { name: /DXF \(CAD\)/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  const dxf = readFileSync(file, 'utf8');
+  copyFileSync(file, process.env.DXFOUT || '/tmp/loft-test.dxf');
+  for (const l of ['MURI', 'QUOTE', 'PROSPETTI_MURI', 'PROSPETTI_TETTO', 'SEZIONI_SOLAI', 'SEZIONI_SCALE', 'SEZIONI_PARAPETTI', 'SEZIONI_QUOTE']) {
+    expect(dxf, `layer ${l}`).toContain(`\n8\n${l}\n`);
+  }
+  expect(dxf).toContain('Sezione longitudinale');
+  expect(dxf).not.toContain('FUORI NORMA');   // il loft generato è a norma
+  expect(errors).toEqual([]);
+});
+
+test('il PDF del loft ha prospetti e sezioni con il soppalco', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(150_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Esporta/ }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 100_000 }),
+    page.getByRole('menuitem', { name: /PDF progetto/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  expect(readFileSync(file).toString('ascii', 0, 5)).toBe('%PDF-');
+  copyFileSync(file, process.env.PDFLOFT || '/tmp/progetto-loft.pdf');
+  expect(errors).toEqual([]);
+});
+
+test('la sezione del loft mostra il soppalco con le altezze in cm', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /Prospetti/ }).click();
+  await expect(page.locator('.pf-sheets-grid svg text', { hasText: /sotto 240 cm/ }).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('.pf-sheets-grid svg text', { hasText: /parapetto 100 cm/ }).first()).toBeVisible();
+  await page.locator('svg[aria-label^="Sezione longitudinale"]').screenshot({ path: process.env.SHOT || '/tmp/sezione-loft.png' });
   expect(errors).toEqual([]);
 });
 

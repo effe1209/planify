@@ -44,3 +44,25 @@ assert.equal(sec.shapes.filter((s) => s.kind === 'slab').length, 1);
 assert.ok(sec.shapes.filter((s) => s.kind === 'wall').length >= 6);
 assert.ok(sec.shapes.filter((s) => s.kind === 'room').every((s) => s.h === 2.7));
 console.log('elevation ok');
+
+// sezione del loft: soppalco con solaio interrotto dal vano scala, parapetto, gradini, quote in cm e altezze fuori norma in rosso
+{
+  const mz = { x: 8.4, y: 0, w: 3.6, h: 8, elev: 2.6, slab: 0.2, parapet: 1, open: ['W'],
+    stair: { x: 4.35, y: 6.9, w: 4.05, h: 0.9, up: 'E', type: 'straight', risers: 15 } };
+  const loft = (m) => ({ floors: [{ id: 'l', name: 'Loft', level: 0, plan: { dimensions: { width: 12, length: 8 }, height: 5, mezzanine: m,
+    rooms: [room(1, 0, 0, 12, 8, 'Loft')], windows: [], doors: [],
+    furniture: [{ type: 'bed', x: 10, y: 3, w: 2, h: 1.6, facing: 'W', room: 1, elev: 2.6 }, { type: 'sofa', x: 1, y: 3, w: 2.2, h: 0.9, facing: 'E', room: 1 }] } }] });
+  let sc = section(loft(mz), 'x', 3.5);
+  assert.equal(sc.shapes.filter((q) => q.kind === 'stair').length, 0, 'fuori dalla scala');
+  assert.ok(sc.shapes.some((q) => q.kind === 'furn' && q.pts[0][1] >= 2.6), 'letto tagliato alla quota del soppalco');
+  assert.ok(sc.shapes.some((q) => q.kind === 'glass'), 'parapetto sul lato aperto');
+  assert.deepEqual(sc.dims.map((q) => [q.label, Math.round((q.y1 - q.y0) * 100), q.bad]), [['sotto', 240, false], ['sopra', 240, false], ['parapetto', 100, false]]);
+  sc = section(loft(mz), 'x', 7.3);   // attraversa la scala: gradini e solaio interrotto
+  assert.equal(sc.shapes.filter((q) => q.kind === 'stair').length, 15);
+  assert.ok(Math.max(...sc.shapes.filter((q) => q.kind === 'stair').flatMap((q) => q.pts.map((p) => p[1]))) <= 2.6 + 1e-9);
+  const slab = sc.shapes.find((q) => q.kind === 'slab' && q.pts[0][1] === 2.4);
+  assert.ok(slab && slab.pts[0][0] >= 8.4 - 1e-9, 'il solaio parte oltre il vano scala');
+  sc = section(loft({ ...mz, elev: 2.5, parapet: 0.8 }), 'x', 3.5);
+  assert.deepEqual(sc.dims.map((q) => q.bad), [true, false, true], 'sotto 2,30 m e parapetto 80 cm fuori norma');
+}
+console.log('elevation loft ok');
