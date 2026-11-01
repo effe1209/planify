@@ -225,9 +225,9 @@ def pdf_to_dxf(data: bytes) -> Tuple[str, List[str]]:
     return buf.getvalue(), notes
 
 
-def import_pdf_data(data: bytes, style: str = "modern") -> Optional[dict]:
+def import_pdf_data(data: bytes, style: str = "modern", furnished: bool = True) -> Optional[dict]:
     import planner
     text, notes = pdf_to_dxf(data)
-    plan = planner.import_dxf_data(text, style=style)
+    plan = planner.import_dxf_data(text, style=style, furnished=furnished)
     plan["notes"] = [n.replace("dal DXF", "dal PDF") for n in plan.get("notes", [])] + notes
     return plan

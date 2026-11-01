@@ -13,6 +13,9 @@ import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
+import FurnishPanel from './components/FurnishPanel';
+import EditPlanPanel from './components/EditPlanPanel';
+import { flipDoor, removeOpening, resizeOpening } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
 import { rotateItem, snapItem } from './lib/furnitureEdit';
@@ -629,6 +632,64 @@ export default function App() {
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
   const editFurniture = (fn) => editPlan((p) => ({ ...p, furniture: fn(p.furniture) }));
+  /* Arreda (o svuota) la pianta così com'è: il motore mette solo i mobili, muri porte e finestre non cambiano. */
+  const [furnishing, setFurnishing] = useState(false);
+  const furnishPlan = async ({ roomIds = null, clear = false } = {}) => {
+    if (!current || !plan || readOnly || furnishing) return;
+    if (!base || !engineHas('furnish_plan')) {
+      setError('Per arredare serve il motore collegato (aggiornato): controlla «Connessione».');
+      return;
+    }
+    setFurnishing(true);
+    setError(null);
+    try {
+      const res = await readJson(await postJson(base, '/furnish-plan',
+        { plan, style: floor.meta?.style || form.style, room_ids: roomIds, clear }));
+      const colors = new Map(res.rooms.map((r) => [r.id, r.color]));
+      editPlan((p) => ({
+        ...p,
+        furniture: res.furniture,
+        rooms: p.rooms.map((r) => (colors.has(r.id) && (!roomIds || roomIds.includes(r.id)) ? { ...r, color: colors.get(r.id), kind: res.rooms.find((x) => x.id === r.id).kind } : r)),
+        notes: res.notes?.length ? res.notes : p.notes,
+      }));
+      say(clear ? 'Arredi tolti' : roomIds ? 'Locale arredato' : 'Pianta arredata');
+    } catch (err) {
+      setError(`Arredo non riuscito: ${err.message}`);
+    } finally {
+      setFurnishing(false);
+    }
+  };
+  /* ── modifica diretta: muri interni, porte e finestre ── */
+  const [wallEdit, setWallEdit] = useState(false);
+  const [addMode, setAddMode] = useState(null);
+  const [selectedOpening, setSelectedOpening] = useState(null);   // { kind: 'door' | 'window', index }
+  const editable = !!plan && !readOnly && !plan.rooms.some((r) => r.poly) && !plan.wallLines?.length
+    && !['garden'].includes(floor?.meta?.type);
+  // il piano cambia (altro piano, altro progetto): la modifica si chiude
+  useEffect(() => { setWallEdit(false); setAddMode(null); setSelectedOpening(null); }, [current?.id, floor?.id]);
+  /* Registra la modifica come un passo di annulla; i locali che hanno cambiato misura si riarredano con il motore (un solo passo). */
+  const applyPlanEdit = async (res) => {
+    const edited = res.plan;
+    let next = edited;
+    if (res.moved?.length && edited.furniture?.length && base && engineHas('furnish_plan')) {
+      setFurnishing(true);
+      try {
+        const out = await readJson(await postJson(base, '/furnish-plan',
+          { plan: edited, style: floor.meta?.style || form.style, room_ids: res.moved }));
+        next = { ...edited, furniture: out.furniture };
+      } catch {
+        say('Pianta modificata, ma gli arredi non sono stati aggiornati: usa «Arreda questo locale»');
+      } finally {
+        setFurnishing(false);
+      }
+    }
+    editPlan(() => next);
+    if (res.opening) setSelectedOpening(res.opening);
+    setAddMode(null);
+    if (res.dropped?.length) say(res.dropped[0]);
+  };
+  const openingEdit = (fn) => { if (selectedOpening) { editPlan((p) => fn(p, selectedOpening)); } };
+  const setFloorStyle = (id) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, style: id } })));
   const removeFurniture = (index) => {
     editFurniture((list) => list.filter((_, i) => i !== index));
     setSelectedItem(null);
@@ -671,6 +732,14 @@ export default function App() {
           e.preventDefault();
           removeDevice(selectedDevice.id);
         } else if (e.key === 'Escape') setSelectedDevice(null);
+        return;
+      }
+      if (wallEdit && !mod && (selectedOpening || addMode)) {
+        if (selectedOpening && (e.key === 'Delete' || e.key === 'Backspace')) {
+          e.preventDefault();
+          editPlan((p) => removeOpening(p, selectedOpening.kind, selectedOpening.index));
+          setSelectedOpening(null);
+        } else if (e.key === 'Escape') { setSelectedOpening(null); setAddMode(null); }
         return;
       }
       if (selectedItem == null || mod) return;
@@ -973,7 +1042,7 @@ export default function App() {
     if (base && engineHas('pdf_import')) {
       setImporting('Leggo il PDF: muri, porte, finestre e locali…');
       try {
-        const data = await readJson(await postJson(base, '/import-pdf', { pdf_base64: await fileToBase64(file), style: form.style }));
+        const data = await readJson(await postJson(base, '/import-pdf', { pdf_base64: await fileToBase64(file), style: form.style, furnish: false }));
         if (data.floors) {
           openImportedHouse(data, name);
           return;
@@ -1021,14 +1090,14 @@ export default function App() {
         let data = null;
         if (base) {
           try {
-            data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style }));
+            data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style, furnish: false }));
           } catch {
             /* motore non raggiungibile: si prosegue in locale */
           }
         }
         data ??= parseDxfClientSide(text, form.style);
         openNewPlan(data, { type: 'dxf' }, { name: file.name.replace(/\.dxf$/i, '') });
-        say('Planimetria DXF importata e arredata');
+        say(engineHas('furnish_plan') ? 'Planimetria DXF importata: scegli lo stile e arreda' : 'Planimetria DXF importata e arredata');
       } catch (err) {
         setError(`Errore durante l'importazione del file DXF: ${err.message}`);
       }
@@ -1170,6 +1239,21 @@ export default function App() {
     if (!res) return;
     saveBlob(new Blob([res.text], { type: 'application/dxf' }), `${threeName()}.dxf`);
     say(`Modello 3D esportato: ${res.faces.toLocaleString('it-IT')} facce su ${res.layers.length} layer`);
+  };
+
+  const [exportingGlb, setExportingGlb] = useState(false);
+  const export3dGlb = async () => {
+    if (!three.current?.glb || exportingGlb) return;
+    setExportingGlb(true);
+    try {
+      const res = await three.current.glb({ electric: electricPlan || planElectric(current, { level: 2 }) });
+      saveBlob(new Blob([res.buffer], { type: 'model/gltf-binary' }), `${threeName()}.glb`);
+      say(`Modello per Blender esportato: ${res.meshes.toLocaleString('it-IT')} oggetti, ${res.lights} luci`);
+    } catch (err) {
+      setError(`Esportazione GLB non riuscita: ${err.message}`);
+    } finally {
+      setExportingGlb(false);
+    }
   };
 
   /* DXF R12 a layer del piano aperto, con i dispositivi Ajax come blocchi e la copertura calcolata (lib/dxf.js). */
@@ -1532,6 +1616,10 @@ export default function App() {
                     title="Modello 3D per il CAD (facce 3D, layer per piano e tipo: muri, vetri, pavimenti, arredi, solai)">
                     <Download size={15} /> <span className="pf-tl">DXF 3D</span>
                   </button>
+                  <button type="button" className="pf-tool" onClick={export3dGlb} disabled={exportingGlb}
+                    title="Modello 3D per Blender (GLB): materiali e texture dello stile, arredi completi, luci e sole. In Blender: File → Importa → glTF 2.0">
+                    <Download size={15} /> <span className="pf-tl">{exportingGlb ? 'GLB…' : 'GLB Blender'}</span>
+                  </button>
                 </>
               )}
             </div>
@@ -1637,7 +1725,8 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`} north={current?.north ?? 0}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
-                  editable={!readOnly && !showElectric && !showPlumbing} selectedItem={selectedItem} codes={schedule?.codes[floor.id]}
+                  editable={!readOnly && !showElectric && !showPlumbing && !wallEdit} selectedItem={selectedItem}
+                  wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? { selected: selectedOpening, addMode, onSelect: setSelectedOpening, onApply: applyPlanEdit, onError: setError } : null} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
                   onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
@@ -1699,6 +1788,19 @@ export default function App() {
                   onChange={(patch) => changeDevice(selectedDevice.id, patch)} onRemove={() => removeDevice(selectedDevice.id)}
                   onClose={() => setSelectedDevice(null)} />
               )}
+              {editable && !selectedRoom && (
+                <EditPlanPanel plan={plan} on={wallEdit} addMode={addMode} selected={selectedOpening} busy={furnishing}
+                  onToggle={() => { setWallEdit(!wallEdit); setAddMode(null); setSelectedOpening(null); setSelectedId(null); }}
+                  onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); }}
+                  onResize={(w) => openingEdit((p, o) => resizeOpening(p, o.kind, o.index, w))}
+                  onFlip={() => openingEdit((p, o) => flipDoor(p, o.index))}
+                  onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}
+                  onClose={() => setSelectedOpening(null)} />
+              )}
+              {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
+                <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}
+                  onStyle={setFloorStyle} onFurnish={() => furnishPlan()} onClear={() => furnishPlan({ clear: true })} />
+              )}
               {selectedRoom && (
                 <RoomEditor
                   key={selectedRoom.id}
@@ -1709,6 +1811,8 @@ export default function App() {
                   onFlip={flipFurniture}
                   onRemoveItem={removeFurniture}
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
+                  onFurnish={engineHas('furnish_plan') && !readOnly ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
+                  busy={furnishing}
                   onClose={() => setSelectedId(null)}
                 />
               )}

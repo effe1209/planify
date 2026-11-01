@@ -31,8 +31,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     if (st.sun) st.sun.intensity = on ? 0.4 : 1.6;
   };
   /* Costruisce i gruppi del progetto e li aggiunge a `target` (la scena o una copia per il DXF). */
-  const attach = (st, target, spreadBy) => {
-    const ov = overlayRef.current;
+  const attach = (st, target, spreadBy, override = null) => {
+    const ov = override || overlayRef.current;
     if (!ov || !st) return null;
     // il giardino sta in un gruppo suo, spostato e ruotato accanto alla facciata: i suoi oggetti vanno là dentro
     const gardenHost = (f) => target.children.find((c) => c.userData.floor?.id === f.id);
@@ -141,6 +141,29 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           png: () => {
             renderer.render(scene, camera);
             return renderer.domElement.toDataURL('image/png');
+          },
+          // GLB per Blender: la scena com'è (tetto, impianto e sensori visibili), con tutte le luci vere e il sole
+          glb: async (extra = {}) => {
+            const fresh = project
+              ? buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern)
+              : buildScene(THREE, plan, THEMES[style] || THEMES.modern);
+            const rf = roofRef.current;
+            if (rf) {
+              const top = project ? roofFloor(project) : { floor: { plan }, y: plan?.height || WALL_H };
+              if (top) fresh.add(buildRoof(THREE, top.floor.plan, top.y, { ...rf, style: project ? (top.floor.meta?.style || style) : style }));
+            }
+            // i corpi illuminanti ci sono sempre (anche senza impianto elettrico: se ne ricavano i punti luce)
+            const cur = overlayRef.current;
+            const lamps = { devices: cur?.devices || [], electric: cur?.electric || extra.electric || null, floorId: cur?.floorId,
+              show: { ...(cur?.show || {}), lights: true }, lightsOn: false };
+            const built = attach(sceneRef.current, fresh, 0, lamps);
+            if (built) {
+              setLights(built, false);
+              for (const g of built.glow) g.emissiveIntensity = 1.8;   // corpi illuminanti accesi
+            }
+            const { sceneToGlb } = await import('../lib/glb');
+            const dir = sunDirection(north);
+            return sceneToGlb(THREE, fresh, { lightPoints: built?.lightPoints || [], sun: dir });
           },
           // il DXF ha sempre le quote vere e i muri interi, anche se la vista è esplosa o con i muri bassi
           dxf: () => {
