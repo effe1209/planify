@@ -698,3 +698,5 @@
 @media (max-width: 720px) { .pf-render { position: static; width: auto; margin: 8px 0 0; } }
 .pf-cutbar { display: inline-flex; align-items: center; gap: 6px; }
 .pf-cutbar input[type="range"] { width: 110px; }
+.pf-render-bar { height: 6px; border-radius: 4px; background: var(--hairline); overflow: hidden; }
+.pf-render-bar i { display: block; height: 100%; background: var(--accent, #0071e3); transition: width .2s; }

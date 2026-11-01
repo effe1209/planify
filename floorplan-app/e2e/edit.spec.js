@@ -419,6 +419,34 @@ test('il loft in 3D ha le viste Completa, Sotto e Sopra e la sezione con piano d
   expect(errors).toEqual([]);
 });
 
+test('il render in qualità alta usa il path tracing e salva il PNG', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(280_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const panel = page.getByRole('complementary', { name: 'Render' });
+  await panel.getByLabel('Inquadratura del render').selectOption({ label: process.env.RVIEW || 'Interno: Soggiorno' });
+  await panel.getByLabel('Risoluzione del render').selectOption({ label: 'Anteprima 960 × 540' });
+  if (process.env.RTIME) await panel.getByLabel('Ora del giorno').selectOption({ label: process.env.RTIME });
+  await panel.getByLabel('Qualità del render').selectOption({ label: 'Alta, path tracing (minuti)' });
+  await panel.getByLabel('Campioni del path tracing').selectOption({ label: process.env.RSAMPLES || 'Anteprima (16 campioni)' });
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 250_000 }).catch(async (e) => { throw new Error(`${e.message} | pannello: ${(await panel.innerText()).replace(/\s+/g, ' ')}`); }),
+    panel.getByRole('button', { name: /Salva render/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  const buf = readFileSync(file);
+  expect(buf.toString('ascii', 1, 4)).toBe('PNG');
+  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([960, 540]);
+  expect(download.suggestedFilename()).toMatch(/-pt\.png$/);
+  copyFileSync(file, process.env.PTOUT || '/tmp/render-pt.png');
+  expect(errors).toEqual([]);
+});
+
 test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(150_000);

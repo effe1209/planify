@@ -16,7 +16,7 @@ function disposeScene(scene) {
 
 export async function houseImage(project, {
   width = 1800, height = 1100, lowWalls = false, view = null, time = 'afternoon', background = 'white', roof = true,
-  quality = 'fast', onProgress = null, signal = null,
+  quality = 'fast', samples = undefined, onProgress = null, signal = null,
 } = {}) {
   const THREE = await import('three');
   const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
@@ -46,7 +46,7 @@ export async function houseImage(project, {
 
     if (quality === 'high') {
       const { pathTraceImage } = await import('./pathTrace');
-      return await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, onProgress, signal });
+      return await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal });
     }
 
     // tempo reale: render → occlusione ambientale → bagliore (luci accese) → mappa tonale e sRGB

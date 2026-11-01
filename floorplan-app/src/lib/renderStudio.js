@@ -8,6 +8,7 @@ import { FLOOR_H } from './scene3d';
 export const EYE = 1.6;   // altezza degli occhi nelle viste interne
 
 export const SIZES = [
+  { id: 'prev', label: 'Anteprima 960 × 540', w: 960, h: 540 },
   { id: 'hd', label: 'Full HD 1920 × 1080', w: 1920, h: 1080 },
   { id: '4k', label: '4K 3840 × 2160', w: 3840, h: 2160 },
 ];
