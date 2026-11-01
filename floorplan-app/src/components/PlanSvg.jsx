@@ -13,6 +13,7 @@ import { FURNITURE_ART } from '../lib/furnitureArt';
 import Rug from './Rug';
 import Decor from './Decor';
 import { decorFor } from '../lib/decor';
+import { slideDoor } from '../lib/mezz';
 import { itemProblems, snapItem } from '../lib/furnitureEdit';
 import { rugsFor } from '../lib/rugs';
 import { mezzAxis, mezzLimits, resizeMezz } from '../lib/mezz';
@@ -1175,6 +1176,18 @@ export default function PlanSvg({
             {plan.mezzanine.bath && level !== 'below' && plan.mezzanine.bath.walls.map((q, i) => (
               <rect key={`mb-${i}`} x={q.x * s} y={q.y * s} width={q.w * s} height={q.h * s} fill="#1f2933" />
             ))}
+            {plan.mezzanine.bath && level !== 'below' && (() => {
+              const sd = slideDoor(plan.mezzanine);
+              if (!sd) return null;
+              const R = (q, props) => <rect x={q.x * s} y={q.y * s} width={q.w * s} height={q.h * s} {...props} />;
+              return (
+                <g>
+                  {R(sd.open, { fill: 'none', stroke: '#7c8896', strokeWidth: 0.8, strokeDasharray: '3 2' })}
+                  {R(sd.rail, { fill: '#3d4452' })}
+                  {R(sd.closed, { fill: '#aeb9c6', stroke: '#3d4452', strokeWidth: 0.8 })}
+                </g>
+              );
+            })()}
             <Stair st={{ ...plan.mezzanine.stair, id: 'mezzanine', role: 'none' }} s={s} />
             {!thumb && layers.labels && (() => {
               const mz = plan.mezzanine;

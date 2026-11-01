@@ -99,6 +99,18 @@ export function itemProblems(plan, index, it = plan.furniture[index]) {
       out.push(`Esce da ${room.name || 'il locale'}`);
     }
   }
+  // la TV (a parete o su mobile) non sta davanti a una finestra: controluce e vetro la rendono inutilizzabile
+  if (it.type === 'tv') {
+    const hitWin = plan.windows.some((w) => {
+      const op = opening(plan, w);
+      const along = Math.abs((it.x + it.w / 2 - op.cx) * op.ux + (it.y + it.h / 2 - op.cy) * op.uy);
+      const across = Math.abs((it.x + it.w / 2 - op.cx) * op.nx + (it.y + it.h / 2 - op.cy) * op.ny);
+      const halfAlong = (Math.abs(op.ux) * it.w + Math.abs(op.uy) * it.h) / 2;
+      const halfAcross = (Math.abs(op.nx) * it.w + Math.abs(op.ny) * it.h) / 2;
+      return along < op.w / 2 + halfAlong - 0.05 && across < op.t / 2 + halfAcross + 0.2;
+    });
+    if (hitWin) out.push('La TV non può stare davanti a una finestra');
+  }
   const hits = plan.furniture.filter((o, i) => i !== index && !GROUND.has(o.type) && !o.elev && overlap(it, o));
   if (hits.length) out.push(`Si sovrappone a ${hits.length === 1 ? 'un altro arredo' : `${hits.length} arredi`}`);
   // porte: il vano e la fascia di passaggio (80 cm) da entrambi i lati

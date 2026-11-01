@@ -6,6 +6,7 @@
 import { frontOf } from './project';
 import { rugsFor } from './rugs';
 import { decorFor } from './decor';
+import { slideDoor } from './mezz';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -455,6 +456,13 @@ function buildMezzanine(THREE, root, mz, M, K, theme, box, dims) {
     const d = mz.bath.door;
     const lin = box(d.x, d.y, d.w, d.h, e + 2.0, 0.2, M.wall);
     if (lin) lin.userData.layer = 'MURI';
+    // porta scorrevole esterna: anta davanti al varco e binario sopra, che corre oltre il varco
+    const sd = slideDoor(mz);
+    if (sd) {
+      const leaf = box(sd.closed.x, sd.closed.y, sd.closed.w, sd.closed.h, e + 0.04, 2.0, M.cabinet);
+      const rail = box(sd.rail.x, sd.rail.y, sd.rail.w, sd.rail.h, e + 2.04, 0.04, M.metal);
+      for (const m of [leaf, rail]) if (m) m.userData.layer = 'PORTE';
+    }
   }
   for (const side of mz.open) {
     const vertical = side === 'W' || side === 'E';

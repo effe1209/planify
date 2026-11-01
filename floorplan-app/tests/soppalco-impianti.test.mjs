@@ -42,3 +42,19 @@ const arredi = g.children.filter((c) => c.userData.layer === 'ARREDI');
 assert.ok(arredi.length > 10, 'tende e specchi nel 3D');
 assert.ok(g.children.some((c) => c.userData.layer === 'LUCI'), 'luce sopra lo specchio');
 console.log('soppalco-impianti ok');
+
+// porta scorrevole del bagnetto: anta sul varco, davanti al muro, binario più lungo del varco
+import { slideDoor } from '../src/lib/mezz.js';
+import { itemProblems } from '../src/lib/furnitureEdit.js';
+const bathMz = { ...mezz, bath: { walls: [{ x: 10.6, y: 1.4, w: 1.4, h: 0.1 }, { x: 10.6, y: 0, w: 0.1, h: 0.35 }, { x: 10.6, y: 1.15, w: 0.1, h: 0.35 }], door: { x: 10.6, y: 0.35, w: 0.1, h: 0.8 } } };
+const sd = slideDoor(bathMz);
+assert.ok(sd && sd.vertical && sd.closed.x < 10.6 && sd.closed.h >= 0.8, JSON.stringify(sd));   // sul lato del soppalco, copre il varco
+assert.ok(sd.open.y > sd.closed.y && sd.rail.h > sd.closed.h * 1.8, 'scorre verso il lato libero');
+const gs = buildScene(THREE, { ...plan, doors: [], mezzanine: bathMz }, THEMES.modern);
+assert.ok(gs.children.filter((c) => c.userData.layer === 'PORTE').length === 2, 'anta e binario nel 3D');
+
+// TV davanti a una finestra: segnalata; su una parete piena no
+const tvPlan = { ...plan, furniture: [{ type: 'tv', x: 1, y: 0.15, w: 1.6, h: 0.25, facing: 'S', room: 1 }, { type: 'tv', x: 6, y: 7.5, w: 1.6, h: 0.25, facing: 'N', room: 1 }] };
+assert.ok(itemProblems(tvPlan, 0).some((q) => q.includes('finestra')), 'TV sulla finestra');
+assert.ok(!itemProblems(tvPlan, 1).some((q) => q.includes('finestra')), 'TV su parete piena');
+console.log('soppalco-impianti 2 ok');

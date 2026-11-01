@@ -80,3 +80,30 @@ export function resizeMezz(plan, size) {
   });
   return { plan: next, dropped, size: target };
 }
+
+/*
+ * Porta scorrevole esterna del bagnetto: anta chiusa sul varco, davanti al muro (lato soppalco), che scorre lungo il muro
+ * verso il lato con più posto. Restituisce l'anta chiusa, la posizione aperta (ombra) e il binario, in metri.
+ */
+export function slideDoor(mz) {
+  const b = mz?.bath;
+  if (!b?.door || !b.walls?.length) return null;
+  const d = b.door;
+  const vertical = d.h > d.w;   // il varco corre lungo y: muro verticale
+  const bx = b.walls.reduce((a, q) => [Math.min(a[0], q.x), Math.max(a[1], q.x + q.w)], [Infinity, -Infinity]);
+  const by = b.walls.reduce((a, q) => [Math.min(a[0], q.y), Math.max(a[1], q.y + q.h)], [Infinity, -Infinity]);
+  const out = vertical ? ((bx[0] + bx[1]) / 2 > d.x + d.w / 2 ? -1 : 1) : ((by[0] + by[1]) / 2 > d.y + d.h / 2 ? -1 : 1);
+  const len = vertical ? d.h : d.w;
+  const a0 = vertical ? d.y : d.x;
+  const lo = vertical ? mz.y : mz.x;
+  const hi = lo + (vertical ? mz.h : mz.w);
+  const dir = hi - (a0 + len) >= a0 - lo ? 1 : -1;
+  const T = 0.04;
+  const face = vertical ? (out > 0 ? d.x + d.w + 0.01 : d.x - 0.01 - T) : (out > 0 ? d.y + d.h + 0.01 : d.y - 0.01 - T);
+  const mk = (s0, l, t, across) => (vertical ? { x: across, y: s0, w: t, h: l } : { x: s0, y: across, w: l, h: t });
+  const closed = mk(a0 - 0.02, len + 0.04, T, face);
+  const open = mk(a0 - 0.02 + dir * len, len + 0.04, T, face);
+  const r0 = Math.min(a0, a0 + dir * len) - 0.04;
+  const rail = mk(r0, len * 2 + 0.08, 0.03, out > 0 ? face + T : face - 0.03);
+  return { closed, open, rail, vertical };
+}
