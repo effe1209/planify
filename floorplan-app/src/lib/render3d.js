@@ -1,57 +1,87 @@
 /*
- * Immagine 3D di tutta la casa fuori schermo (PDF del progetto e pannello Render): stessa scena della vista
- * interattiva (lib/scene3d.js), con inquadratura, ora del giorno, sfondo e risoluzione a scelta (lib/renderStudio.js).
- * Senza opzioni: tre quarti dall'alto, pomeriggio, sfondo bianco. three.js si carica solo qui.
+ * Immagine 3D di tutta la casa fuori schermo (PDF del progetto e pannello Render): scena di lib/renderScene.js (tetto,
+ * soffitti, sole dalle finestre, luci e allarme), inquadratura, ora del giorno, sfondo e risoluzione a scelta.
+ * Tempo reale con mappa tonale ACES, occlusione ambientale (GTAO) e bagliore delle luci accese; con `quality: 'high'`
+ * il path tracing calcola la luce vera (lib/pathTrace.js). Senza opzioni: tre quarti, pomeriggio, sfondo bianco.
+ * three.js si carica solo qui.
  */
-import { THEMES } from './themes';
-import { backgroundFor, cameraViews, houseBounds, sunFor } from './renderStudio';
+import { backgroundFor, cameraViews, houseBounds, timeById } from './renderStudio';
+
+function disposeScene(scene) {
+  scene.traverse((o) => {
+    o.geometry?.dispose();
+    if (o.material) [].concat(o.material).forEach((m) => m.dispose());
+  });
+}
 
 export async function houseImage(project, {
-  width = 1800, height = 1100, lowWalls = false, view = null, time = 'afternoon', background = 'white', roof = null,
+  width = 1800, height = 1100, lowWalls = false, view = null, time = 'afternoon', background = 'white', roof = true,
+  quality = 'fast', onProgress = null, signal = null,
 } = {}) {
   const THREE = await import('three');
-  const { buildHouse, addGround, buildRoof, roofFloor } = await import('./scene3d');
+  const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
+  const { buildRenderScene } = await import('./renderScene');
   const canvas = document.createElement('canvas');
   const bg = backgroundFor(background, time);
+  const t = timeById(time);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
   try {
     renderer.setSize(width, height, false);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = t.exposure;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
-    const scene = new THREE.Scene();
-    const model = buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls });
-    if (!model.children.length) return null;
-    if (roof) {
-      const top = roofFloor(project);
-      if (top) model.add(buildRoof(THREE, top.floor.plan, top.y, { ...roof, style: top.floor.meta?.style || 'modern' }));
-    }
-    scene.add(model);
-    const { bb, center, size } = addGround(THREE, scene, model);
-    const W = size.x, L = size.z, H = bb.max.y;
-    const sunSet = sunFor(time, project.north || 0, [center.x, 0, center.z], Math.max(W, L) * 0.6 + 8 + H);
-    scene.add(new THREE.HemisphereLight('#ffffff', '#cfd6e0', sunSet.hemi));
-    const sun = new THREE.DirectionalLight(sunSet.color, sunSet.intensity);
-    const ext = Math.max(W, L, H);
-    sun.position.set(...sunSet.position);
-    sun.target.position.set(center.x, 0, center.z);
-    sun.castShadow = true;
-    sun.shadow.bias = -0.0004;
-    sun.shadow.normalBias = 0.03;
-    sun.shadow.mapSize.set(width > 2500 ? 4096 : 2048, width > 2500 ? 4096 : 2048);
-    Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + H * 2 + sunSet.position[1] });
-    scene.add(sun, sun.target);
-    // l'inquadratura scelta; senza, tre quarti dall'alto (la prima delle viste automatiche)
-    const v = view || cameraViews(project, { aspect: width / height })[0] || { position: [W, H * 2, L * 1.5], target: [W / 2, H / 2, L / 2], fov: 35 };
+    const v = view || cameraViews(project, { aspect: width / height })[0];
+    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, view: v, time, background, roof, lowWalls });
+    if (!built) return null;
+    const { scene, bounds } = built;
+    const { size, bb } = bounds;
+    const sunMap = width > 2500 ? 4096 : 2048;
+    built.sun.shadow.mapSize.set(sunMap, sunMap);
     const camera = new THREE.PerspectiveCamera(v.fov, width / height, 0.05, 400);
     camera.position.set(...v.position);
     camera.lookAt(new THREE.Vector3(...v.target));
-    renderer.render(scene, camera);
+
+    if (quality === 'high') {
+      const { pathTraceImage } = await import('./pathTrace');
+      return await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, onProgress, signal });
+    }
+
+    // tempo reale: render → occlusione ambientale → bagliore (luci accese) → mappa tonale e sRGB
+    let drawn = false;
+    if (!bg.alpha) {
+      try {
+        const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+        const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+        const { GTAOPass } = await import('three/examples/jsm/postprocessing/GTAOPass.js');
+        const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
+        const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
+        const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: 4 });
+        const composer = new EffectComposer(renderer, target);
+        composer.setPixelRatio(1);
+        composer.setSize(width, height);
+        composer.addPass(new RenderPass(scene, camera));
+        const ao = new GTAOPass(scene, camera, width, height);
+        ao.updateGtaoMaterial({ radius: Math.max(0.35, Math.min(1.2, Math.max(size.x, size.z) / 25)), distanceExponent: 1.5, thickness: 1.5, scale: 1.1, samples: 16, distanceFallOff: 1 });
+        ao.normalMaterial.side = THREE.DoubleSide;   // il tetto e i soffitti si disegnano da due lati: senza, l'AO "vede" l'interno attraverso
+        ao.blendIntensity = 0.85;
+        composer.addPass(ao);
+        if (t.bloom > 0) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), t.bloom, 0.6, built.lampsOn ? 0.85 : 0.95));
+        composer.addPass(new OutputPass());
+        composer.render();
+        drawn = true;
+        composer.dispose?.();
+        target.dispose();
+      } catch (e) {
+        drawn = false;   // senza i passaggi extra si disegna diretto
+      }
+    }
+    if (!drawn) renderer.render(scene, camera);
     const data = canvas.toDataURL('image/png');
-    scene.traverse((o) => {
-      o.geometry?.dispose();
-      if (o.material) [].concat(o.material).forEach((m) => m.dispose());
-    });
+    disposeScene(scene);
+    void bb;
     return { data, w: width, h: height };
   } finally {
     renderer.dispose();

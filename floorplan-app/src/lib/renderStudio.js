@@ -14,11 +14,11 @@ export const SIZES = [
 
 /* Sole: azimut dal nord del foglio (gradi, in senso orario), altezza sull'orizzonte, colore e intensità; cielo e luce d'ambiente. */
 export const TIMES = [
-  { id: 'morning', label: 'Mattina', az: 100, el: 24, color: '#ffe6c2', sun: 1.5, hemi: 1.1, sky: '#d3e5f5' },
-  { id: 'noon', label: 'Mezzogiorno', az: 180, el: 62, color: '#fffaf0', sun: 1.9, hemi: 1.3, sky: '#bfdaf3' },
-  { id: 'afternoon', label: 'Pomeriggio', az: 215, el: 38, color: '#fff7ea', sun: 1.6, hemi: 1.3, sky: '#d2e2f1' },
-  { id: 'sunset', label: 'Tramonto', az: 270, el: 9, color: '#ffb470', sun: 1.3, hemi: 0.8, sky: '#f4c7a1' },
-  { id: 'evening', label: 'Sera', az: 215, el: 18, color: '#9fb2ff', sun: 0.5, hemi: 0.42, sky: '#27324f' },
+  { id: 'morning', label: 'Mattina', az: 100, el: 24, color: '#ffe6c2', sun: 2.6, hemi: 0.22, env: 0.3, exposure: 0.8, bloom: 0.12, lamps: false, sky: '#d3e5f5' },
+  { id: 'noon', label: 'Mezzogiorno', az: 180, el: 62, color: '#fffaf0', sun: 3.2, hemi: 0.25, env: 0.32, exposure: 0.75, bloom: 0.1, lamps: false, sky: '#bfdaf3' },
+  { id: 'afternoon', label: 'Pomeriggio', az: 215, el: 38, color: '#fff3e0', sun: 2.9, hemi: 0.22, env: 0.3, exposure: 0.8, bloom: 0.12, lamps: false, sky: '#d2e2f1' },
+  { id: 'sunset', label: 'Tramonto', az: 270, el: 9, color: '#ff9f5a', sun: 2.4, hemi: 0.14, env: 0.18, exposure: 0.95, bloom: 0.22, lamps: true, sky: '#f1b98e' },
+  { id: 'evening', label: 'Sera', az: 215, el: 14, color: '#8ea6ff', sun: 0.3, hemi: 0.08, env: 0.08, exposure: 1.2, bloom: 0.3, lamps: true, sky: '#1e2a47' },
 ];
 
 export const BACKGROUNDS = [
@@ -28,6 +28,8 @@ export const BACKGROUNDS = [
   { id: 'transparent', label: 'Trasparente (PNG)', color: null, alpha: true },
 ];
 
+/* Le luci di casa sono accese al tramonto e di sera. */
+export const lampsOn = (id) => !!timeById(id).lamps;
 export const timeById = (id) => TIMES.find((t) => t.id === id) || TIMES[2];
 
 /* Posizione e colore del sole per un'ora del giorno, attorno al centro della scena. */
@@ -99,12 +101,12 @@ export function cameraViews(project, { aspect = 16 / 9 } = {}) {
       const corners = [[room.x, room.y], [room.x + room.w, room.y], [room.x, room.y + room.h], [room.x + room.w, room.y + room.h]];
       const doors = (f.plan.doors || []).map((d) => [d.x + (d.rot === 90 ? 0 : d.w / 2), d.y + (d.rot === 90 ? d.w / 2 : 0)]);
       const near = (c) => (doors.length ? Math.min(...doors.map((d) => Math.hypot(d[0] - c[0], d[1] - c[1]))) : 0);
-      const inset = 0.4;
+      const inset = Math.min(0.75, Math.min(room.w, room.h) / 5);   // lontano dall'anta aperta di una porta d'angolo
       const at = (c) => [c[0] + (cx - c[0] > 0 ? inset : -inset), c[1] + (cz - c[1] > 0 ? inset : -inset)];
-      // niente occhio dentro una lampada, una pianta o un mobile d'angolo: si scartano gli angoli occupati (0,3 m di margine)
+      // niente occhio dentro una lampada, una pianta o un mobile d'angolo: si scartano gli angoli occupati (0,6 m di margine)
       const free = corners.filter((c) => {
         const [x, z] = at(c);
-        return !(f.plan.furniture || []).some((it) => x > it.x - 0.3 && x < it.x + it.w + 0.3 && z > it.y - 0.3 && z < it.y + it.h + 0.3 && it.type !== 'rug');
+        return !(f.plan.furniture || []).some((it) => x > it.x - 0.6 && x < it.x + it.w + 0.6 && z > it.y - 0.6 && z < it.y + it.h + 0.6 && it.type !== 'rug');
       });
       const [px, pz] = (free.length ? free : corners).reduce((best, c) => (near(c) > near(best) ? c : best));
       const [vx, vz] = at([px, pz]);

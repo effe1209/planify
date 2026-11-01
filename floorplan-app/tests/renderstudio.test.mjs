@@ -56,7 +56,7 @@ assert.ok(Math.hypot(rot.position[0] - aft.position[0], rot.position[2] - aft.po
 
 // sfondo
 assert.deepEqual(backgroundFor('white', 'noon'), { color: '#ffffff', alpha: false });
-assert.equal(backgroundFor('sky', 'evening').color, '#27324f');
+assert.equal(backgroundFor('sky', 'evening').color, '#1e2a47');
 assert.equal(backgroundFor('transparent', 'noon').alpha, true);
 assert.deepEqual(SIZES.map((s) => s.w), [1920, 3840]);
 console.log('renderstudio ok');

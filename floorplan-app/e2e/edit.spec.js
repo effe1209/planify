@@ -357,10 +357,11 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   const view = panel.getByLabel('Inquadratura del render');
   await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
   const before = await page.evaluate(() => window.__planify3d.camera.position.toArray());
-  await view.selectOption({ label: 'Interno: Soggiorno' });
+  await view.selectOption({ label: process.env.RVIEW || 'Interno: Soggiorno' });
   const after = await page.evaluate(() => window.__planify3d.camera.position.toArray());
-  expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
+  if (!process.env.RVIEW) expect(Math.abs(after[1] - 1.6)).toBeLessThan(0.01);   // a 1,6 m dal pavimento
   expect(before[1]).toBeGreaterThan(3);
+  if (process.env.RTIME) await panel.getByLabel('Ora del giorno').selectOption({ label: process.env.RTIME });
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 90_000 }),
     panel.getByRole('button', { name: /Salva render/ }).click(),
@@ -371,7 +372,7 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   expect(buf.toString('ascii', 1, 4)).toBe('PNG');
   expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1920, 1080]);
   copyFileSync(file, process.env.RENDEROUT || '/tmp/render-interno.png');
-  expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
+  if (!process.env.RVIEW) expect(download.suggestedFilename()).toMatch(/render-room-.*-hd\.png$/);
   expect(errors).toEqual([]);
 });
 

@@ -546,7 +546,7 @@ function floorVoids(stairs) {
     .flatMap((st) => stairHoles(st, WALL_H + SLAB_T));
 }
 
-export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0 } = {}) {
+export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0, ceiling = false } = {}) {
   const house = new THREE.Group();
   house.userData.grade = 0;
   const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
@@ -590,6 +590,23 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
       slab.userData.layer = 'SOLAI';
       slab.userData.floor = { id: f.id, name: f.name, level: f.level };
       house.add(slab);
+    }
+  }
+  // soffitto del piano più alto (render): senza, da dentro si vedrebbe il tetto da sotto o il cielo; i piani sotto hanno già il solaio sopra
+  if (ceiling) {
+    const top = floors[floors.length - 1];
+    const ceilMat = new THREE.MeshStandardMaterial({ color: '#f4f2ee', roughness: 0.95 });
+    const yTop = quota(top.level) + (top.plan.height || WALL_H);
+    for (const r of top.plan.rooms) {
+      if (r.kind === 'garden') continue;
+      const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
+      const c = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z)))), ceilMat);
+      c.rotation.x = Math.PI / 2;   // la faccia guarda in basso
+      c.position.y = yTop;
+      c.receiveShadow = true;
+      c.castShadow = true;
+      c.userData.layer = 'SOFFITTI';
+      house.add(c);
     }
   }
   const garden = project.floors.find((f) => f.level === 'out' && f.plan?.rooms?.length);

@@ -38,7 +38,7 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
         const c = three.current?.camera?.();
         view = c ? shiftView(c, -dy) : null;   // la telecamera attuale, riportata alle quote della casa intera
       }
-      const img = await houseImage(project, { width: px.w, height: px.h, view, time, background: bg, lowWalls, roof });
+      const img = await houseImage(project, { width: px.w, height: px.h, view, time, background: bg, lowWalls });
       if (!img) throw new Error('niente da disegnare');
       const blob = await fetch(img.data).then((r) => r.blob());
       saveBlob(blob, `${name}-render-${viewId === 'current' ? 'vista' : viewId}-${px.id}.png`);
