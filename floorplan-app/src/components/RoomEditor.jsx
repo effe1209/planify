@@ -7,7 +7,7 @@ const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio',
 /* Pannello di personalizzazione della stanza selezionata: nome, uso, finitura, arredi. */
 const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula']);
 
-export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip, onRemoveItem, onAddItem, onFurnish, busy, onClose }) {
+export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip, onRemoveItem, onAddItem, onFurnish, busy, onClose, mezz = null }) {
   const [newId, setNewId] = useState('bed_double');
   const groups = [...new Set(FURNITURE.map((f) => f.group))];
 
@@ -51,6 +51,8 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip
       </div>
 
       </>)}
+
+      {mezz && <MezzSize mezz={mezz} area={room.w * room.h} />}
 
       <div className="pf-field-sm">
         <span>{room.mezz ? `Arredi del soppalco (${furniture.length})` : `Arredi nella stanza (${furniture.length})`}</span>
@@ -106,5 +108,27 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip
         </div>
       </div>
     </section>
+  );
+}
+
+/* Dimensione del soppalco: cursore e campo in metri; sotto 1/3 del loft è la misura usuale della norma, oltre avvisa. */
+function MezzSize({ mezz, area }) {
+  const ratio = mezz.ratio(mezz.cur);
+  const over = ratio > 1 / 3 + 1e-6;
+  return (
+    <div className="pf-field-sm pf-mezz-size">
+      <span>{mezz.label} del soppalco</span>
+      <div className="pf-row">
+        <input type="range" min={mezz.min} max={mezz.max} step="0.05" value={mezz.cur} aria-label={`${mezz.label} del soppalco`}
+          onChange={(e) => mezz.onSize(parseFloat(e.target.value))} />
+        <input type="number" className="pf-input-sm pf-mezz-num" min={mezz.min} max={mezz.max} step="0.05" value={mezz.cur}
+          aria-label={`${mezz.label} del soppalco in metri`} onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) mezz.onSize(v); }} />
+        <em>m</em>
+      </div>
+      <p className={`pf-hint ${over ? 'pf-hint-warn' : ''}`} role="status">
+        {area.toFixed(1).replace('.', ',')} m² · {(ratio * 100).toFixed(0)}% del loft
+        {over ? ': oltre 1/3, il limite usuale della norma (alcuni comuni ammettono di più)' : ': entro 1/3, a norma'}
+      </p>
+    </div>
   );
 }

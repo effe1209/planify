@@ -19,6 +19,7 @@ import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, p
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
 import { itemProblems, rotateItem, snapItem } from './lib/furnitureEdit';
+import { mezzAxis, mezzLimits, mezzRatio, resizeMezz } from './lib/mezz';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
 import HistoryPanel from './components/HistoryPanel';
@@ -744,6 +745,12 @@ export default function App() {
   };
   const tryEdit = (res) => { if (res.error) setError(res.error); else { setError(null); applyPlanEdit(res); } };
   const splitAt = (roomId, dir, at) => tryEdit(splitRoom(plan, roomId, dir, at));
+  const resizeMezzanine = (size) => {
+    const res = resizeMezz(plan, size);
+    if (res.unchanged) return;
+    tryEdit({ ...res, moved: [] });
+    if (res.dropped?.length) say(`Scala spostata: tolti ${res.dropped.length} arredi sotto la rampa`);
+  };
   const mergeSelected = () => tryEdit(mergeRooms(plan, selectedWall.a, selectedWall.b));
   const openSelected = () => tryEdit(openWall(plan, selectedWall.a, selectedWall.b));
   /* Piani con il vano scala nello stesso punto di questo: la scala si cambia su tutti insieme. */
@@ -1908,7 +1915,7 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`} north={current?.north ?? 0}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
-                  level={plan.mezzanine ? loftLevel : 'all'}
+                  level={plan.mezzanine ? loftLevel : 'all'} onMezzResize={readOnly ? null : resizeMezzanine}
                   editable={!readOnly && !showElectric && !showPlumbing && !wallEdit} selectedItem={selectedItem}
                   wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? {
                     selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
@@ -2021,6 +2028,7 @@ export default function App() {
                   onFlip={flipFurniture}
                   onRemoveItem={removeFurniture}
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
+                  mezz={selectedRoom.mezz && !readOnly ? { ...mezzLimits(plan), label: mezzAxis(plan).label, ratio: (s) => mezzRatio(plan, s), onSize: resizeMezzanine } : null}
                   onFurnish={engineHas('furnish_plan') && !readOnly && !selectedRoom.mezz ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
                   busy={furnishing}
                   onClose={() => setSelectedId(null)}

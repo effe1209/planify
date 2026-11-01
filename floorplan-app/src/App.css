@@ -769,3 +769,7 @@
 /* loft: scelta del livello mostrato (completa, sotto, sopra) */
 .pf-levels { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; box-shadow: var(--shadow-sm); background: var(--bg-panel); border: 1px solid var(--border); }
 .pf-levels button { min-width: 74px; }
+
+.pf-mezz-size .pf-row { align-items: center; gap: 8px; }
+.pf-mezz-size input[type=range] { flex: 1; }
+.pf-mezz-num { width: 70px; }

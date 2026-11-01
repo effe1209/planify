@@ -349,3 +349,30 @@ test('nella vista Sopra si aggiungono arredi al soppalco', async ({ page }, info
   await expect(rows).toHaveCount(before + 1);
   expect(errors).toEqual([]);
 });
+
+test('il soppalco si allarga dal pannello con l\'avviso oltre 1/3, e si mette un tappeto da solo', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('radiogroup', { name: 'Livello del loft' }).getByRole('radio', { name: 'Sopra' }).click();
+  const panel = page.locator('.pf-customizer');
+  const num = panel.getByLabel('Larghezza del soppalco in metri');
+  await expect(panel).toContainText('a norma');
+  await num.fill('4.5');
+  await expect(panel).toContainText('oltre 1/3');
+  await expect(num).toHaveValue('4.5');
+  await page.keyboard.press('Control+z');
+  await expect(panel).toContainText('a norma');
+  // tappeto da solo: nella stanza, senza tavolino
+  await page.getByRole('radiogroup', { name: 'Livello del loft' }).getByRole('radio', { name: 'Completa' }).click();
+  await page.locator('.pf-sheet svg [class~="pf-hit"]').first().click({ force: true });
+  const room = page.locator('.pf-customizer');
+  await room.locator('.pf-add-furn select').selectOption({ label: 'Tappeto medio 2 × 2,6' });
+  await room.getByRole('button', { name: /Aggiungi/ }).click();
+  await expect(room.locator('.pf-furn-row', { hasText: 'Tappeto' })).toHaveCount(1);
+  expect(errors).toEqual([]);
+});

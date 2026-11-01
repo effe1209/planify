@@ -4,6 +4,7 @@
  * finestre (da 0,90 a 2,10 m, con il vetro); arredi come volumi con altezze reali e i colori dello stile.
  */
 import { frontOf } from './project';
+import { rugsFor } from './rugs';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -272,12 +273,60 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     }
   }
 
+  // tappeti: sotto il tavolino, ai piedi del letto e quelli messi a mano, bassi e col colore dello stile
+  const rugMat = mat(theme.rug || '#e6ebf2', { roughness: 1 });
+  for (const r of rugsFor(plan)) {
+    const m = box(r.x, r.y, r.w, r.h, 0.004, 0.012, rugMat);
+    if (m) m.userData.layer = 'ARREDI';
+  }
+
+  // sedie attorno ai tavoli (come nel disegno in pianta): seduta, gambe e schienale sul lato esterno
+  const chair = (cx, cz, side, chairMat) => {
+    const cl = 0.42;
+    const cd = 0.4;
+    const x0 = cx - (side === 'W' || side === 'E' ? cd : cl) / 2;
+    const z0 = cz - (side === 'W' || side === 'E' ? cl : cd) / 2;
+    const w = side === 'W' || side === 'E' ? cd : cl;
+    const d = side === 'W' || side === 'E' ? cl : cd;
+    box(x0, z0, w, d, 0.43, 0.04, chairMat);
+    for (const [lx, lz] of [[x0, z0], [x0 + w - 0.035, z0], [x0, z0 + d - 0.035], [x0 + w - 0.035, z0 + d - 0.035]]) box(lx, lz, 0.035, 0.035, 0, 0.43, chairMat);
+    const b = 0.04;
+    if (side === 'N') box(x0, z0, w, b, 0.47, 0.42, chairMat);
+    else if (side === 'S') box(x0, z0 + d - b, w, b, 0.47, 0.42, chairMat);
+    else if (side === 'W') box(x0, z0, b, d, 0.47, 0.42, chairMat);
+    else box(x0 + w - b, z0, b, d, 0.47, 0.42, chairMat);
+  };
+  const chairsAround = (it) => {
+    const chairMat = mat(theme.chair || '#eadfca');
+    const spots = [];   // [centro x, centro z, lato su cui sta lo schienale]
+    if (it.type === 'table_round') {
+      const rr = it.w / 2 + 0.24;
+      for (const [dx, dz, sd] of [[0, -rr, 'N'], [rr, 0, 'E'], [0, rr, 'S'], [-rr, 0, 'W']]) spots.push([it.x + it.w / 2 + dx, it.y + it.h / 2 + dz, sd]);
+    } else {
+      const horiz = it.w >= it.h;
+      const long = Math.max(it.w, it.h);
+      const n = Math.max(1, Math.min(8, Math.floor(long / 0.55)));
+      for (let i = 0; i < n; i++) {
+        const p = (long * (i + 0.5)) / n;
+        if (horiz) spots.push([it.x + p, it.y - 0.24, 'N'], [it.x + p, it.y + it.h + 0.24, 'S']);
+        else spots.push([it.x - 0.24, it.y + p, 'W'], [it.x + it.w + 0.24, it.y + p, 'E']);
+      }
+      if (long > 2.4) {
+        if (horiz) spots.push([it.x - 0.24, it.y + it.h / 2, 'W'], [it.x + it.w + 0.24, it.y + it.h / 2, 'E']);
+        else spots.push([it.x + it.w / 2, it.y - 0.24, 'N'], [it.x + it.w / 2, it.y + it.h + 0.24, 'S']);
+      }
+    }
+    for (const [x, z, sd] of spots) chair(x, z, sd, chairMat);
+  };
+
   // arredi
   // arredi del soppalco (it.elev): stessi volumi, alzati alla quota del suo pavimento
   const raise = (it, from) => {
     if (it.elev) for (let i = from; i < root.children.length; i++) root.children[i].position.y += it.elev;
   };
   for (const it of plan.furniture) {
+    if (it.type === 'rug') continue;   // il tappeto è già disegnato sopra
+    if (it.type === 'table' || it.type === 'table_round') chairsAround(it);
     const from = root.children.length;
     // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
     const obj = buildObject(THREE, it, M, mat, theme);
@@ -362,6 +411,16 @@ function buildMezzanine(THREE, root, mz, M, K, theme, box, dims) {
   };
   const thick = 0.03;
   buildStairRail(THREE, root, mz, M, K, dims);
+  // bagnetto chiuso sul soppalco: tramezzi alti 2,20 m con il varco della porta e l'architrave
+  if (mz.bath) {
+    for (const q of mz.bath.walls) {
+      const m = box(q.x, q.y, q.w, q.h, e, 2.2, M.wall);
+      if (m) m.userData.layer = 'MURI';
+    }
+    const d = mz.bath.door;
+    const lin = box(d.x, d.y, d.w, d.h, e + 2.0, 0.2, M.wall);
+    if (lin) lin.userData.layer = 'MURI';
+  }
   for (const side of mz.open) {
     const vertical = side === 'W' || side === 'E';
     const at = side === 'W' ? mz.x : side === 'E' ? mz.x + mz.w : side === 'N' ? mz.y : mz.y + mz.h;

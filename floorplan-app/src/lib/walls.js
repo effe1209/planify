@@ -386,7 +386,8 @@ export function movePartition(plan0, part, delta) {
     furniture: (plan.furniture || []).map(shift),
     stairs: stairs.map((st) => ({ ...shift(st), core: shift(st.core) })),
     doors: doors.map(place), windows: windows.map(place),
-    ...(plan.mezzanine ? { mezzanine: { ...shift(plan.mezzanine), stair: shift(plan.mezzanine.stair) } } : {}),
+    ...(plan.mezzanine ? { mezzanine: { ...shift(plan.mezzanine), stair: shift(plan.mezzanine.stair),
+      ...(plan.mezzanine.bath ? { bath: { walls: plan.mezzanine.bath.walls.map(shift), door: shift(plan.mezzanine.bath.door) } } : {}) } } : {}),
   };
   if (grow) {
     const notches = computeNotches(rooms, W2, L2);
