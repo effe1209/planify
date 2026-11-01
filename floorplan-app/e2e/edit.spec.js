@@ -436,6 +436,27 @@ test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page 
   expect(errors).toEqual([]);
 });
 
+test('il PDF del loft ha prospetti e sezioni con il soppalco', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(150_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Esporta/ }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 100_000 }),
+    page.getByRole('menuitem', { name: /PDF progetto/ }).click(),
+  ]);
+  const { readFileSync, copyFileSync } = await import('node:fs');
+  const file = await download.path();
+  expect(readFileSync(file).toString('ascii', 0, 5)).toBe('%PDF-');
+  copyFileSync(file, process.env.PDFLOFT || '/tmp/progetto-loft.pdf');
+  expect(errors).toEqual([]);
+});
+
 test('la sezione del loft mostra il soppalco con le altezze in cm', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   const errors = await open(page);

@@ -10,6 +10,9 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { jsPDF } from 'jspdf';
 import PlanSvg from '../components/PlanSvg';
+import { Drawing } from '../components/SheetsView';
+import { elevation, levelMarks, section } from './elevation';
+import { ROOF_DEFAULTS } from './roof';
 import { TYPE_NAME } from '../constants';
 import { AJAX_MODELS, billOfMaterials, DEVICE_STYLE } from './ajax';
 import { APPLIANCES, KIND_ORDER, KINDS, LEVELS, planElectric } from './electric';
@@ -64,6 +67,79 @@ export async function floorImage(floor, devices, extra, k = 3) {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/* Un elemento React con un SVG → PNG (stesso giro di floorImage). */
+async function svgToPng(element, k = 3) {
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  flushSync(() => root.render(element));
+  const { xml, w, h } = serializeSvg(host.querySelector('svg'));
+  root.unmount();
+  const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('Rendering del disegno non riuscito'));
+      im.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * k);
+    canvas.height = Math.round(h * k);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return { data: canvas.toDataURL('image/png'), w, h };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/*
+ * Prospetti N/S/E/O (con il tetto) e due sezioni (senza tetto, per vedere dentro). Nel loft il taglio passa per la scala
+ * del soppalco, così la sezione mostra gradini, solaio, parapetto e le altezze libere (rosse se fuori norma).
+ */
+async function elevationPages(doc, project, north) {
+  const levels = levelMarks(project);
+  if (!levels.length) return;
+  const first = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).sort((a, b) => a.level - b.level)
+    .find((f) => f.plan.mezzanine) || project.floors.find((f) => typeof f.level === 'number' && f.plan?.rooms?.length);
+  const dims = first.plan.dimensions;
+  let cutY = dims.length / 2;
+  let cutX = dims.width / 2;
+  const st = first.plan.mezzanine?.stair;
+  if (st) {
+    if (st.up === 'E' || st.up === 'W') cutY = st.y + st.h / 2;
+    else cutX = st.x + st.w / 2;
+  }
+  const roof = { ...ROOF_DEFAULTS };
+  const drawings = [
+    ...['down', 'up', 'right', 'left'].map((s) => elevation(project, s, { north, roof })),
+    section(project, 'x', cutY),
+    section(project, 'y', cutX),
+  ].filter((d) => d.shapes.length);
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const put = async (list, cols, title, sub) => {
+    if (!list.length) return;
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text(safe(title), M, 16);
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED).text(safe(sub), M, 22);
+    const rows = Math.ceil(list.length / cols);
+    const cw = (pw - 2 * M - 6 * (cols - 1)) / cols;
+    const chh = (ph - 28 - 16 - 6 * (rows - 1)) / rows;
+    for (let i = 0; i < list.length; i++) {
+      const img = await svgToPng(createElement(Drawing, { d: list[i], marks: levels }), 3);
+      const z = Math.min(cw / img.w, chh / img.h);
+      const x = M + (i % cols) * (cw + 6) + (cw - img.w * z) / 2;
+      const y = 27 + Math.floor(i / cols) * (chh + 6);
+      doc.addImage(img.data, 'PNG', x, y, img.w * z, img.h * z, undefined, 'FAST');
+    }
+  };
+  await put(drawings.slice(0, 4), 2, 'Prospetti', 'Quattro facciate con il tetto; quote dei piani a sinistra, +0,00 = piano terra');
+  await put(drawings.slice(4), 1, 'Sezioni', st ? 'Tagli per la scala del soppalco: altezze libere in cm, in rosso se fuori norma' : 'Sezione longitudinale e trasversale con le altezze dei locali');
 }
 
 export const grossArea = (plan) => plan.stats?.grossArea ?? plan.rooms.reduce((a, r) => a + r.w * r.h, 0);
@@ -602,6 +678,11 @@ export async function exportProjectPdf(project) {
       doc.addPage('a4', 'landscape');
       await plumbingPage(doc, f, pl, plumbing, { stairs: byFloor[f.id], house, plumbingLines: project.plumbing.lines !== false });
     }
+  }
+  try {
+    await elevationPages(doc, project, project.north || 0);
+  } catch {
+    /* un disegno non riuscito non deve bloccare il PDF */
   }
   if (electric?.bom.length) electricSummary(doc, project, electric);
   if (plumbing?.bom.length) plumbingSummary(doc, project, plumbing);

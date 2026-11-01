@@ -12,7 +12,7 @@ const FILL = { wall: '#ece8df', below: '#d6d3cc', slab: '#8d939c', glass: '#bfe0
 const num = (v) => fmt(v, 2);
 
 /* Un disegno (prospetto o sezione) in SVG: terreno, forme, quote dei piani. */
-function Drawing({ d, marks, svgRef }) {
+export function Drawing({ d, marks, svgRef }) {
   const w = Math.max(1, d.maxX - d.minX) * S + PAD * 2 + 30 + (d.dims?.length ? 100 : 0);
   const h = (d.maxY - d.minY) * S + PAD * 2;
   const X = (x) => PAD + 22 + (x - d.minX) * S;
