@@ -67,7 +67,9 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
       if (!img) throw new Error('niente da disegnare');
       const blob = await fetch(img.data).then((r) => r.blob());
       saveBlob(blob, `${name}-render-${viewId === 'current' ? 'vista' : viewId}-${px.id}${quality === 'high' ? '-pt' : ''}.png`);
-      onDone?.(`Render ${px.w} × ${px.h} salvato${img.samples ? ` (${img.samples} campioni)` : ''}`);
+      const i = img.info;
+      onDone?.(`Render ${img.w} × ${img.h} salvato${img.samples ? ` (${img.samples} campioni)` : ''}${i ? ` · ${i.mode}, esposizione ${i.exposure}, scheda: ${i.gpu}` : ''}${i?.notes?.length ? ` · ${i.notes.join('; ')}` : ''}`);
+      if (i?.notes?.length) setError(`Attenzione: ${i.notes.join('; ')}.`);
     } catch (e) {
       setError(e.message === 'interrotto' ? 'Render interrotto.' : `Render non riuscito: ${e.message}`);
     } finally {

@@ -1,9 +1,10 @@
 /*
  * Immagine 3D di tutta la casa fuori schermo (PDF del progetto e pannello Render): scena di lib/renderScene.js (tetto,
  * soffitti, sole dalle finestre, luci e allarme), inquadratura, ora del giorno, sfondo e risoluzione a scelta.
- * Tempo reale con mappa tonale ACES, occlusione ambientale (GTAO) e bagliore delle luci accese; con `quality: 'high'`
- * il path tracing calcola la luce vera (lib/pathTrace.js). Senza opzioni: tre quarti, pomeriggio, sfondo bianco.
- * three.js si carica solo qui.
+ * Tempo reale con mappa tonale ACES, esposizione automatica, occlusione ambientale (GTAO) e bagliore delle luci accese;
+ * con `quality: 'high'` il path tracing calcola la luce vera (lib/pathTrace.js).
+ * Ogni immagine si controlla: se esce nera o vuota (schede grafiche che non reggono gli effetti o il 4K) si riprova con meno
+ * effetti, e il risultato dice quale strada ha funzionato e su quale scheda grafica. three.js si carica solo qui.
  */
 import { backgroundFor, cameraViews, houseBounds, timeById } from './renderStudio';
 
@@ -12,6 +13,38 @@ function disposeScene(scene) {
     o.geometry?.dispose();
     if (o.material) [].concat(o.material).forEach((m) => m.dispose());
   });
+}
+
+/* Nome della scheda grafica (se il browser lo dice), per capire dove un render va storto. */
+export function gpuName(gl) {
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : 'sconosciuta';
+  } catch {
+    return 'sconosciuta';
+  }
+}
+
+/* Luminosità mediana (0-1) dei pixel che non sono sfondo e quota di pixel visibili: dice se l'immagine è nera o vuota. */
+export function canvasStats(source, bgSrgb, alphaBg, pw = 256) {
+  const ph = Math.max(2, Math.round((pw * source.height) / source.width));
+  const c = document.createElement('canvas');
+  c.width = pw;
+  c.height = ph;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(source, 0, 0, pw, ph);
+  const px = ctx.getImageData(0, 0, pw, ph).data;
+  const lum = [];
+  let visible = 0;
+  for (let k = 0; k < px.length; k += 4) {
+    if (px[k + 3] < 200) continue;
+    visible++;
+    if (!alphaBg && Math.abs(px[k] - bgSrgb[0]) < 6 && Math.abs(px[k + 1] - bgSrgb[1]) < 6 && Math.abs(px[k + 2] - bgSrgb[2]) < 6) continue;
+    lum.push((0.2126 * px[k] + 0.7152 * px[k + 1] + 0.0722 * px[k + 2]) / 255);
+  }
+  lum.sort((x, y) => x - y);
+  const total = px.length / 4;
+  return { median: lum.length ? lum[Math.floor(lum.length / 2)] : 0, shown: lum.length / total, visible: visible / total };
 }
 
 export async function houseImage(project, {
@@ -26,63 +59,143 @@ export async function houseImage(project, {
   const t = timeById(time);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
   try {
+    const gl = renderer.getContext();
+    const info = { gpu: gpuName(gl), mode: '', exposure: 0, notes: [] };
+    // dimensioni che la scheda grafica regge: oltre, si riduce in proporzione (il 4K su alcune schede o browser non esce)
+    const maxSide = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 4096, renderer.capabilities.maxTextureSize || 4096, gl.getParameter(gl.MAX_VIEWPORT_DIMS)?.[0] || 4096);
+    if (Math.max(width, height) > maxSide) {
+      const k = maxSide / Math.max(width, height);
+      info.notes.push(`la scheda grafica regge ${maxSide} px: immagine ridotta da ${width}×${height}`);
+      width = Math.floor(width * k);
+      height = Math.floor(height * k);
+    }
+    renderer.setPixelRatio(1);
     renderer.setSize(width, height, false);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = t.exposure;
+    let exposure = t.exposure;
+    renderer.toneMappingExposure = exposure;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
     const v = view || cameraViews(project, { aspect: width / height })[0];
     const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, view: v, time, background, roof, lowWalls });
     if (!built) return null;
     const { scene, bounds } = built;
-    const { size, bb } = bounds;
-    const sunMap = width > 2500 ? 4096 : 2048;
-    built.sun.shadow.mapSize.set(sunMap, sunMap);
+    const { size } = bounds;
+    built.sun.shadow.mapSize.set(width > 2500 ? 4096 : 2048, width > 2500 ? 4096 : 2048);
     const camera = new THREE.PerspectiveCamera(v.fov, width / height, 0.05, 400);
     camera.position.set(...v.position);
     camera.lookAt(new THREE.Vector3(...v.target));
+    // colore dello sfondo in sRGB 0-255 (per non contarlo nella luminosità)
+    const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
+
+    // esposizione automatica: si prova il render in piccolo, si misura la luminosità di ciò che non è sfondo e si corregge
+    // l'esposizione finché l'immagine non è né nera né bruciata (stile scuro, sera, GPU diversa: non importa)
+    {
+      const pw = 256;
+      const ph = Math.max(2, Math.round((256 * height) / width));
+      renderer.setSize(pw, ph, false);
+      camera.aspect = pw / ph;
+      camera.updateProjectionMatrix();
+      for (let i = 0; i < 3; i++) {
+        renderer.toneMappingExposure = exposure;
+        renderer.render(scene, camera);
+        const st = canvasStats(canvas, bgSrgb, bg.alpha, pw);
+        if (st.shown < 0.03) break;
+        if (st.median < 0.004) { info.notes.push('anteprima di esposizione nera'); break; }   // nera davvero: non è questione di esposizione
+        const target = built.lampsOn ? 0.2 : 0.52;   // la sera resta più scura, ma mai nera
+        if (Math.abs(st.median - target) < 0.04) break;
+        // di giorno l'esposizione può cambiare molto (stili scuri); di sera resta vicina a quella della scena, che deve restare notte
+        const [lo, hi] = built.lampsOn ? [t.exposure * 0.6, t.exposure * 1.5] : [0.35, 6];
+        exposure = THREE.MathUtils.clamp(exposure * (target / Math.max(0.02, st.median)) ** 1.3, lo, hi);
+      }
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.toneMappingExposure = exposure;
+      built.exposure = exposure;
+      info.exposure = +exposure.toFixed(2);
+    }
 
     if (quality === 'high') {
       const { pathTraceImage } = await import('./pathTrace');
-      return await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal });
+      try {
+        const res = await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal });
+        // l'immagine del path tracing si controlla come le altre: se è nera o vuota si cade sul tempo reale
+        const img = new Image();
+        await new Promise((ok, ko) => { img.onload = ok; img.onerror = ko; img.src = res.data; });
+        const st = canvasStats(img, bgSrgb, bg.alpha);
+        if (st.visible > 0.02 && (st.median > 0.03 || st.shown < 0.02)) return { ...res, info: { ...info, mode: 'path tracing' } };
+        info.notes.push('il path tracing è uscito nero: salvato in tempo reale');
+      } catch (e) {
+        if (e.message === 'interrotto') throw e;
+        info.notes.push(`path tracing non riuscito (${e.message}): salvato in tempo reale`);
+      }
+      // ripiego: si rifà la scena e si disegna in tempo reale (il path tracing ha cambiato materiali e luci)
+      disposeScene(scene);
+      return houseImage(project, { width, height, lowWalls, view, time, background, roof, quality: 'fast', onProgress, signal })
+        .then((r) => r && { ...r, info: { ...r.info, notes: [...info.notes, ...(r.info?.notes || [])] } });
     }
 
-    // tempo reale: render → occlusione ambientale → bagliore (luci accese) → mappa tonale e sRGB
-    let drawn = false;
-    if (!bg.alpha) {
+    // tempo reale: più strade, dalla più bella alla più sicura; ognuna si controlla (immagine nera = si passa alla successiva)
+    const attempts = [];
+    if (!bg.alpha) attempts.push('post');        // render + occlusione ambientale + bagliore + mappa tonale (target a mezzo float, 4 campioni)
+    if (!bg.alpha) attempts.push('post-light');  // come sopra, ma con target a 8 bit e senza antialias multicampione
+    attempts.push('direct');                    // render diretto, senza effetti
+    let data = null;
+    for (const mode of attempts) {
       try {
-        const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
-        const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
-        const { GTAOPass } = await import('three/examples/jsm/postprocessing/GTAOPass.js');
-        const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
-        const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
-        const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: 4 });
-        const composer = new EffectComposer(renderer, target);
-        composer.setPixelRatio(1);
-        composer.setSize(width, height);
-        composer.addPass(new RenderPass(scene, camera));
-        const ao = new GTAOPass(scene, camera, width, height);
-        ao.updateGtaoMaterial({ radius: Math.max(0.35, Math.min(1.2, Math.max(size.x, size.z) / 25)), distanceExponent: 1.5, thickness: 1.5, scale: 1.1, samples: 16, distanceFallOff: 1 });
-        ao.normalMaterial.side = THREE.DoubleSide;   // il tetto e i soffitti si disegnano da due lati: senza, l'AO "vede" l'interno attraverso
-        ao.blendIntensity = 0.85;
-        composer.addPass(ao);
-        if (t.bloom > 0) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), t.bloom, 0.6, built.lampsOn ? 0.85 : 0.95));
-        composer.addPass(new OutputPass());
-        composer.render();
-        drawn = true;
-        composer.dispose?.();
-        target.dispose();
+        if (mode === 'direct') {
+          renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
+          renderer.render(scene, camera);
+        } else {
+          const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+          const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+          const { GTAOPass } = await import('three/examples/jsm/postprocessing/GTAOPass.js');
+          const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
+          const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
+          const heavy = mode === 'post';
+          const maxMs = gl.getParameter(gl.MAX_SAMPLES) || 0;
+          const target = new THREE.WebGLRenderTarget(width, height, heavy
+            ? { type: THREE.HalfFloatType, samples: Math.min(4, maxMs) }
+            : { type: THREE.UnsignedByteType, samples: 0 });
+          const composer = new EffectComposer(renderer, target);
+          composer.setPixelRatio(1);
+          composer.setSize(width, height);
+          composer.addPass(new RenderPass(scene, camera));
+          const ao = new GTAOPass(scene, camera, width, height);
+          ao.updateGtaoMaterial({ radius: Math.max(0.35, Math.min(1.2, Math.max(size.x, size.z) / 25)), distanceExponent: 1.5, thickness: 1.5, scale: 1.1, samples: heavy ? 16 : 8, distanceFallOff: 1 });
+          ao.normalMaterial.side = THREE.DoubleSide;   // il tetto e i soffitti si disegnano da due lati: senza, l'AO "vede" l'interno attraverso
+          ao.blendIntensity = 0.85;
+          composer.addPass(ao);
+          if (t.bloom > 0) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), t.bloom, 0.6, built.lampsOn ? 0.85 : 0.95));
+          composer.addPass(new OutputPass());
+          composer.render();
+          composer.dispose?.();
+          target.dispose();
+        }
+        const st = canvasStats(canvas, bgSrgb, bg.alpha);
+        if (gl.isContextLost()) throw new Error('contesto grafico perso');
+        // nera o vuota: la strada non ha funzionato su questa scheda grafica
+        if (st.visible < 0.02 || (!bg.alpha && st.shown > 0.03 && st.median < 0.004)) {
+          info.notes.push(`modo «${mode}» uscito nero`);
+          continue;
+        }
+        info.mode = mode === 'post' ? 'occlusione ambientale e bagliore' : mode === 'post-light' ? 'occlusione ambientale (leggera)' : 'diretto';
+        data = canvas.toDataURL('image/png');
+        break;
       } catch (e) {
-        drawn = false;   // senza i passaggi extra si disegna diretto
+        info.notes.push(`modo «${mode}» non riuscito (${e.message})`);
       }
     }
-    if (!drawn) renderer.render(scene, camera);
-    const data = canvas.toDataURL('image/png');
+    if (!data) {
+      renderer.render(scene, camera);
+      info.mode = 'diretto (ultima risorsa)';
+      data = canvas.toDataURL('image/png');
+    }
     disposeScene(scene);
-    void bb;
-    return { data, w: width, h: height };
+    return { data, w: width, h: height, info };
   } finally {
     renderer.dispose();
   }

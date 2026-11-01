@@ -28,8 +28,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     vis(built.groups.cones, !!show?.cones);
     vis(built.groups.lights, !!show?.electric || !!show?.lights);
     st.setLights(built, !!on);
-    if (st.hemi) st.hemi.intensity = on ? 0.5 : 1.3;
-    if (st.sun) st.sun.intensity = on ? 0.4 : 1.6;
+    if (st.hemi) st.hemi.intensity = on ? 0.85 : 1.3;   // di sera la scena si abbassa ma resta leggibile, con le lampade che spiccano
+    if (st.sun) st.sun.intensity = on ? 0.5 : 1.6;
   };
   /* Costruisce i gruppi del progetto e li aggiunge a `target` (la scena o una copia per il DXF). */
   const attach = (st, target, spreadBy, override = null) => {
