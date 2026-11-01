@@ -10,7 +10,8 @@ const PAD = 7;   // px attorno al muro per afferrarlo con il dito
  *  - muri interni: si trascinano per cambiare la misura dei locali, un clic li seleziona (unire, aprire);
  *  - porte e finestre: si selezionano e si trascinano lungo il muro; con «Aggiungi» se ne mettono di nuove;
  *  - vano scala: si trascina lungo un asse (scambia spazio con i locali ai lati) e si seleziona per tipo e verso;
- *  - «Dividi»: un clic sul locale lo taglia con un muro nuovo (verticale o orizzontale, come scelto).
+ *  - «Muro»: si trascina nel locale per tracciare un muro nuovo (la direzione la dà il gesto) o si clicca per usare la direzione
+ *    scelta; il muro nuovo resta selezionato e si tira col mouse come gli altri.
  * Durante il trascinamento la pianta mostrata è un'anteprima (onPreview); al rilascio il risultato va a edit.*.
  * edit = { selected, addMode: 'door' | 'window' | 'split' | null, splitDir: 'v' | 'h', selectedWall, selectedStair,
  *          onSelect, onSelectWall, onSelectStair, onApply, onError, onSplit, onStairMove }
@@ -18,7 +19,8 @@ const PAD = 7;   // px attorno al muro per afferrarlo con il dito
 export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
   const [hover, setHover] = useState(null);
   const [drag, setDrag] = useState(null);   // { type: 'wall' | 'open' | 'stair', base, … }
-  const [cut, setCut] = useState(null);     // { room, at } anteprima del taglio
+  const [cut, setCut] = useState(null);     // { room, at, dir } anteprima del taglio
+  const [trace, setTrace] = useState(null); // { room, start } muro in tracciamento (trascinamento nel locale)
   const wt = plan.wallThickness;
   const runs = useMemo(() => (drag ? drag.runs : wallRuns(plan)), [plan, drag]);
   // durante il trascinamento tutto resta quello di partenza: l'elemento che ha la presa non deve sparire
@@ -137,10 +139,10 @@ export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
   };
 
   /* ── divisione dei locali ── */
-  const cutAt = (e, r) => {
+  const cutAt = (e, r, dir = edit.splitDir) => {
     const m = toMeters(e);
-    const v = edit.splitDir === 'v';
-    return { room: r, at: Math.max((v ? r.x : r.y) + 0.3, Math.min((v ? r.x + r.w : r.y + r.h) - 0.3, snap(v ? m.x : m.y))) };   // il limite vero lo dà splitRoom
+    const v = dir === 'v';
+    return { room: r, at: Math.max((v ? r.x : r.y) + 0.3, Math.min((v ? r.x + r.w : r.y + r.h) - 0.3, snap(v ? m.x : m.y))), dir };   // il limite vero lo dà splitRoom
   };
 
   const wallRect = (r, pad) => (r.orient === 'v'
@@ -178,13 +180,32 @@ export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
       {edit.addMode === 'split' && plan.rooms.filter((r) => r.kind !== 'garden' && r.kind !== 'stairs' && !r.poly).map((r) => (
         <rect key={`cut-${r.id}`} x={r.x * s} y={r.y * s} width={r.w * s} height={r.h * s} fill={GREEN}
           fillOpacity={cut?.room.id === r.id ? 0.1 : 0.03} style={{ cursor: 'crosshair', touchAction: 'none' }}
-          onPointerMove={(e) => setCut(cutAt(e, r))} onPointerLeave={() => setCut(null)}
-          onPointerDown={(e) => { e.stopPropagation(); const c = cutAt(e, r); setCut(null); edit.onSplit?.(r.id, edit.splitDir, c.at); }}
+          onPointerMove={(e) => {
+            if (!trace || trace.room.id !== r.id) { setCut(cutAt(e, r)); return; }
+            // tracciando: la direzione la dà il gesto, la posizione è dove si è premuto
+            const m = toMeters(e);
+            const dx = m.x - trace.start.x;
+            const dy = m.y - trace.start.y;
+            const far = Math.hypot(dx, dy) > 0.25;
+            const dir = far ? (Math.abs(dy) > Math.abs(dx) ? 'v' : 'h') : edit.splitDir;
+            const base = { x: trace.start.x, y: trace.start.y };
+            const v = dir === 'v';
+            setCut({ room: r, at: Math.max((v ? r.x : r.y) + 0.3, Math.min((v ? r.x + r.w : r.y + r.h) - 0.3, snap(v ? base.x : base.y))), dir });
+          }}
+          onPointerLeave={() => { if (!trace) setCut(null); }}
+          onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setTrace({ room: r, start: toMeters(e) }); setCut(cutAt(e, r)); }}
+          onPointerUp={() => {
+            const c = cut && trace?.room.id === r.id ? cut : null;
+            setTrace(null);
+            setCut(null);
+            if (c) edit.onSplit?.(r.id, c.dir, c.at);
+          }}
+          onPointerCancel={() => { setTrace(null); setCut(null); }}
           onClick={(e) => e.stopPropagation()} />
       ))}
       {edit.addMode === 'split' && cut && (
         <line pointerEvents="none" stroke={GREEN} strokeWidth="2.4" strokeDasharray="7 4"
-          {...(edit.splitDir === 'v'
+          {...((cut.dir || edit.splitDir) === 'v'
             ? { x1: cut.at * s, x2: cut.at * s, y1: cut.room.y * s, y2: (cut.room.y + cut.room.h) * s }
             : { y1: cut.at * s, y2: cut.at * s, x1: cut.room.x * s, x2: (cut.room.x + cut.room.w) * s })} />
       )}

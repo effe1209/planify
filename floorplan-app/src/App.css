@@ -83,6 +83,8 @@
 .pf-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .pf-chip { background: var(--bg-canvas); border: 1px solid var(--border); border-radius: 12px; padding: 4px 10px; font-size: 11px; cursor: pointer; color: var(--text); }
 .pf-chip:hover { border-color: var(--border-hover); }
+.pf-chip.pf-chip-on, .pf-chip.pf-chip-on:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: 0 0 0 1px var(--accent); }
+.pf-hint-warn { color: #b45309; }
 
 /* Selettori e switch */
 .pf-seg { display: flex; background: var(--bg-canvas); border-radius: 8px; padding: 2px; }
@@ -763,3 +765,7 @@
 .pf-miniinput { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
 .pf-miniinput input { width: 64px; height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); color: var(--text); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
 .pf-miniinput em { font-style: normal; }
+
+/* loft: scelta del livello mostrato (completa, sotto, sopra) */
+.pf-levels { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; box-shadow: var(--shadow-sm); background: var(--bg-panel); border: 1px solid var(--border); }
+.pf-levels button { min-width: 74px; }

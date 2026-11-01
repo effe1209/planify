@@ -1046,7 +1046,7 @@ export default function PlanSvg({
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
   coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0,
-  wallEdit = null,
+  wallEdit = null, level = 'all',
 }) {
   const uid = useId().replace(/:/g, '');
   // modifica di muri e aperture: durante il trascinamento si mostra l'anteprima al posto della pianta
@@ -1193,24 +1193,40 @@ export default function PlanSvg({
         )}
         {plan.mezzanine && !tech && (
           <g pointerEvents="none">
-            {/* soppalco: attenua quello che c'è sotto, contorno tratteggiato, zona notte e rampa */}
+            {/* soppalco: attenua quello che c'è sotto, contorno tratteggiato, zona notte e rampa;
+                «sotto» lascia il piano a terra in chiaro, «sopra» lo vela per isolare il soppalco */}
+            {level === 'above' && (
+              <rect x={-40} y={-40} width={plan.dimensions.width * s + 80} height={plan.dimensions.length * s + 80}
+                fill="#ffffff" fillOpacity="0.72" />
+            )}
             <rect x={plan.mezzanine.x * s} y={plan.mezzanine.y * s} width={plan.mezzanine.w * s} height={plan.mezzanine.h * s}
-              fill="#ffffff" fillOpacity="0.85" stroke="#5b6472" strokeWidth="1.2" strokeDasharray="7 4" />
-            {showFurn && (
+              fill={level === 'below' ? 'none' : '#ffffff'} fillOpacity={level === 'above' ? 0.98 : 0.85}
+              stroke="#5b6472" strokeWidth="1.2" strokeDasharray="7 4" />
+            {showFurn && level !== 'below' && (
               <g filter={ref('fshadow')} opacity={furnOpacity}>
                 {plan.furniture.map((it, i) => [placed(it, i), i]).filter(([it]) => it.elev)
                   .map(([it, i]) => <Furn key={`mf-${i}`} item={it} scale={s} theme={theme} />)}
               </g>
             )}
             <Stair st={{ ...plan.mezzanine.stair, id: 'mezzanine', role: 'none' }} s={s} />
-            {!thumb && layers.labels && (
-              <text x={(plan.mezzanine.x + plan.mezzanine.w / 2) * s}
-                y={(plan.mezzanine.stair.y + plan.mezzanine.stair.h / 2 > plan.mezzanine.y + plan.mezzanine.h / 2
-                  ? plan.mezzanine.y + 0.4 : plan.mezzanine.y + plan.mezzanine.h - 0.25) * s}
-                textAnchor="middle" fontSize="10" fontWeight="600" fill="#3d4452">
-                Soppalco · +{plan.mezzanine.elev.toFixed(2).replace('.', ',')} m
-              </text>
-            )}
+            {!thumb && layers.labels && (() => {
+              const mz = plan.mezzanine;
+              const south = mz.stair.y + mz.stair.h / 2 > mz.y + mz.h / 2;
+              // l'etichetta sta nel pianerottolo di arrivo, accanto alla rampa: lì non ci sono arredi
+              const y = (level === 'below'   // senza il letto, l'etichetta va sul lato opposto alla rampa, lontano dai nomi dei locali
+                ? (south ? mz.y + 0.3 : mz.y + mz.h - 0.45)
+                : mz.w < 3.4   // soppalco stretto: letto in fondo, etichetta a metà tra il letto e la rampa
+                  ? mz.y + mz.h * (south ? 0.55 : 0.45)
+                  : south ? mz.stair.y - 0.1 : mz.stair.y + mz.stair.h + 0.3) * s;
+              const quota = `+${mz.elev.toFixed(2).replace('.', ',')} m`;
+              return (
+                <text x={(mz.x + mz.w / 2) * s} y={y} textAnchor="middle" fontSize="9.5" fontWeight="600" fill="#3d4452"
+                  stroke="#fff" strokeWidth="3" paintOrder="stroke" strokeLinejoin="round">
+                  <tspan x={(mz.x + mz.w / 2) * s}>{level === 'below' ? 'Soppalco sopra' : 'Soppalco'}</tspan>
+                  <tspan x={(mz.x + mz.w / 2) * s} dy="11">{quota}</tspan>
+                </text>
+              );
+            })()}
           </g>
         )}
         {showFurn && !garden && !tech && (
@@ -1337,6 +1353,7 @@ export default function PlanSvg({
         {editable && showFurn && plan.furniture.map((raw, i) => {
           const it = placed(raw, i);
           if (GROUND.has(it.type)) return null;
+          if (plan.mezzanine && ((level === 'below' && it.elev) || (level === 'above' && !it.elev))) return null;
           const sel = i === selectedItem;
           const bad = sel && itemProblems(plan, i, it).length > 0;
           return (

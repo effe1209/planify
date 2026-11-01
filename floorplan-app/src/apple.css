@@ -228,6 +228,7 @@
 }
 .pf-chip { border-radius: 999px; background: var(--fill); border-color: transparent; padding: 6px 12px; }
 .pf-chip:hover { background: var(--fill-strong); }
+.pf-chip.pf-chip-on, .pf-chip.pf-chip-on:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .pf-type-card, .pf-style-card, .pf-shape { background: var(--fill); border-color: transparent; }
 .pf-type-card:hover, .pf-style-card:hover, .pf-shape:hover { background: var(--fill-strong); border-color: transparent; }
 .pf-seg { background: var(--fill); border-radius: 10px; padding: 2px; }

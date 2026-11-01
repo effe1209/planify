@@ -119,7 +119,7 @@ test('il pulsante Modifica resta attivo e fisso in cima alla barra, si divide e 
   // dividere: il locale più grande in due
   const names = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /m²$/.test(t)).length;
   const before = await names();
-  await page.locator('.pf-segtools button', { hasText: 'Dividi' }).click();
+  await page.locator('.pf-segtools button', { hasText: 'Muro' }).click();
   const rects = page.locator('.pf-sheet svg rect[style*="crosshair"]');
   await expect(rects.first()).toBeVisible();
   let big = null;
@@ -283,5 +283,52 @@ test('la scala a vista si sceglie nel modulo e riduce il vano', async ({ page },
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 40_000 });
   // la fascia che avanza è diventata un locale: la nota lo dice
   await expect(page.getByText(/ricavato dalla fascia della scala/).first()).toBeVisible({ timeout: 10_000 });
+  expect(errors).toEqual([]);
+});
+
+test('un muro si traccia trascinando nel locale e resta selezionato per tirarlo', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'il trascinamento si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.locator('.pf-editbtn').click();
+  const count = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /m²$/.test(t)).length;
+  const before = await count();
+  await page.locator('.pf-segtools button', { hasText: 'Muro' }).click();
+  const rects = page.locator('.pf-sheet svg rect[style*="crosshair"]');
+  let big = null;
+  for (const r of await rects.all()) { const b = await r.boundingBox(); if (!big || b.width * b.height > big.width * big.height) big = b; }
+  const x = big.x + big.width / 2;
+  const y = big.y + big.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 40, { steps: 5 });   // gesto verticale: muro verticale
+  await page.mouse.up();
+  await expect.poll(count).toBe(before + 1);
+  // il muro nuovo è selezionato (contorno pieno) e si tira col mouse
+  await expect(page.locator('.pf-sheet svg rect[style*="col-resize"][stroke="#1f4fd8"]').first()).toBeVisible();
+  await page.keyboard.press('Control+z');
+  await expect.poll(count).toBe(before);
+  expect(errors).toEqual([]);
+});
+
+test('il loft è una tipologia selezionata, resta tale cambiando misura e ha le tre viste', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  const loft = page.getByRole('radio', { name: 'Loft' });
+  await loft.click();
+  await expect(loft).toHaveAttribute('aria-checked', 'true');
+  await page.getByLabel('Larghezza').fill('7');
+  await page.getByLabel('Lunghezza').fill('5');
+  await expect(loft).toHaveAttribute('aria-checked', 'true');   // le misure non cambiano la tipologia
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const tabs = page.getByRole('radiogroup', { name: 'Livello del loft' });
+  await expect(tabs).toBeVisible();
+  await expect(tabs.getByRole('radio', { name: 'Completa' })).toHaveAttribute('aria-checked', 'true');
+  await tabs.getByRole('radio', { name: 'Sopra' }).click();
+  await expect(tabs.getByRole('radio', { name: 'Sopra' })).toHaveAttribute('aria-checked', 'true');
+  await tabs.getByRole('radio', { name: 'Sotto' }).click();
+  await expect(page.locator('.pf-sheet svg text', { hasText: 'Soppalco sopra' }).first()).toBeVisible();
   expect(errors).toEqual([]);
 });

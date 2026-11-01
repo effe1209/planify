@@ -2759,15 +2759,23 @@ MEZZ_UNDER = 2.4       # altezza libera sotto il soppalco
 MEZZ_ELEV = MEZZ_UNDER + MEZZ_SLAB   # quota del pavimento del soppalco
 MEZZ_PARAPET = 1.0
 MEZZ_RISERS = 15       # 2,60 m in 15 alzate = 17,3 cm
+MEZZ_RISERS_COMPACT = 13   # loft stretti: 2,60 m in 13 alzate da 20 cm con pedata 25 cm (rampa di 3,25 m invece di 4,05)
 MEZZ_STAIR_W = 0.9
-LOFT_MEZZ_MIN = (9.5, 6.0)   # lato minimo e profondità minima per un loft con soppalco
+LOFT_MEZZ_MIN = (7.0, 5.0)   # lato minimo e profondità minima per un loft con soppalco
+LOFT_MEZZ_COMFORT = 9.5      # sotto questo lato il soppalco è «compatto»: rampa più ripida, letto di testa
 
 
 def layout_loft_mezzanine(W: float, L: float, rng: random.Random) -> Layout:
     lay = Layout(W, L)
     lay.room_type = "open-space"
     lay.shape = "rect"
-    bw = snap(min(clamp(W * 0.30, 3.2, 3.6), W / 3 - 0.05))
+    compact = W < LOFT_MEZZ_COMFORT
+    risers = MEZZ_RISERS_COMPACT if compact else MEZZ_RISERS
+    tread = 0.25 if compact else 0.27
+    if compact:
+        bw = snap(clamp(W / 3 - 0.03, 2.3, 3.2))   # ≤ 1/3 della superficie, quanto serve a un letto di testa
+    else:
+        bw = snap(min(clamp(W * 0.30, 3.2, 3.6), W / 3 - 0.05))
     bh = snap(clamp(L * 0.38, 2.4, 3.2))
     a = lay.add_room("Soggiorno", "living", 0, 0, W - bw, L, group=1)
     k = lay.add_room("Cucina", "kitchen", W - bw, bh, W, L, group=1)
@@ -2782,11 +2790,12 @@ def layout_loft_mezzanine(W: float, L: float, rng: random.Random) -> Layout:
     if side:
         lay.add_windows(bath.id, side, 0.7, 1)
     lay.add_partial_windows()
-    run = round(MEZZ_RISERS * 0.27, 3)
+    run = round(risers * tread, 3)
     lay.mezz = {
         "rect": Rect(W - bw, 0.0, bw, L),
         "stair": Rect(W - bw - run, L - WALL - MEZZ_STAIR_W, run, MEZZ_STAIR_W),
         "up": "E", "open": ["W"], "elev": MEZZ_ELEV, "height": LOFT_H, "parapet": MEZZ_PARAPET,
+        "risers": risers,
     }
     lay.notes.append("Loft con soppalco: volume a doppia altezza, zona notte sul soppalco sopra cucina e bagno.")
     return lay
@@ -2817,6 +2826,13 @@ def furnish_mezzanine(lay: Layout) -> None:
         return it
 
     if clear < 0.85:
+        # soppalco stretto: letto di testa contro il muro in fondo, si sale dal lato della scala
+        bw_bed = 1.6
+        if x1 - x0 >= bw_bed + 0.4:
+            bx = x1 - bw_bed if side == "E" else x0
+            bed = Item("bed", Rect(bx, y0, bw_bed, 2.0), living.id, 0.05, None, "S")
+            bed.elev = m["elev"]
+            lay.items.append(bed)
         return
     ybed = y0 + 0.55
     put("bed", 2.0, 1.6, ybed)
@@ -2839,11 +2855,14 @@ def furnish_mezzanine(lay: Layout) -> None:
 
 
 def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
-                rng: Optional[random.Random] = None) -> Layout:
+                rng: Optional[random.Random] = None, mezzanine: bool = False) -> Layout:
     """Open space: zona principale + zona secondaria aperta + bagno chiuso (anche con rientranza a L)."""
     rng = rng or random.Random(0)
-    if not office and W >= LOFT_MEZZ_MIN[0] and L >= LOFT_MEZZ_MIN[1]:
-        return layout_loft_mezzanine(W, L, rng)
+    too_small = False
+    if mezzanine and not office:
+        if W >= LOFT_MEZZ_MIN[0] and L >= LOFT_MEZZ_MIN[1]:
+            return layout_loft_mezzanine(W, L, rng)
+        too_small = True
     lay = Layout(W, L)
     lay.room_type = "office" if office else "open-space"
     bw = snap(clamp(W * rng.uniform(0.24, 0.31), 2.6, 3.6))
@@ -2863,6 +2882,8 @@ def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
         if bw * (L - bh) < need:
             bw = snap(min(W * 0.5, need / (L - bh) + 0.024))
     lay.shape = "l" if nd > 0 else "rect"
+    if too_small:
+        lay.notes.append(f"Con queste misure il soppalco non entra (minimo {LOFT_MEZZ_MIN[0]:g} × {LOFT_MEZZ_MIN[1]:g} m): loft a un solo livello.")
     if shape not in ("auto", "rect") and nd == 0:
         lay.notes.append("Con queste misure non è possibile una sagoma irregolare: pianta rettangolare.")
     yb = L - nd
@@ -3401,8 +3422,8 @@ def _build_layout(Wn: float, Ln: float, rt: str, n: int, palette: dict, shape: s
         return layout_office(Wn, Ln, n_closed=max(1, n - 1), shape=shape, rng=rng)
     if rt == "hotel-room":
         return layout_hotel_room(Wn, Ln, shape=shape, rng=rng)
-    if rt == "open-space":
-        return layout_loft(Wn, Ln, office=False, shape=shape, rng=rng)
+    if rt in ("open-space", "loft"):
+        return layout_loft(Wn, Ln, office=False, shape=shape, rng=rng, mezzanine=rt == "loft")
     if rt == "garage":
         return layout_garage(Wn, Ln, rng=rng, needs=opts["needs"], stair=opts.get("stair"))
     if rt == "garden":
@@ -3443,8 +3464,10 @@ def generate(width: float, length: float, room_type: str = "apartment",
     rt = (room_type or "apartment").strip().lower()
     if rt in ("ufficio", "office", "workspace", "coworking"):
         rt = "office"
-    elif rt in ("open-space", "open_space", "openspace", "loft", "monolocale", "studio"):
+    elif rt in ("open-space", "open_space", "openspace", "monolocale", "studio"):
         rt = "open-space"
+    elif rt == "loft":
+        pass
     elif rt in ("hotel-room", "hotel_room", "hotel", "camera hotel", "camera"):
         rt = "hotel-room"
     elif rt in ("garage", "box", "interrato", "basement", "piano interrato"):
@@ -3919,7 +3942,7 @@ def _export_mezzanine(lay: Layout) -> dict:
     box = lambda q: {"x": round(q.x, 3), "y": round(q.y, 3), "w": round(q.w, 3), "h": round(q.h, 3)}
     return {"height": m["height"], "mezzanine": {
         **box(r), "elev": m["elev"], "slab": MEZZ_SLAB, "parapet": m["parapet"], "open": m["open"],
-        "stair": {**box(st), "up": m["up"], "type": "straight", "risers": MEZZ_RISERS},
+        "stair": {**box(st), "up": m["up"], "type": "straight", "risers": m.get("risers", MEZZ_RISERS)},
     }}
 
 

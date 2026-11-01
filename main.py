@@ -35,7 +35,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "open_stairs"]
+            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "open_stairs", "loft_type"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,7 +50,7 @@ app.add_middleware(
 class PlanRequest(BaseModel):
     width: float = Field(..., gt=0, description="Larghezza in metri (da 3.5 a 60)")
     length: float = Field(..., gt=0, description="Lunghezza in metri (da 3.5 a 60)")
-    room_type: str = Field("apartment", description="apartment | open-space | office | hotel-room")
+    room_type: str = Field("apartment", description="apartment | open-space | loft | office | hotel-room | garage | garden")
     num_rooms: int = Field(3, ge=1, le=8, description="Numero di locali principali (soggiorno/open space incluso)")
     style: Optional[str] = Field("modern", description="modern | classic | nordic | industrial | japandi | luxury")
     shape: Optional[str] = Field("auto", description="auto | rect | l | u | t | step  (auto = varia a caso)")
