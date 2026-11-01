@@ -7,6 +7,7 @@
  * effetti, e il risultato dice quale strada ha funzionato e su quale scheda grafica. three.js si carica solo qui.
  */
 import { backgroundFor, cameraViews, houseBounds, timeById } from './renderStudio';
+import { clearTextureCache } from './style3d';
 
 function disposeScene(scene) {
   scene.traverse((o) => {
@@ -51,6 +52,7 @@ export async function houseImage(project, {
   width = 1800, height = 1100, lowWalls = false, view = null, time = 'afternoon', background = 'white', roof = true,
   quality = 'fast', samples = undefined, onProgress = null, signal = null,
 } = {}) {
+  clearTextureCache();   // il render ha texture sue: non condivide con la vista 3D quelle che un altro contesto grafico potrebbe lasciare in uno stato strano
   const THREE = await import('three');
   const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
   const { buildRenderScene } = await import('./renderScene');
@@ -123,12 +125,12 @@ export async function houseImage(project, {
     if (quality === 'high') {
       const { pathTraceImage } = await import('./pathTrace');
       try {
-        const res = await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal });
+        const res = await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal, project });
         // l'immagine del path tracing si controlla come le altre: se è nera o vuota si cade sul tempo reale
         const img = new Image();
         await new Promise((ok, ko) => { img.onload = ok; img.onerror = ko; img.src = res.data; });
         const st = canvasStats(img, bgSrgb, bg.alpha);
-        if (st.visible > 0.02 && (st.median > 0.03 || st.shown < 0.02)) return { ...res, info: { ...info, mode: 'path tracing' } };
+        if (st.visible > 0.02 && (st.median > 0.03 || st.shown < 0.02)) return { ...res, info: { ...info, exposure: res.exposure, mode: res.denoised ? 'path tracing con filtro' : 'path tracing' } };
         info.notes.push('il path tracing è uscito nero: salvato in tempo reale');
       } catch (e) {
         if (e.message === 'interrotto') throw e;
@@ -208,6 +210,7 @@ export async function houseImage(project, {
     return { data, w: width, h: height, info };
   } finally {
     renderer.dispose();
+    clearTextureCache();   // e la vista 3D, la prossima volta, ne costruisce di fresche
   }
 }
 /* Passaggi di post-produzione: render, (occlusione ambientale), bagliore delle luci, mappa tonale e sRGB. run() disegna; done() libera. */

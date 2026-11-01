@@ -273,6 +273,11 @@ export function texture(THREE, kind, a, b, c) {
   return cache.get(key);
 }
 
+/* Svuota la cache delle texture: chi costruisce una scena da portare in un altro contesto grafico (render, path tracing) ne ha di sue e non tocca quelle della vista. */
+export function clearTextureCache() {
+  cache.clear();
+}
+
 /* Scala le UV di una BoxGeometry in metri: una texture per metro su ogni faccia (px/nx: d·h, py/ny: w·d, pz/nz: w·h). */
 export function uvMeters(geo, w, h, d) {
   const uv = geo.attributes.uv;
