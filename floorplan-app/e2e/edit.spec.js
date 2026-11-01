@@ -375,6 +375,49 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   expect(errors).toEqual([]);
 });
 
+test('il loft in 3D ha le viste Completa, Sotto e Sopra e la sezione con piano di taglio', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const state = () => page.evaluate(() => {
+    const { model, renderer } = window.__planify3d;
+    let mezz = 0, shown = 0;
+    model.traverse((o) => { if (o.userData.mezz && o.isMesh) { mezz++; if (o.visible) shown++; } });
+    return { mezz, shown, planes: renderer.clippingPlanes.length };
+  });
+  const tabs = page.getByRole('radiogroup', { name: 'Livello del loft' });
+  await expect(tabs).toBeVisible();
+  let st = await state();
+  expect(st.mezz).toBeGreaterThan(5);
+  expect([st.shown, st.planes]).toEqual([st.mezz, 0]);                    // Completa: tutto
+  await tabs.getByRole('radio', { name: 'Sotto' }).click();
+  st = await state();
+  expect([st.shown, st.planes]).toEqual([0, 0]);                          // Sotto: niente soppalco
+  await tabs.getByRole('radio', { name: 'Sopra' }).click();
+  st = await state();
+  expect([st.shown, st.planes]).toEqual([st.mezz, 1]);                    // Sopra: tutto sotto il solaio tagliato via
+  await page.waitForTimeout(500);
+  await page.locator('.pf-3d canvas').screenshot({ path: process.env.SHOT3 || '/tmp/loft-sopra.png' });
+  await tabs.getByRole('radio', { name: 'Completa' }).click();
+  await page.getByRole('button', { name: 'Sezione', exact: true }).click();
+  await expect(page.getByLabel('Posizione del piano di sezione')).toBeVisible();
+  st = await state();
+  expect(st.planes).toBe(1);
+  await page.getByLabel('Direzione della sezione 3D').selectOption('z');
+  await page.waitForTimeout(400);
+  await page.locator('.pf-3d canvas').screenshot({ path: process.env.SHOT4 || '/tmp/loft-sezione.png' });
+  await page.getByRole('button', { name: 'Sezione', exact: true }).click();
+  expect((await state()).planes).toBe(0);
+  expect(errors).toEqual([]);
+});
+
 test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(150_000);

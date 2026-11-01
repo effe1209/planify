@@ -696,3 +696,5 @@
 .pf-render .pf-tip { margin: 0; font-size: 11px; line-height: 1.35; color: var(--muted, #6b7482); }
 .pf-render .pf-tool { justify-content: center; min-height: 36px; }
 @media (max-width: 720px) { .pf-render { position: static; width: auto; margin: 8px 0 0; } }
+.pf-cutbar { display: inline-flex; align-items: center; gap: 6px; }
+.pf-cutbar input[type="range"] { width: 110px; }

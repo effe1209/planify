@@ -1789,6 +1789,24 @@ export default function App() {
                 </>
               )}
               {view3d && (
+                <button type="button" className={`pf-tool ${view3d.cut ? 'is-on' : ''}`} aria-pressed={!!view3d.cut}
+                  onClick={() => setView3d({ ...view3d, cut: view3d.cut ? null : { axis: 'x', t: 0.5, flip: false } })}
+                  title="Sezione 3D: un piano di taglio verticale toglie metà casa per vedere dentro">Sezione</button>
+              )}
+              {view3d?.cut && (
+                <span className="pf-cutbar">
+                  <select className="pf-select-sm" aria-label="Direzione della sezione 3D" value={view3d.cut.axis}
+                    onChange={(e) => setView3d({ ...view3d, cut: { ...view3d.cut, axis: e.target.value } })}>
+                    <option value="x">Trasversale</option>
+                    <option value="z">Longitudinale</option>
+                  </select>
+                  <input type="range" min="0" max="1" step="0.01" value={view3d.cut.t} aria-label="Posizione del piano di sezione"
+                    onChange={(e) => setView3d({ ...view3d, cut: { ...view3d.cut, t: Number(e.target.value) } })} />
+                  <button type="button" className="pf-tool" onClick={() => setView3d({ ...view3d, cut: { ...view3d.cut, flip: !view3d.cut.flip } })}
+                    title="Tiene l'altra metà">Inverti</button>
+                </span>
+              )}
+              {view3d && (
                 <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
                   onClick={() => setView3d({ ...view3d, low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
               )}
@@ -1904,7 +1922,7 @@ export default function App() {
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
                 <div className="pf-3d-wrap">
                   <Plan3D plan={plan} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
-                    spread={view3d.spread ? 3.5 : 0} onReady={(api) => { three.current = api; }} />
+                    spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
                   {view3d.render && (
                     <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
                       roof={view3d.roof} lowWalls={view3d.low} name={threeName()} onClose={() => setView3d({ ...view3d, render: false })} onDone={say} />
@@ -1960,7 +1978,7 @@ export default function App() {
               )
             )}
 
-            {plan?.mezzanine && !view3d && !sheets && !sketch && !(globalView && current?.floors.length > 1) && (
+            {plan?.mezzanine && !sheets && !sketch && !(globalView && current?.floors.length > 1) && (
               <div className="pf-levels pf-segtools" role="radiogroup" aria-label="Livello del loft">
                 {[['all', 'Completa', 'Loft intero, soppalco sopra il piano sotto'], ['below', 'Sotto', 'Solo il livello a terra'], ['above', 'Sopra', 'Solo il soppalco']].map(([id, label, tip]) => (
                   <button key={id} type="button" role="radio" aria-checked={loftLevel === id} title={tip}
