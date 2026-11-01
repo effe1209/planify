@@ -10,6 +10,9 @@ import { FLOOR_PRESETS } from './project';
 export const PROGRAMS = [['full', 'Completo'], ['day', 'Giorno'], ['night', 'Notte']];
 export const PROGRAM_LABEL = Object.fromEntries(PROGRAMS);
 
+/* Scala chiusa nel vano o a vista (vano ridotto alla rampa, aperto sul soggiorno): «auto» sceglie a vista nei lotti piccoli. */
+export const STAIR_STYLES = [['auto', 'Auto'], ['open', 'A vista'], ['closed', 'In vano']];
+
 export const STAIR_TYPES = [['auto', 'Auto'], ['u', 'A U'], ['l', 'A L'], ['straight', 'Rampa']];
 
 export const HOUSE_PRESETS = [

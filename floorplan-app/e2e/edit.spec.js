@@ -271,3 +271,17 @@ test('un PDF scansionato si ricalca con la bacchetta magica: un clic nel locale 
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 40_000 });
   expect(errors).toEqual([]);
 });
+
+test('la scala a vista si sceglie nel modulo e riduce il vano', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.getByRole('checkbox', { name: /Casa su più piani/ }).check();
+  await page.getByRole('radiogroup', { name: 'Posizione della scala' }).getByRole('radio', { name: 'A vista' }).click();
+  await page.getByRole('radiogroup', { name: 'Scala', exact: true }).getByRole('radio', { name: 'A U' }).click();
+  await page.getByRole('button', { name: /Genera/ }).first().click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 40_000 });
+  // la fascia che avanza è diventata un locale: la nota lo dice
+  await expect(page.getByText(/ricavato dalla fascia della scala/).first()).toBeVisible({ timeout: 10_000 });
+  expect(errors).toEqual([]);
+});

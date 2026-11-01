@@ -130,7 +130,7 @@ export default function App() {
     entry: 'auto', suite: false, study: false, storage: false, laundry: false,
     garageLaundry: true, garageStorage: true,
     // casa su più piani (vedi lib/house.js)
-    house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto',
+    house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto', stairStyle: 'auto',
     houseGarage: false, garageMode: 'basement',
     floorProgram: 'full',
   });
@@ -1056,7 +1056,8 @@ export default function App() {
       if (houseMode) {
         const req = {
           width: clamp(w, 3.5, 60), length: clamp(l, 3.5, 60), style: form.style, seed: requestSeed,
-          stair_type: form.stairType, floors: houseFloorsRequest(form, { street: engineHas('street_garage') }),
+          stair_type: form.stairType, ...(engineHas('open_stairs') && { stair_style: form.stairStyle }),
+          floors: houseFloorsRequest(form, { street: engineHas('street_garage') }),
         };
         const house = async () => readJson(await postJson(base, '/generate-house', req, controller.signal));
         let res;
