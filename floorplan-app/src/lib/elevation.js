@@ -17,7 +17,7 @@ export function stack(project) {
   const floors = (project?.floors || []).filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length
     && !f.plan.rooms.every((r) => r.kind === 'garden'))
     .sort((a, b) => a.level - b.level);
-  const out = floors.map((f) => ({ floor: f, level: f.level, h: f.meta?.height ?? DEFAULT_HEIGHT, base: 0 }));
+  const out = floors.map((f) => ({ floor: f, level: f.level, h: f.meta?.height ?? f.plan?.height ?? DEFAULT_HEIGHT, base: 0 }));
   const ground = out.findIndex((s) => s.level >= 0);
   const g = ground < 0 ? out.length : ground;
   for (let i = g + 1; i < out.length; i++) out[i].base = out[i - 1].base + out[i - 1].h + SLAB;

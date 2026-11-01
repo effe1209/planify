@@ -6,12 +6,16 @@
  * Il programma è un aiuto alla progettazione: non sostituisce il progetto di un tecnico abilitato.
  * Non verificabili oggi (non sono nel modello dati): parapetti, distanze, impianti, soffitti inclinati (mansarde).
  * L'altezza interna è un dato per piano (opts.height, 2,70 m se non indicata).
+ * I requisiti dell'alloggio valgono per tutto il complesso (opts.complex = gli altri piani dello stesso edificio): la
+ * superficie si somma sui piani e basta un bagno completo (almeno 6 m²) per l'intero edificio, gli altri servizi possono
+ * essere più piccoli. Il loft ha il soppalco: superficie, altezze, parapetto e scala si verificano a parte.
  */
 import { stairGeometry } from './stairs';
 
 export const NORME = {
   DM1975: 'DM 5/7/1975',
   DM236: 'DM 236/1989',
+  REG: 'Regolamenti edilizi comunali (verificare)',
 };
 
 const HABITABLE = ['bed', 'living', 'living_kitchen', 'kitchen', 'study', 'dining', 'hotel_room'];
@@ -23,6 +27,8 @@ const MIN_AREA = { double: 14, single: 9, living: 14 };
 const DWELLING_MIN = { one: 28, two: 38 };   // alloggio minimo per 1 e per 2 persone
 const DOOR_MIN = { inner: 0.75, innerOk: 0.8, entrance: 0.8 };
 const CORRIDOR_MIN = 1.0;
+const BATH_MAIN = 6;                  // bagno completo dell'edificio (m²); gli altri servizi possono essere più piccoli
+const MEZZ = { ratio: 1 / 3, ratioMax: 0.5, under: 2.4, underMin: 2.2, above: 2.2, parapet: 1.0 };   // soppalco
 const BATH_ROTATION = 1.5;            // spazio di rotazione di una carrozzina nel bagno
 const BATH_WINDOW_MIN = 0.5;          // m² di finestra apribile per un bagno senza aspirazione forzata
 const STAIR_MIN = 0.8;
@@ -72,7 +78,7 @@ function windowsByRoom(plan) {
  * plan: la pianta nel formato del motore. opts.type: tipo di piano (apartment, open-space, garage, …).
  * Restituisce { items: [{ id, level: 'fail'|'warn', roomId?, text, ref }], ok: [testi], fail, warn, residential }.
  */
-export function checkCompliance(plan, { type, height = DEFAULT_HEIGHT, stairs = null } = {}) {
+export function checkCompliance(plan, { type, height = DEFAULT_HEIGHT, stairs = null, complex = [] } = {}) {
   const items = [];
   const ok = [];
   if (!plan?.rooms?.length) return { items, ok, fail: 0, warn: 0, residential: false };
@@ -91,6 +97,11 @@ export function checkCompliance(plan, { type, height = DEFAULT_HEIGHT, stairs = 
 
   const rooms = plan.rooms.filter((r) => r.kind !== 'stairs');
   const area = (r) => r.w * r.h;
+  // tutto il complesso: questo piano più gli altri piani abitati dello stesso edificio
+  const others = complex.filter((c) => c.plan?.rooms?.length && !NON_RESIDENTIAL.includes(c.type));
+  const building = [plan, ...others.map((c) => c.plan)];
+  const buildingRooms = building.flatMap((p) => p.rooms.filter((r) => r.kind !== 'stairs'));
+  const mzArea = (p) => (p.mezzanine ? p.mezzanine.w * p.mezzanine.h : 0);
   const lit = windowsByRoom(plan);
 
   // 1) superfici minime dei locali
@@ -116,32 +127,43 @@ export function checkCompliance(plan, { type, height = DEFAULT_HEIGHT, stairs = 
   }
 
   // 2) alloggio minimo: 28 m² per una persona, 38 m² per due (monolocale compreso)
-  const dwelling = rooms.filter((r) => !['garage', 'garden'].includes(r.kind)).reduce((a, r) => a + area(r), 0);
+  const dwelling = buildingRooms.filter((r) => !['garage', 'garden'].includes(r.kind)).reduce((a, r) => a + area(r), 0)
+    + building.reduce((a, p) => a + mzArea(p), 0);
+  const whole = others.length ? ' (tutto il complesso)' : '';
   if (dwelling < DWELLING_MIN.one - 0.05) {
-    add('dwelling', 'fail', `Alloggio di ${m2(dwelling)}: sotto i ${DWELLING_MIN.one} m² minimi anche per una sola persona`, NORME.DM1975);
+    add('dwelling', 'fail', `Alloggio${whole} di ${m2(dwelling)}: sotto i ${DWELLING_MIN.one} m² minimi anche per una sola persona`, NORME.DM1975);
   } else if (dwelling < DWELLING_MIN.two - 0.05) {
-    add('dwelling', 'warn', `Alloggio di ${m2(dwelling)}: a norma solo per una persona (per due ne servono ${DWELLING_MIN.two} m²)`, NORME.DM1975);
+    add('dwelling', 'warn', `Alloggio${whole} di ${m2(dwelling)}: a norma solo per una persona (per due ne servono ${DWELLING_MIN.two} m²)`, NORME.DM1975);
   } else {
-    ok.push(`Alloggio di ${m2(dwelling)}: a norma fino a due persone`);
+    ok.push(`Alloggio${whole} di ${m2(dwelling)}: a norma fino a due persone`);
   }
 
   // 3) aeroilluminazione: finestre almeno 1/8 del pavimento nei locali abitabili
   let lightOk = true;
   for (const r of rooms.filter((x) => HABITABLE.includes(x.kind))) {
     const win = lit.get(r.id) || 0;
-    if (win < area(r) / 8 - 1e-6) {
+    const need = (area(r) + (LIVING.includes(r.kind) ? mzArea(plan) : 0)) / 8;   // il soppalco conta nel totale
+    if (win < need - 1e-6) {
       lightOk = false;
       add('light', 'fail', win === 0
-        ? `${r.name}: nessuna finestra, serve almeno 1/8 del pavimento (${m2(area(r) / 8)})`
-        : `${r.name}: finestre per ${m2(win)}, servono almeno ${m2(area(r) / 8)} (1/8 del pavimento)`, NORME.DM1975, r);
+        ? `${r.name}: nessuna finestra, serve almeno 1/8 del pavimento (${m2(need)})`
+        : `${r.name}: finestre per ${m2(win)}, servono almeno ${m2(need)} (1/8 del pavimento${mzArea(plan) && LIVING.includes(r.kind) ? ' e del soppalco' : ''})`, NORME.DM1975, r);
     }
   }
   if (lightOk) ok.push('Tutti i locali abitabili rispettano il rapporto aeroilluminante 1/8');
 
   // 4) bagni e cucine
   const baths = rooms.filter((r) => r.kind === 'bath');
-  if (!baths.length && dwelling >= DWELLING_MIN.one) {
-    add('bath', 'fail', 'Manca il servizio igienico: ogni alloggio deve averne uno completo', NORME.DM1975);
+  const complexBaths = buildingRooms.filter((r) => r.kind === 'bath');
+  if (!complexBaths.length && dwelling >= DWELLING_MIN.one) {
+    add('bath', 'fail', 'Manca il servizio igienico: ogni alloggio deve averne uno completo, basta uno per tutto l’edificio', NORME.DM1975);
+  } else if (complexBaths.length) {
+    const biggest = Math.max(...complexBaths.map(area));
+    if (biggest < BATH_MAIN - 0.05) {
+      add('bath-size', 'warn', `Il bagno completo più grande è di ${m2(biggest)}: per l’edificio ne serve almeno uno di ${BATH_MAIN} m² (gli altri possono essere più piccoli)`, NORME.REG, complexBaths.find((r) => area(r) === biggest));
+    } else {
+      ok.push(`Bagno completo di ${m2(biggest)}: ne basta uno per tutto l’edificio, gli altri servizi possono essere più piccoli`);
+    }
   }
   for (const r of [...baths, ...rooms.filter((x) => x.kind === 'wc')]) {
     const win = lit.get(r.id) || 0;
@@ -208,15 +230,42 @@ export function checkCompliance(plan, { type, height = DEFAULT_HEIGHT, stairs = 
   }
 
   // 9) accessibilità: un bagno in cui ruota una carrozzina (visitabilità)
-  if (baths.length) {
-    if (!baths.some((r) => Math.min(r.w, r.h) >= BATH_ROTATION - 0.005)) {
-      add('bath-rotation', 'warn', `Nessun bagno con lo spazio di rotazione di ${m(BATH_ROTATION)}: l’alloggio non è visitabile`, NORME.DM236, baths[0]);
+  if (complexBaths.length) {
+    if (!complexBaths.some((r) => Math.min(r.w, r.h) >= BATH_ROTATION - 0.005)) {
+      add('bath-rotation', 'warn', `Nessun bagno con lo spazio di rotazione di ${m(BATH_ROTATION)}: l’alloggio non è visitabile`, NORME.DM236, baths[0] || complexBaths[0]);
     } else {
       ok.push('Almeno un bagno con spazio di rotazione per la carrozzina');
     }
   }
 
+  if (plan.mezzanine) checkMezzanine(plan, height, area, add, ok);
   return done();
+}
+
+/* Soppalco del loft: superficie, altezze libere sotto e sopra, parapetto e scala. */
+function checkMezzanine(plan, height, area, add, ok) {
+  const mz = plan.mezzanine;
+  const floorArea = plan.rooms.filter((r) => r.kind !== 'stairs').reduce((a, r) => a + area(r), 0);
+  const ratio = (mz.w * mz.h) / floorArea;
+  const pct = `${Math.round(ratio * 100)}%`;
+  if (ratio > MEZZ.ratioMax + 1e-6) add('mezz-area', 'fail', `Soppalco di ${m2(mz.w * mz.h)}: ${pct} del loft, troppo per un soppalco (di norma al massimo 1/3)`, NORME.REG);
+  else if (ratio > MEZZ.ratio + 1e-6) add('mezz-area', 'warn', `Soppalco di ${m2(mz.w * mz.h)}: ${pct} del loft, oltre 1/3 (limite usuale, a volte 40%)`, NORME.REG);
+  else ok.push(`Soppalco di ${m2(mz.w * mz.h)}: ${pct} del loft, entro 1/3`);
+  const under = mz.elev - mz.slab;
+  const above = height - mz.elev;
+  if (under < MEZZ.underMin - 1e-6) add('mezz-under', 'fail', `Sotto il soppalco ${m(under)}: servono almeno ${m(MEZZ.under)}`, NORME.REG);
+  else if (under < MEZZ.under - 1e-6) add('mezz-under', 'warn', `Sotto il soppalco ${m(under)}: di norma ${m(MEZZ.under)}`, NORME.REG);
+  else ok.push(`Altezza libera sotto il soppalco di ${m(under)}`);
+  if (above < MEZZ.above - 1e-6) add('mezz-above', 'fail', `Sul soppalco ${m(above)}: servono almeno ${m(MEZZ.above)}`, NORME.REG);
+  else ok.push(`Altezza sul soppalco di ${m(above)}`);
+  if (mz.parapet < MEZZ.parapet - 1e-6) add('mezz-parapet', 'fail', `Parapetto del soppalco di ${m(mz.parapet)}: almeno ${m(MEZZ.parapet)}`, NORME.REG);
+  else ok.push(`Parapetto del soppalco di ${m(mz.parapet)}`);
+  const sw = Math.min(mz.stair.w, mz.stair.h);
+  if (sw < STAIR_MIN - 0.005) add('stairs', 'fail', `Scala del soppalco larga ${m(sw)}: almeno ${m(STAIR_MIN)}`, NORME.DM236);
+  const rise = mz.elev / (mz.stair.risers || 15);
+  if (rise > RISER.max + 1e-6) add('stairs-rise', 'fail', `Scala del soppalco con alzata di ${(rise * 100).toFixed(1).replace('.', ',')} cm: oltre 20 cm non è praticabile`, 'Regola dell’arte');
+  else if (rise > RISER.good + 1e-6) add('stairs-rise', 'warn', `Scala del soppalco con alzata di ${(rise * 100).toFixed(1).replace('.', ',')} cm: scomoda`, 'Regola dell’arte');
+  else ok.push(`Scala del soppalco con alzata di ${(rise * 100).toFixed(1).replace('.', ',')} cm: comoda`);
 }
 
 /* Rampa carrabile verso un garage interrato (si disegna nel giardino): pendenza e larghezza. */

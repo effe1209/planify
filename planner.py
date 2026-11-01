@@ -155,6 +155,7 @@ class Item:
     facing: str = ""
     flip: bool = False            # disegno specchiato (pezzi asimmetrici: doccia angolare, divano angolare)
     parts: Optional[dict] = None  # posizioni interne nel riferimento del disegno (piano cucina: hob, sink in m)
+    elev: float = 0.0             # quota del pavimento su cui poggia (arredi del soppalco)
 
     def __post_init__(self):
         if self.keep is None:
@@ -192,6 +193,8 @@ class Layout:
         self.shape = "rect"
         self.room_type = ""
         self.options: dict = {}   # preferenze dell'utente (es. penisola)
+        # soppalco del loft: {rect, stair (Rect della rampa), up, open (lati aperti sul vuoto), elev, height, parapet}
+        self.mezz: Optional[dict] = None
         self.mirror: Optional[Tuple[bool, bool]] = None   # specchiatura imposta dalla scala di un altro piano
         self.wet: List[Rect] = []   # bagni del piano accanto (coordinate del layout), per sovrapporre gli scarichi
 
@@ -389,6 +392,10 @@ class Layout:
             it.keep = it.keep.transposed()
             it.facing = TRANSPOSE_SIDE.get(it.facing, it.facing)
             it.flip = not it.flip
+        if self.mezz:
+            m = self.mezz
+            m.update(rect=m["rect"].transposed(), stair=m["stair"].transposed(), up=TRANSPOSE_SIDE[m["up"]],
+                     open=[TRANSPOSE_SIDE[x] for x in m["open"]])
 
     # -- specchiatura (varianti della stessa pianta) -----------------------------
     def flip(self, fx: bool, fy: bool):
@@ -423,6 +430,15 @@ class Layout:
             it.facing = f
             if fx != fy:
                 it.flip = not it.flip
+        if self.mezz:
+            m = self.mezz
+            m["rect"], m["stair"] = fr(m["rect"]), fr(m["stair"])
+            def side(x):
+                if fx: x = FLIP_X.get(x, x)
+                if fy: x = FLIP_Y.get(x, x)
+                return x
+            m["up"] = side(m["up"])
+            m["open"] = [side(x) for x in m["open"]]
 
 
 # ----------------------------------------------------------------------------
@@ -542,6 +558,9 @@ class Placer:
                 zones.append(Rect(d.line if right else d.line - depth, d.start, depth, d.w))
                 if d.room_b is None:
                     zones.append(Rect(d.line if right else d.line - 1.8, d.start - 0.5, 1.8, d.w + 1.0))
+        if self.lay.mezz and room.kind == "living":
+            st = self.lay.mezz["stair"]   # la scala del soppalco sta nel soggiorno: ingombro e spazio per salire
+            zones.append(Rect(st.x - 0.3, st.y - 0.3, st.w + 0.6, st.h + 0.6))
         self._dz[room.id] = zones
         return zones
 
@@ -1592,6 +1611,7 @@ def furnish(lay: Layout):
         furnish_room(r)
     for plist in P.placed.values():
         lay.items.extend(plist)
+    furnish_mezzanine(lay)
 
 
 # ----------------------------------------------------------------------------
@@ -2722,10 +2742,101 @@ def furnish_storage(P: Placer, room: Room) -> None:
     P.place_corner(room, "vacuum", 0.4, 0.4, gap=0.05)
 
 
+# Loft vero: un unico volume a doppia altezza con il soppalco (zona notte) sopra i servizi.
+# Regole di riferimento (nazionali e prassi dei regolamenti edilizi comunali, da verificare col Comune):
+# soppalco di norma non oltre 1/3 della superficie del locale, altezza libera sotto ≥ 2,40 m e sopra ≥ 2,20 m,
+# parapetto ≥ 1,00 m, aperto verso il vuoto, scala fissa, aeroilluminazione 1/8 sul totale.
+LOFT_H = 5.0           # altezza interna del volume (m)
+MEZZ_SLAB = 0.2        # spessore del solaio del soppalco
+MEZZ_UNDER = 2.4       # altezza libera sotto il soppalco
+MEZZ_ELEV = MEZZ_UNDER + MEZZ_SLAB   # quota del pavimento del soppalco
+MEZZ_PARAPET = 1.0
+MEZZ_RISERS = 15       # 2,60 m in 15 alzate = 17,3 cm
+MEZZ_STAIR_W = 0.9
+LOFT_MEZZ_MIN = (9.5, 6.0)   # lato minimo e profondità minima per un loft con soppalco
+
+
+def layout_loft_mezzanine(W: float, L: float, rng: random.Random) -> Layout:
+    lay = Layout(W, L)
+    lay.room_type = "open-space"
+    lay.shape = "rect"
+    bw = snap(min(clamp(W * 0.30, 3.2, 3.6), W / 3 - 0.05))
+    bh = snap(clamp(L * 0.38, 2.4, 3.2))
+    a = lay.add_room("Soggiorno", "living", 0, 0, W - bw, L, group=1)
+    k = lay.add_room("Cucina", "kitchen", W - bw, bh, W, L, group=1)
+    bath = lay.add_room("Bagno", "bath", W - bw, 0, W, bh, group=3)
+    lay.add_entrance(a.id, "S", DOOR_W, 0.04, margin=0.2)
+    lay.add_door(bath.id, a.id, DOOR_W_BATH, 0.2, into=bath.id)
+    lay.add_windows(a.id, "W", 2.0, 3)
+    lay.add_windows(a.id, "N", 1.8, 3)
+    lay.add_windows(a.id, "S", 1.6, 2)
+    lay.add_windows(k.id, "E", 1.4, 2)
+    side = lay.best_ext_side(bath)
+    if side:
+        lay.add_windows(bath.id, side, 0.7, 1)
+    lay.add_partial_windows()
+    run = round(MEZZ_RISERS * 0.27, 3)
+    lay.mezz = {
+        "rect": Rect(W - bw, 0.0, bw, L),
+        "stair": Rect(W - bw - run, L - WALL - MEZZ_STAIR_W, run, MEZZ_STAIR_W),
+        "up": "E", "open": ["W"], "elev": MEZZ_ELEV, "height": LOFT_H, "parapet": MEZZ_PARAPET,
+    }
+    lay.notes.append("Loft con soppalco: volume a doppia altezza, zona notte sul soppalco sopra cucina e bagno.")
+    return lay
+
+
+def furnish_mezzanine(lay: Layout) -> None:
+    """Zona notte del soppalco: letto contro il muro esterno, comodini, armadio e (se c'è posto) scrivania."""
+    m = lay.mezz
+    if not m:
+        return
+    r: Rect = m["rect"]
+    side = "E" if r.cx > lay.W / 2 else "W"
+    ns = r.w < r.h
+    living = next(x for x in lay.rooms if x.kind == "living")
+    if not ns:
+        return
+    x0, x1 = (r.x + 0.1, r.x2 - WALL) if side == "E" else (r.x + WALL, r.x2 - 0.1)
+    y0, y1 = r.y + WALL, r.y2 - WALL
+    wall_x = (lambda d: x1 - d) if side == "E" else (lambda d: x0)
+    face = OPP[side]
+    clear = r.w - 0.1 - WALL - 2.0   # corridoio tra letto e parapetto
+    out: List[Item] = []
+
+    def put(typ, d, along, y):
+        it = Item(typ, Rect(wall_x(d), y, d, along), living.id, 0.05, None, face)
+        it.elev = m["elev"]
+        out.append(it)
+        return it
+
+    if clear < 0.85:
+        return
+    ybed = y0 + 0.55
+    put("bed", 2.0, 1.6, ybed)
+    put("nightstand", 0.4, 0.45, ybed - 0.5)
+    put("nightstand", 0.4, 0.45, ybed + 1.6 + 0.05)
+    # il pianerottolo di arrivo della scala sta in fondo, lungo il lato aperto: resta libero
+    y = ybed + 1.6 + 0.05 + 0.45 + 0.3
+    stop = r.y2 - MEZZ_STAIR_W - 0.9
+    if y + 1.8 <= stop:
+        wl = 2.4 if y + 2.4 <= stop else 1.8
+        put("wardrobe", 0.6, wl, y)
+        y += wl + 0.3
+    if y + 1.2 <= stop - 0.6:
+        desk = put("desk", 0.55, 1.2, y)
+        ch = Rect(desk.rect.x - 0.52 if side == "E" else desk.rect.x2 + 0.02, desk.rect.cy - 0.25, 0.5, 0.5)
+        chair = Item("office_chair", ch, living.id, 0.0, None, OPP[face])
+        chair.elev = m["elev"]
+        out.append(chair)
+    lay.items.extend(out)
+
+
 def layout_loft(W: float, L: float, office: bool, shape: str = "auto",
                 rng: Optional[random.Random] = None) -> Layout:
     """Open space: zona principale + zona secondaria aperta + bagno chiuso (anche con rientranza a L)."""
     rng = rng or random.Random(0)
+    if not office and W >= LOFT_MEZZ_MIN[0] and L >= LOFT_MEZZ_MIN[1]:
+        return layout_loft_mezzanine(W, L, rng)
     lay = Layout(W, L)
     lay.room_type = "office" if office else "open-space"
     bw = snap(clamp(W * rng.uniform(0.24, 0.31), 2.6, 3.6))
@@ -2851,6 +2962,10 @@ def validate(lay: Layout) -> List[str]:
     # 1) arredi
     for it in lay.items:
         room = lay.room(it.room_id)
+        if it.elev:
+            if lay.mezz and not it.rect.inside(lay.mezz["rect"]):
+                issues.append(f"{it.type} fuori dal soppalco")
+            continue
         if room.kind == "garden":
             continue   # recinzioni e siepi stanno sul confine, il vialetto parte dal cancello: niente muri qui
         if not it.rect.inside(P.inner(room)):
@@ -2860,7 +2975,7 @@ def validate(lay: Layout) -> List[str]:
                 issues.append(f"{it.type} blocca una porta in {room.name}")
     for i, a in enumerate(lay.items):
         for b in lay.items[i + 1:]:
-            if a.room_id == b.room_id and a.rect.overlaps(b.rect):
+            if a.room_id == b.room_id and a.elev == b.elev and a.rect.overlaps(b.rect):
                 issues.append(f"{a.type} e {b.type} si sovrappongono in {lay.room(a.room_id).name}")
     # 2) connettività (le zone aperte sono la stessa zona)
     entrance = [d.room_a for d in lay.doors if d.room_b is None] or \
@@ -3574,6 +3689,18 @@ def _waste(plan: dict) -> float:
     return 100 * circ / area + 8 * max(0.0, ribbon - 1.8)
 
 
+def _export_mezzanine(lay: Layout) -> dict:
+    m = lay.mezz
+    if not m:
+        return {}
+    r, st = m["rect"], m["stair"]
+    box = lambda q: {"x": round(q.x, 3), "y": round(q.y, 3), "w": round(q.w, 3), "h": round(q.h, 3)}
+    return {"height": m["height"], "mezzanine": {
+        **box(r), "elev": m["elev"], "slab": MEZZ_SLAB, "parapet": m["parapet"], "open": m["open"],
+        "stair": {**box(st), "up": m["up"], "type": "straight", "risers": MEZZ_RISERS},
+    }}
+
+
 def serialize(lay: Layout, palette: dict, seed: int) -> dict:
     """Layout -> dizionario nel formato di PlanResponse (usato da generate e dall'import DXF)."""
     walls = [] if lay.room_type == "garden" else build_walls(lay)
@@ -3608,8 +3735,10 @@ def serialize(lay: Layout, palette: dict, seed: int) -> dict:
         "furniture": [{"type": i.type, "x": round(i.rect.x, 3), "y": round(i.rect.y, 3),
                        "w": round(i.rect.w, 3), "h": round(i.rect.h, 3), "rot": 0.0,
                        "facing": i.facing, "room": i.room_id, "flip": i.flip,
-                       **({"parts": i.parts} if i.parts else {})} for i in lay.items],
+                       **({"parts": i.parts} if i.parts else {}),
+                       **({"elev": i.elev} if i.elev else {})} for i in lay.items],
         "stairs": export_stairs(lay),
+        **_export_mezzanine(lay),
         "notes": lay.notes,
         **({"house": lay.options["house"]} if lay.options.get("house") else {}),
     }

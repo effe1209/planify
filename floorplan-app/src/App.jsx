@@ -1787,6 +1787,7 @@ export default function App() {
                 onNorth={readOnly ? () => {} : (v) => editProject((p) => ({ ...p, north: v }))} />
               <DesignReport design={plan.design} />
               <CompliancePanel plan={plan} type={floor.meta?.type} height={floor.meta?.height} stairs={floorStairs}
+                complex={current?.floors.filter((f) => f.id !== floor.id && typeof f.level === 'number' && f.plan).map((f) => ({ plan: f.plan, type: f.meta?.type }))}
                 onHeight={readOnly ? null : (v) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, height: v } })))}
                 onSelectRoom={setSelectedId} />
 
