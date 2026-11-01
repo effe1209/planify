@@ -27,7 +27,7 @@ def test_minimum_areas_are_respected():
 
 
 def test_loft_has_a_bathroom_below_the_apartment_minimum():
-    plan = planner.generate(12, 8, "open-space", num_rooms=1, seed=1, style="industrial")
+    plan = planner.generate(12, 8, "loft", num_rooms=1, seed=1, style="industrial")
     assert not [n for n in plan.get("notes", []) if "minimi" in n]
     print("ok test_loft_has_a_bathroom_below_the_apartment_minimum")
 
@@ -37,9 +37,9 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
     rampa fissa con alzate comode, zona notte sul soppalco e niente arredi del soggiorno sulla scala."""
     ov = lambda a, b: min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"]) > 0.02 and \
         min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]) > 0.02
-    for w, l in [(12, 8), (10, 6.5), (14, 10), (16, 9)]:
+    for w, l in [(12, 8), (10, 6.5), (14, 10), (16, 9), (7, 5), (8, 5.5), (9, 6)]:
         for seed in range(4):
-            plan = planner.generate(w, l, "open-space", num_rooms=1, seed=seed, style="industrial")
+            plan = planner.generate(w, l, "loft", num_rooms=1, seed=seed, style="industrial")
             mz = plan["mezzanine"]
             assert mz["w"] * mz["h"] <= w * l / 3 + 0.01, (w, l, seed)
             assert mz["elev"] - mz["slab"] >= 2.4 and plan["height"] - mz["elev"] >= 2.2
@@ -48,8 +48,9 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
             assert any(f["type"] == "bed" for f in up) and all(ov(f, mz) for f in up), (w, l, seed)
             assert not [f for f in plan["furniture"] if not f.get("elev") and ov(f, mz["stair"])], (w, l, seed)
             assert not [n for n in plan["notes"] if "non" in n.lower() and "raggiungibile" in n.lower()]
-    small = planner.generate(8, 6, "open-space", num_rooms=1, seed=1)
-    assert "mezzanine" not in small   # troppo piccolo per un soppalco: loft a un livello
+    small = planner.generate(6.5, 5, "loft", num_rooms=1, seed=1)
+    assert "mezzanine" not in small and any("soppalco non entra" in n for n in small["notes"])   # sotto 7 × 5 m: loft a un livello
+    assert "mezzanine" not in planner.generate(12, 8, "open-space", num_rooms=1, seed=1)   # il monolocale non ha soppalco
     print("ok test_loft_is_a_real_loft_with_a_mezzanine")
 
 

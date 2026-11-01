@@ -7,7 +7,7 @@ const ENTRY = [['N', ArrowUp, 'Parte dal lato nord'], ['E', ArrowRight, 'Parte d
 /* Strumenti della modifica, nella barra fissa in cima: aggiungere una porta o una finestra, dividere un locale. */
 export function EditTools({ addMode, splitDir, onAdd, onSplitDir }) {
   const tools = [['door', DoorOpen, 'Porta', 'Aggiungi una porta: clicca sul muro'], ['window', PanelTop, 'Finestra', 'Aggiungi una finestra: clicca su un muro esterno'],
-    ['split', Scissors, 'Dividi', 'Dividi un locale con un muro nuovo']];
+    ['split', Scissors, 'Muro', 'Aggiungi un muro: trascina nel locale per tracciarlo, poi tiralo col mouse per spostarlo']];
   return (
     <div className="pf-edittools">
       <div className="pf-segtools" role="group" aria-label="Strumenti di modifica">
@@ -26,7 +26,7 @@ export function EditTools({ addMode, splitDir, onAdd, onSplitDir }) {
       )}
       {addMode && (
         <p className="pf-tip">
-          {addMode === 'split' ? 'Clicca nel locale dove mettere il muro: le due parti restano collegate da una porta.'
+          {addMode === 'split' ? 'Trascina nel locale lungo la linea del muro (la direzione si capisce dal gesto) oppure clicca per usare la direzione scelta. Le due parti restano collegate da una porta; il muro nuovo si sposta poi col mouse. Esc per annullare.'
             : `Clicca sul muro dove metterla${addMode === 'window' ? ' (solo muri esterni)' : ''}. Esc per annullare.`}
         </p>
       )}

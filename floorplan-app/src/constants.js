@@ -1,4 +1,4 @@
-import { Home, Briefcase, Maximize2, BedDouble, Car, Trees } from 'lucide-react';
+import { Home, Briefcase, Maximize2, BedDouble, Car, Trees, Warehouse } from 'lucide-react';
 
 export const SHAPES = [
   { id: 'auto', label: 'Varia', d: null },
@@ -15,6 +15,7 @@ export const SHAPE_NAME = {
 export const TYPES = [
   { id: 'apartment', label: 'Appartamento', Icon: Home },
   { id: 'open-space', label: 'Open space', Icon: Maximize2 },
+  { id: 'loft', label: 'Loft', Icon: Warehouse },
   { id: 'office', label: 'Ufficio', Icon: Briefcase },
   { id: 'hotel-room', label: 'Camera Hotel', Icon: BedDouble },
   { id: 'garage', label: 'Garage / interrato', Icon: Car },
@@ -23,6 +24,7 @@ export const TYPES = [
 export const TYPE_NAME = {
   apartment: 'Appartamento',
   'open-space': 'Open space',
+  loft: 'Loft',
   office: 'Ufficio',
   'hotel-room': 'Camera Hotel',
   garage: 'Garage / interrato',
@@ -42,12 +44,16 @@ export const STYLES = [
   { id: 'luxury', label: 'Luxury', bg: '#f9f6f0', desc: 'Elegante e raffinato' },
 ];
 
+/* Il loft con soppalco ha bisogno di almeno 7 × 5 m (lato lungo × lato corto): come LOFT_MEZZ_MIN del motore. */
+export const LOFT_MIN = { long: 7, short: 5 };
+export const loftTooSmall = (w, l) => Math.max(w, l) < LOFT_MIN.long || Math.min(w, l) < LOFT_MIN.short;
+
 export const PRESETS = [
   { label: 'Bilocale', w: 8, l: 6.5, type: 'apartment', rooms: 2 },
   { label: 'Trilocale', w: 10, l: 8, type: 'apartment', rooms: 3 },
   { label: 'Quadrilocale', w: 13, l: 9.5, type: 'apartment', rooms: 4 },
   { label: 'Monolocale', w: 6.5, l: 5.5, type: 'open-space', rooms: 1 },
-  { label: 'Loft', w: 12, l: 8, type: 'open-space', rooms: 1, style: 'industrial' },
+  { label: 'Loft', w: 12, l: 8, type: 'loft', rooms: 1, style: 'industrial' },
   { label: 'Ufficio', w: 14, l: 10, type: 'office', rooms: 3 },
   { label: 'Camera Std', w: 4.2, l: 6.0, type: 'hotel-room', rooms: 1 },
   { label: 'Camera Deluxe', w: 5.0, l: 6.8, type: 'hotel-room', rooms: 1 },

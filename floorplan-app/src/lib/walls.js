@@ -567,7 +567,7 @@ export function splitRoom(plan, roomId, orient, at) {
     const added = addOpening(out, 'door', run, (run.lo + run.hi) / 2);
     if (added.plan) { out = added.plan; opening = { kind: 'door', index: added.index }; }
   }
-  return { plan: out, moved: [roomId, id], dropped: done.dropped, opening };
+  return { plan: out, moved: [roomId, id], dropped: done.dropped, opening, wall: run || null };
 }
 
 /* Due locali che si toccano lungo un muro: coppia { a, b, vertical, line }, o null. */

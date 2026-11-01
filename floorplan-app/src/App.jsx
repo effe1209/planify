@@ -8,7 +8,7 @@ import { Analytics } from '@vercel/analytics/react';
 import './App.css';
 import './apple.css';
 
-import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME } from './constants';
+import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME, LOFT_MIN, loftTooSmall } from './constants';
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
@@ -173,6 +173,7 @@ export default function App() {
       }),
   ];
   const [globalView, setGlobalView] = useState(false);
+  const [loftLevel, setLoftLevel] = useState('all');   // loft con soppalco: all | below | above
   const [pendingFloor, setPendingFloor] = useState(null); // { name, level }: la prossima pianta diventa un nuovo piano
 
   const [layers, setLayers] = useState({ furniture: true, labels: true, dims: true, grid: false, alarm: true, technical: false });
@@ -732,7 +733,7 @@ export default function App() {
     }
     editPlan(() => next);
     setSelectedOpening(res.opening || null);
-    setSelectedWall(null);
+    setSelectedWall(res.wall || null);   // dopo «Muro» il muro nuovo è già selezionato e si tira col mouse
     setAddMode(null);
     if (res.dropped?.length) say(res.dropped[0]);
   };
@@ -1433,6 +1434,7 @@ export default function App() {
   };
 
   const area = (parseFloat(form.width) || 0) * (parseFloat(form.length) || 0);
+  const presetOn = (p) => form.roomType === p.type && parseFloat(form.width) === p.w && parseFloat(form.length) === p.l;
   const toggle = (k) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
   /* esportazioni: in riga quando c'è spazio, in un menu «Esporta» quando la colonna centrale è stretta */
@@ -1514,9 +1516,14 @@ export default function App() {
                 ))}
               </div>
               <p className="pf-hint">{fmt(area)} m² nel riquadro · da 3,5 a 60 m per lato</p>
+              {form.roomType === 'loft' && loftTooSmall(parseFloat(form.width) || 0, parseFloat(form.length) || 0) && (
+                <p className="pf-hint pf-hint-warn" role="status">
+                  Il soppalco richiede almeno {LOFT_MIN.long} × {LOFT_MIN.short} m: con queste misure il loft resta a un solo livello.
+                </p>
+              )}
               <div className="pf-chips">
                 {PRESETS.map((p) => (
-                  <button key={p.label} type="button" className="pf-chip"
+                  <button key={p.label} type="button" aria-pressed={presetOn(p)} className={`pf-chip ${presetOn(p) ? 'pf-chip-on' : ''}`}
                     onClick={() => setForm((f) => ({ ...f, width: p.w, length: p.l, roomType: p.type, rooms: p.rooms, ...(p.style ? { style: p.style } : {}), ...defaultBedrooms(p.rooms) }))}>
                     {p.label}
                   </button>
@@ -1532,6 +1539,7 @@ export default function App() {
                     className={`pf-type-card ${form.roomType === id ? 'is-on' : ''}`}
                     onClick={() => setForm((f) => (id === 'hotel-room' && (parseFloat(f.width) > 6 || parseFloat(f.length) > 8)
                       ? { ...f, roomType: id, width: 4.2, length: 6.0, rooms: 1 }
+                      : id === 'loft' ? { ...f, roomType: id, rooms: 1, style: 'industrial' }
                       : { ...f, roomType: id }))}>
                     <Icon size={16} />
                     <span>{label}</span>
@@ -1570,7 +1578,7 @@ export default function App() {
               )}
               {form.roomType === 'apartment' ? (
                 <LayoutOptions form={form} setF={setF} />
-              ) : !['hotel-room', 'garage', 'garden'].includes(form.roomType) && (
+              ) : !['hotel-room', 'garage', 'garden', 'loft'].includes(form.roomType) && (
                 <div className="pf-range">
                   <div>
                     <span>{form.roomType === 'office' ? 'Locali (open space incluso)' : 'Locali principali'}</span>
@@ -1879,6 +1887,7 @@ export default function App() {
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`} north={current?.north ?? 0}
                   style={floor.meta?.style} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
+                  level={plan.mezzanine ? loftLevel : 'all'}
                   editable={!readOnly && !showElectric && !showPlumbing && !wallEdit} selectedItem={selectedItem}
                   wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? {
                     selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
@@ -1910,6 +1919,16 @@ export default function App() {
                   )}
                 </div>
               )
+            )}
+
+            {plan?.mezzanine && !view3d && !sheets && !sketch && !(globalView && current?.floors.length > 1) && (
+              <div className="pf-levels pf-segtools" role="radiogroup" aria-label="Livello del loft">
+                {[['all', 'Completa', 'Loft intero, soppalco sopra il piano sotto'], ['below', 'Sotto', 'Solo il livello a terra'], ['above', 'Sopra', 'Solo il soppalco']].map(([id, label, tip]) => (
+                  <button key={id} type="button" role="radio" aria-checked={loftLevel === id} title={tip}
+                    className={loftLevel === id ? 'is-on' : ''}
+                    onClick={() => { setLoftLevel(id); setSelectedItem(null); }}>{label}</button>
+                ))}
+              </div>
             )}
 
             {isLoading && (
