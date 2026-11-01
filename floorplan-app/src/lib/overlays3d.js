@@ -23,6 +23,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
   const out = {
     sensors: new THREE.Group(), electric: new THREE.Group(), cables: new THREE.Group(), cones: new THREE.Group(), lights: new THREE.Group(),
     realLights: [], glow: [],
+    lightPoints: [],   // tutti i punti luce { x, y, z, g }: l'esportazione 3D ne fa luci vere (la vista ne accende solo alcune)
   };
   out.sensors.name = 'sensori';
   out.electric.name = 'impianto';
@@ -263,7 +264,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
             box(g, 0.27, 0.01, 0.27, lamp, 0, -0.04, 0);
           }
           at(g, p.x, WALL_H, p.y, G('lights'));
-          lightsSeen.push({ x: p.x, y: y + WALL_H - 0.15, z: p.y });
+          lightsSeen.push({ x: p.x, y: y + WALL_H - 0.15, z: p.y, g: G('lights') });
           continue;
         }
         g.name = 'LAMPADARIO';
@@ -308,7 +309,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
           cyl(g, 0.12, 0.12, 0.02, white, 0, -0.01, 0, 22);
         }
         at(g, p.x, WALL_H, p.y, G('lights'));
-        lightsSeen.push({ x: p.x, y: y + WALL_H - 0.5, z: p.y });
+        lightsSeen.push({ x: p.x, y: y + WALL_H - 0.5, z: p.y, g: G('lights') });
         continue;
       }
       const g = object(`IMP_${k.toUpperCase()}`, layerOf(k), key);
@@ -373,7 +374,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         } else {
           part(g, new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), gl, 0, 0, 0.012).rotation.x = Math.PI / 2;
         }
-        lightsSeen.push({ x: px + nx * 0.25, y: y + baseH, z: pz + nz * 0.25 });
+        lightsSeen.push({ x: px + nx * 0.25, y: y + baseH, z: pz + nz * 0.25, g: G('lights') });
       } else if (k === 'light_ext') {
         box(g, 0.16, 0.22, 0.1, mat('extlamp', '#2b3036', { metalness: 0.4 }, 'METALLO'), 0, 0, 0.05);
         const gl = mat('extglow', '#fff3d4', { emissive: '#ffcf80', emissiveIntensity: 0.15 }, 'LUCE');
@@ -397,6 +398,8 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         at(g, px + (wall ? nx * 0.002 : 0), baseH, pz + (wall ? nz * 0.002 : 0), lampLike ? G('lights') : G('electric'));
       }
     }
+
+    out.lightPoints.push(...lightsSeen);
 
     // luci vere: le più distanti fra loro (al massimo MAX_REAL_LIGHTS per scena) illuminano davvero
     const step = Math.max(1, Math.ceil(lightsSeen.length / Math.max(1, MAX_REAL_LIGHTS - out.realLights.length)));

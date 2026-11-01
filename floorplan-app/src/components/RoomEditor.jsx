@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, X } from 'lucide-react';
+import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, X } from 'lucide-react';
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
@@ -7,7 +7,7 @@ const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio',
 /* Pannello di personalizzazione della stanza selezionata: nome, uso, finitura, arredi. */
 const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula']);
 
-export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip, onRemoveItem, onAddItem, onClose }) {
+export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip, onRemoveItem, onAddItem, onFurnish, busy, onClose }) {
   const [newId, setNewId] = useState('bed_double');
   const groups = [...new Set(FURNITURE.map((f) => f.group))];
 
@@ -72,6 +72,20 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip
           ))}
         </div>
       </div>
+
+      {onFurnish && (
+        <div className="pf-field-sm">
+          <span>Arredo del locale</span>
+          <div className="pf-row">
+            <button type="button" className="pf-btn-add" disabled={busy} onClick={() => onFurnish(false)}>
+              <Armchair size={13} /> Arreda questo locale
+            </button>
+            <button type="button" className="pf-btn-add" disabled={busy} onClick={() => onFurnish(true)}>
+              <Eraser size={13} /> Svuota
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="pf-field-sm">
         <span>Aggiungi arredo</span>

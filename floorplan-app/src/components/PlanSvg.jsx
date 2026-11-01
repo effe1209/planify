@@ -2,6 +2,7 @@
  * Il foglio della planimetria in SVG: stanze (rettangoli o poligoni liberi), muri, porte,
  * finestre, arredi, quote e cartiglio. Usato per la vista principale, le miniature e l'export.
  */
+import WallEditor from './WallEditor';
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
@@ -1039,14 +1040,18 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
    Il foglio: planimetria + quote + cartiglio
    ──────────────────────────────────────────────────────────────────────────── */
 export default function PlanSvg({
-  plan, layers, hoverId = null, selectedId = null, onHover, onSelect,
+  plan: planProp, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
   coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0,
+  wallEdit = null,
 }) {
   const uid = useId().replace(/:/g, '');
+  // modifica di muri e aperture: durante il trascinamento si mostra l'anteprima al posto della pianta
+  const [preview, setPreview] = useState(null);
+  const plan = preview || planProp;
   // trascinamento di un arredo: posizione provvisoria finché non si rilascia (un solo passo di annulla)
   const gRef = useRef(null);
   const [drag, setDrag] = useState(null);   // { index, start, orig, x, y }
@@ -1321,7 +1326,7 @@ export default function PlanSvg({
           );
         })}
 
-        {!thumb && plan.rooms.map((r) => (
+        {!thumb && !wallEdit && plan.rooms.map((r) => (
           <RoomShape key={`hit-${r.id}`} className="pf-hit" room={r} s={s}
             fill="transparent" style={{ cursor: 'pointer' }}
             onMouseEnter={() => onHover?.(r.id)} onMouseLeave={() => onHover?.(null)}
@@ -1357,6 +1362,8 @@ export default function PlanSvg({
               onClick={(e) => e.stopPropagation()} />
           );
         })}
+
+        {wallEdit && !thumb && <WallEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />}
 
         {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
         {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}

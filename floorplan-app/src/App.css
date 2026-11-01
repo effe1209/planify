@@ -705,3 +705,7 @@
 .pf-cov-hl { animation: pf-cov-pulse 1.2s ease-in-out infinite alternate; }
 @keyframes pf-cov-pulse { from { opacity: 0.55; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pf-cov-hl { animation: none; } }
+
+/* arredo della pianta: stili e pulsanti in riga */
+.pf-furnish .pf-row, .pf-customizer .pf-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pf-furnish .pf-chip.is-on { background: var(--accent, #1f4fd8); color: #fff; border-color: transparent; }

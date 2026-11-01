@@ -35,7 +35,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine"]
+            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -116,11 +116,21 @@ HouseFloor.model_rebuild()
 class DxfImportRequest(BaseModel):
     dxf_content: str
     style: Optional[str] = "modern"
+    furnish: bool = True   # False: solo la struttura (stanze, muri, porte, finestre), da arredare poi con /furnish-plan
 
 
 class PdfImportRequest(BaseModel):
     pdf_base64: str = Field(..., description="Il file PDF in base64")
     style: Optional[str] = "modern"
+    furnish: bool = True
+
+
+class FurnishRequest(BaseModel):
+    plan: Dict[str, Any]
+    style: Optional[str] = "modern"
+    room_ids: Optional[List[int]] = None            # solo questi locali (vuoto = tutti)
+    kinds: Optional[Dict[int, str]] = None          # nuovo uso dei locali, applicato prima di arredare
+    clear: bool = False                             # toglie gli arredi senza riarredare
 
 
 class Room(BaseModel):
@@ -353,9 +363,19 @@ def export_dxf(plan: dict):
 def import_dxf_endpoint(req: DxfImportRequest):
     """Riceve il testo di un file DXF e genera una planimetria arredata completa."""
     try:
-        return planner.import_dxf_data(req.dxf_content, style=req.style or "modern")
+        return planner.import_dxf_data(req.dxf_content, style=req.style or "modern", furnished=req.furnish)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {e}")
+
+
+@app.post("/furnish-plan")
+def furnish_plan_endpoint(req: FurnishRequest):
+    """Arreda una pianta già fatta (importata o modificata a mano) senza cambiarne muri, porte e finestre."""
+    try:
+        return planner.furnish_plan(req.plan, style=req.style or "modern", room_ids=req.room_ids,
+                                    kinds=req.kinds, clear=req.clear)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore nell'arredo: {e}")
 
 
 @app.post("/import-pdf", response_model=Union[HouseResponse, PlanResponse])
@@ -370,7 +390,7 @@ def import_pdf_endpoint(req: PdfImportRequest):
     if len(data) > 25_000_000:
         raise HTTPException(status_code=413, detail="PDF troppo grande (massimo 25 MB)")
     try:
-        return pdf_import.import_pdf_data(data, style=req.style or "modern")
+        return pdf_import.import_pdf_data(data, style=req.style or "modern", furnished=req.furnish)
     except pdf_import.RasterPdf as e:
         try:
             return catasto_import.import_catasto(data, style=req.style or "modern")

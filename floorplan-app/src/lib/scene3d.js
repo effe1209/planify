@@ -280,6 +280,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
     const obj = buildObject(THREE, it, M, mat, theme);
     if (obj) {
+      obj.name = obj.name || `ARREDO_${it.type.toUpperCase()}`;
       root.add(obj);
       raise(it, from);
       continue;
@@ -422,6 +423,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
+    g.name = `PIANO_${String(f.name || f.level).toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
     house.add(g);
     if (f.level === lowest) continue;
     // solaio sotto il piano: un volume per locale, nessuno sopra la scala (il vano resta aperto)

@@ -1564,10 +1564,15 @@ def ensure_access(lay: Layout) -> None:
             lay.notes.append(f"{r.name} non ha accesso: nessuna porta raggiungibile.")
 
 
-def furnish(lay: Layout):
-    ensure_access(lay)
+def furnish(lay: Layout, only: Optional[set] = None, access: bool = True):
+    """Arreda i locali. `only` = id dei soli locali da arredare (gli altri restano com'erano); `access` = ripara i
+    locali senza porta (aggiunge porte): con una pianta data la geometria non si tocca."""
+    if access:
+        ensure_access(lay)
     P = Placer(lay)
     for r in lay.rooms:                     # prima i bagni (possono invertire il verso porta)
+        if only is not None and r.id not in only:
+            continue
         if r.kind in ("bath", "wc"):
             if lay.room_type == "hotel-room":
                 furnish_hotel_bath(P, r)
@@ -1596,6 +1601,8 @@ def furnish(lay: Layout):
         elif k == "garden":         furnish_garden(P, r)
 
     for r in lay.rooms:
+        if only is not None and r.id not in only:
+            continue
         # nei locali di passaggio si prova prima lasciando liberi i percorsi tra le porte; se così manca
         # qualcosa di essenziale si arreda di nuovo senza (e il percorso resta stretto)
         doors = sum(1 for d in lay.doors if r.id in (d.room_a, d.room_b) and d.kind not in ("garage", "gate"))
@@ -3947,7 +3954,95 @@ def connect_rooms(lay: Layout, entrance_room: Room) -> None:
             lay.notes.append(f"{r.name} non raggiungibile")
 
 
-def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
+# ----------------------------------------------------------------------------
+# ARREDARE UNA PIANTA DATA (importata o modificata a mano): la geometria resta com'è
+# ----------------------------------------------------------------------------
+def _opening_from_plan(lay: Layout, d: dict, is_door: bool) -> Optional[Opening]:
+    """L'inverso di _export_opening: porta o finestra del formato di PlanResponse → Opening del layout."""
+    horiz = not d.get("rot")
+    extent = lay.L if horiz else lay.W
+    org = float(d["y"]) if horiz else float(d["x"]) - (WALL if ROT90_PIVOT_AT_WALL_RIGHT else 0.0)
+    if org <= EPS:
+        line = 0.0
+    elif org >= extent - WALL - 1e-3:
+        line = extent
+    else:
+        line = org + WALL / 2
+    start, w = float(d["x"] if horiz else d["y"]), float(d["w"])
+    mid = start + w / 2
+    probe = lambda off: next((r for r in lay.rooms if r.rect.x - 0.05 <= (mid if horiz else line + off) <= r.rect.x2 + 0.05
+                              and r.rect.y - 0.05 <= (line + off if horiz else mid) <= r.rect.y2 + 0.05), None)
+    lo, hi = probe(-0.2), probe(0.2)   # il locale prima e dopo la linea del muro
+    if lo is None and hi is None:
+        return None
+    if not is_door:
+        room = lo or hi
+        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, None, "")
+    if lo is None or hi is None or d.get("entrance"):
+        room = lo or hi
+        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, room.id, d.get("kind", ""))
+    dirn = d.get("openDir", 1) if horiz else -d.get("openDir", 1)
+    into = hi if dirn > 0 else lo
+    other = lo if into is hi else hi
+    return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), other.id, into.id, into.id, d.get("kind", ""))
+
+
+def layout_from_plan(plan: dict) -> Layout:
+    """Layout (locali, porte, finestre, scale) di una pianta già fatta, senza arredi."""
+    dims = plan["dimensions"]
+    lay = Layout(dims["width"], dims["length"])
+    lay.room_type = plan.get("roomType", "") or ""
+    for r in plan["rooms"]:
+        rect = Rect(float(r["x"]), float(r["y"]), float(r["w"]), float(r["h"]))
+        room = Room(int(r["id"]), r.get("name", ""), r.get("kind", "living"), rect, int(r.get("zone") or r["id"]),
+                    bool(r.get("master")), r.get("size") or "")
+        lay.rooms.append(room)
+        lay._by_id[room.id] = room
+    for st in plan.get("stairs") or []:
+        room = lay._by_id.get(st.get("room"))
+        c = st.get("core")
+        if room and c:
+            room.stair = {"type": st["type"], "entry": st.get("entry", "S"), "hand": st.get("hand", "W"),
+                          "core": Rect(float(c["x"]), float(c["y"]), float(c["w"]), float(c["h"]))}
+    for d in plan.get("doors") or []:
+        o = _opening_from_plan(lay, d, True)
+        if o:
+            lay.doors.append(o)
+    for w in plan.get("windows") or []:
+        o = _opening_from_plan(lay, w, False)
+        if o:
+            lay.windows.append(o)
+    return lay
+
+
+def furnish_plan(plan: dict, style: str = "modern", room_ids: Optional[List[int]] = None,
+                 kinds: Optional[Dict[int, str]] = None, clear: bool = False) -> dict:
+    """Arreda una pianta data senza cambiarne muri, porte e finestre. `room_ids`: solo questi locali (gli altri
+    tengono i loro arredi); `kinds`: {id locale: nuovo uso} da applicare prima; `clear`: toglie gli arredi e basta.
+    Ritorna {furniture, rooms (colori dello stile e usi), notes, design}."""
+    palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
+    kinds = {int(k): v for k, v in (kinds or {}).items()}
+    rooms_in = [{**r, **({"kind": kinds[r["id"]]} if r["id"] in kinds else {})} for r in plan["rooms"]]
+    lay = layout_from_plan({**plan, "rooms": rooms_in})
+    ids = {r.id for r in lay.rooms} if not room_ids else {int(i) for i in room_ids} | set(kinds)
+    ids &= {r.id for r in lay.rooms}
+    keep = [f for f in plan.get("furniture") or [] if f.get("room") not in ids]
+    if not clear:
+        furnish(lay, only=ids, access=False)
+        issues = validate(lay)
+        lay.notes.extend(i for i in issues if not i.endswith("senza finestre") and "non raggiungibile" not in i)
+    items = keep + [{"type": i.type, "x": round(i.rect.x, 3), "y": round(i.rect.y, 3), "w": round(i.rect.w, 3),
+                     "h": round(i.rect.h, 3), "rot": 0.0, "facing": i.facing, "room": i.room_id, "flip": i.flip,
+                     **({"parts": i.parts} if i.parts else {}), **({"elev": i.elev} if i.elev else {})} for i in lay.items]
+    return {
+        "furniture": items,
+        "rooms": [{"id": r.id, "kind": r.kind, "color": palette.get(KIND_GROUP.get(r.kind, "living"), "#f8fafc")}
+                  for r in lay.rooms],
+        "notes": [] if clear else lay.notes,
+    }
+
+
+def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True) -> dict:
     """Importa le stanze (polilinee chiuse) da un DXF e le arreda.
 
     Unità riconosciute: m, cm, mm. Se il file ha un layer delle stanze (AREE/ROOMS/STANZE) si usa
@@ -3966,7 +4061,8 @@ def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
             lay = None
             print(f"import DXF reale non riuscito: {e}")
         if lay is not None:
-            furnish(lay)
+            if furnished:
+                furnish(lay)
             plan = serialize(lay, palette, random.randrange(1, 1_000_000))
             # i pezzi senza nome di un locale a L / T hanno il colore del locale a cui appartengono
             main = {r["zone"]: r for r in plan["rooms"] if r["name"]}
@@ -4034,6 +4130,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern") -> dict:
         best = lay.best_ext_side(r)
         if best:
             lay.add_windows(r.id, best, 0.6 if r.kind == "bath" else 1.4, 1 if r.kind == "bath" else 2)
-    furnish(lay)
-    lay.notes.insert(0, f"Importate {len(lay.rooms)} stanze dal file DXF e arredate automaticamente.")
+    if furnished:
+        furnish(lay)
+    lay.notes.insert(0, f"Importate {len(lay.rooms)} stanze dal file DXF" + (" e arredate automaticamente." if furnished else ": usa «Arreda»."))
     return serialize(lay, palette, random.randrange(1, 1_000_000))
