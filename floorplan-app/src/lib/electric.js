@@ -573,6 +573,104 @@ function planFloor(project, floor, level, stairRole, main) {
     notes.push('Luci del giardino comandate da interruttore crepuscolare e orologio nel quadro generale.');
   }
 
+  /* ── nessun punto a parete dentro il vano di una finestra: si sposta di lato, o resta dov'era se non c'è posto ── */
+  const winHit = (q) => windows.find((op) => Math.abs((q.x - op.cx) * op.ux + (q.y - op.cy) * op.uy) < op.w / 2 + 0.2
+    && Math.abs((q.x - op.cx) * op.nx + (q.y - op.cy) * op.ny) < op.t / 2 + 0.4 && Math.abs(q.nx * op.nx + q.ny * op.ny) > 0.5);
+  for (const p of points) {
+    if (p.elev || (!p.nx && !p.ny)) continue;
+    const op = winHit(p);
+    if (!op) continue;
+    const along = (p.x - op.cx) * op.ux + (p.y - op.cy) * op.uy;
+    const r = plan.rooms.find((x) => x.id === p.room);
+    for (const side of [along >= 0 ? 1 : -1, along >= 0 ? -1 : 1]) {
+      const to = side * (op.w / 2 + 0.25);
+      const q = { ...p, x: p.x + op.ux * (to - along), y: p.y + op.uy * (to - along) };
+      if (winHit(q)) continue;
+      if (r && r.kind !== 'garden' && !contains(r, q.x - q.nx * 0.03 + q.nx * 0.1, q.y - q.ny * 0.03 + q.ny * 0.1)) continue;
+      if (doors.some(({ d, op: o }) => Math.hypot(q.x - o.cx, q.y - o.cy) < d.w / 2 + 0.15)) continue;
+      for (const l of links) for (const pt of l.points) if (pt[0] === p.x && pt[1] === p.y) { pt[0] = +q.x.toFixed(3); pt[1] = +q.y.toFixed(3); }
+      p.x = +q.x.toFixed(3);
+      p.y = +q.y.toFixed(3);
+      break;
+    }
+  }
+
+  /* ── altezza del soffitto: sotto il soppalco è quella del solaio, nel loft la doppia altezza ── */
+  const mz = plan.mezzanine;
+  for (const p of points) {
+    if (p.kind !== 'light' || p.elev) continue;
+    if (mz && p.x > mz.x && p.x < mz.x + mz.w && p.y > mz.y && p.y < mz.y + mz.h) p.ceil = +(mz.elev - mz.slab).toFixed(2);
+    else if (plan.height) p.ceil = plan.height;
+  }
+
+  /* ── soppalco: luci a parete (non a soffitto), prese ai lati del letto, luce del bagnetto e comando dalla scala ── */
+  if (mz) {
+    const { width: W, length: L } = plan.dimensions;
+    const edge = (v, max) => v < 1e-3 || Math.abs(v - max) < 1e-3;
+    const room = roomAt(plan, mz.x + mz.w / 2, mz.y + mz.h / 2);
+    const mAdd = (kind, p, extra = {}) => add(kind, room, p, { elev: mz.elev, ...extra });
+    const closed = ['N', 'E', 'S', 'W'].filter((sd) => !(mz.open || []).includes(sd));
+    const st = mz.stair;
+    const landing = { E: { x: st.x + st.w + 0.45, y: st.y + st.h / 2 }, W: { x: st.x - 0.45, y: st.y + st.h / 2 },
+      S: { x: st.x + st.w / 2, y: st.y + st.h + 0.45 }, N: { x: st.x + st.w / 2, y: st.y - 0.45 } }[st.up || 'E'];
+    const bath = mz.bath?.walls || [];
+    const near = (q, r) => q.x > r.x - 0.35 && q.x < r.x + r.w + 0.35 && q.y > r.y - 0.35 && q.y < r.y + r.h + 0.35;
+    const spots = [];
+    for (const sd of closed) {
+      const vertical = sd === 'W' || sd === 'E';
+      const line = { N: mz.y + (edge(mz.y, L) ? t : 0.05), S: mz.y + mz.h - (edge(mz.y + mz.h, L) ? t : 0.05),
+        W: mz.x + (edge(mz.x, W) ? t : 0.05), E: mz.x + mz.w - (edge(mz.x + mz.w, W) ? t : 0.05) }[sd];
+      const a = vertical ? mz.y : mz.x;
+      const len = vertical ? mz.h : mz.w;
+      const n = { N: [0, 1], S: [0, -1], W: [1, 0], E: [-1, 0] }[sd];
+      for (let d = 0.4; d <= len - 0.4 + 1e-6; d += 0.2) {
+        const q = vertical ? { x: line, y: a + d } : { x: a + d, y: line };
+        if (near(q, { x: st.x, y: st.y, w: st.w, h: st.h }) || bath.some((r) => near(q, r))) continue;
+        spots.push({ ...q, nx: n[0], ny: n[1] });
+      }
+    }
+    const closest = (q, avoid = [], min = 0.3, max = 3) => {
+      let best = null;
+      for (const p of spots) {
+        if (avoid.some((u) => dist(u, p) < min)) continue;
+        if (!best || dist(p, q) < dist(best, q)) best = p;
+      }
+      return best && dist(best, q) <= max ? best : null;
+    };
+    const mf = plan.furniture.filter((f) => f.elev);
+    const lamps = [];
+    const placed = [];
+    const light = (p) => { if (p) { lamps.push(mAdd('light_wall', p)); placed.push(p); } };
+    const stands = mf.filter((f) => f.type === 'nightstand');
+    for (const f of stands) {
+      const p = closest(center(f), placed, 0.3, 1.5);
+      light(p);
+      if (p) mAdd('socket', closest(center(f), [...placed, ...points.filter((x) => x.elev)], 0.3, 1.5) || p);
+    }
+    const bed = mf.find((f) => f.type === 'bed');
+    if (bed && !lamps.length) {
+      const head = closest(center(bed), [], 0, 3);
+      if (head) {
+        light(head);
+        light(closest({ x: head.x, y: head.y }, placed, 1.2, 3));
+        if (head) mAdd('socket', closest(center(bed), placed, 0.3, 3) || head);
+      }
+    }
+    // luce del bagnetto: sopra il lavabo, a filo del muro dietro
+    const BACK = { S: [0, -1], N: [0, 1], E: [-1, 0], W: [1, 0] };
+    for (const f of mf.filter((x) => x.type === 'sink')) {
+      const [bx, by] = BACK[f.facing || 'S'];
+      lamps.push(mAdd('light_wall', { x: f.x + f.w / 2 + bx * (f.w / 2) - bx * 0.03, y: f.y + f.h / 2 + by * (f.h / 2) - by * 0.03, nx: -bx, ny: -by }));
+    }
+    // nessun letto né bagnetto: almeno una luce a metà del lato chiuso più lungo
+    if (!lamps.length && spots.length) light(closest(center(mz), [], 0, 9));
+    const sw = closest(landing, [], 0, 2.5);
+    if (sw && lamps.length) {
+      const c = mAdd('switch', sw, { note: 'Comando delle luci del soppalco, accanto all\'arrivo della scala' });
+      for (const l of lamps) links.push({ kind: 'cmd', points: [[c.x, c.y], [l.x, l.y]] });
+    }
+  }
+
   /* ── circuiti ── */
   const night = (p) => {
     const r = plan.rooms.find((x) => x.id === p.room);

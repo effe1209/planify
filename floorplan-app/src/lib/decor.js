@@ -31,21 +31,21 @@ export function decorFor(plan) {
     const face = { x: op.cx + op.nx * (op.t / 2 + 0.03), y: op.cy + op.ny * (op.t / 2 + 0.03) };
     const panel = Math.min(0.4, Math.max(0.25, op.w * 0.22));
     for (const side of [-1, 1]) {
-      // il pannello parte poco oltre il vano e si raccoglie verso l'interno della finestra
-      const ex = face.x + op.ux * side * (op.w / 2 + 0.12);
-      const ey = face.y + op.uy * side * (op.w / 2 + 0.12);
-      out.push({ kind: 'curtain', x: ex, y: ey, ux: -op.ux * side, uy: -op.uy * side, nx: op.nx, ny: op.ny, len: panel });
+      // tenda aperta: il pannello sta di lato al vano, appena sovrapposto al vetro
+      const ex = face.x + op.ux * side * (op.w / 2 - 0.08);
+      const ey = face.y + op.uy * side * (op.w / 2 - 0.08);
+      out.push({ kind: 'curtain', x: ex, y: ey, ux: op.ux * side, uy: op.uy * side, nx: op.nx, ny: op.ny, len: panel });
     }
   }
   for (const it of plan.furniture) {
     const room = rooms.get(it.room);
-    if (!room) continue;
+    if (!room && !it.elev) continue;
     const b = backOf(it);
     let deco = null;
     if (['sofa', 'sofa_corner', 'bed'].includes(it.type)) deco = { kind: 'art', len: Math.min(1.4, b.along * 0.55) };
-    else if (it.type === 'sink' && (room.kind === 'bath' || room.kind === 'wc')) deco = { kind: 'mirror', len: Math.max(0.4, b.along * 0.8) };
+    else if (it.type === 'sink' && (it.elev || room.kind === 'bath' || room.kind === 'wc')) deco = { kind: 'mirror', len: Math.max(0.4, b.along * 0.8) };
     else if (it.type === 'shoe_cabinet') deco = { kind: 'mirror', len: 0.6 };
-    if (deco && !onGlass(b, deco.len)) out.push({ ...b, ...deco });
+    if (deco && !onGlass(b, deco.len)) out.push({ ...b, ...deco, ...(it.elev ? { elev: it.elev } : {}) });
   }
   return out;
 }
