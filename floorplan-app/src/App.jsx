@@ -14,8 +14,8 @@ import SketchBoard from './components/SketchBoard';
 import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import FurnishPanel from './components/FurnishPanel';
-import EditPlanPanel from './components/EditPlanPanel';
-import { flipDoor, mergeRooms, moveRoom, openWall, removeOpening, resizeOpening, roomSlide, setStair, splitRoom, stairRoom } from './lib/walls';
+import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
+import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
 import { rotateItem, snapItem } from './lib/furnitureEdit';
@@ -705,6 +705,7 @@ export default function App() {
   const [selectedWall, setSelectedWall] = useState(null);         // muro interno scelto con un clic (unire, aprire)
   const [selectedStair, setSelectedStair] = useState(false);
   const [splitDir, setSplitDir] = useState('v');
+  const editWarning = useMemo(() => (selectedOpening && plan ? doorWarning(plan, selectedOpening) : null), [plan, selectedOpening]);
   const editable = !!plan && !readOnly && !plan.rooms.some((r) => r.poly) && !plan.wallLines?.length
     && !['garden'].includes(floor?.meta?.type);
   // la modifica resta attiva finché non si preme di nuovo il pulsante; cambiando piano o progetto si azzera solo la selezione
@@ -757,6 +758,56 @@ export default function App() {
     if (bad) { setError(`${fl.length > 1 ? `${bad.f.name}: ` : ''}${bad.error}`); return; }
     setError(null);
     commitFloors(results);
+  };
+  /* Piani con lo stesso contorno di questo: un muro esterno si sposta su tutti insieme. */
+  const outlineFloors = () => (current?.floors || []).filter((f) => typeof f.level === 'number' && f.plan && f.meta?.type !== 'garden'
+    && Math.abs(f.plan.dimensions.width - plan.dimensions.width) < 0.05 && Math.abs(f.plan.dimensions.length - plan.dimensions.length) < 0.05);
+  /* Lo stesso muro su un altro piano: stessa linea e stesso tratto (e, per la scala, il vano scala). */
+  const sameWall = (f, run, part) => {
+    const cands = wallRuns(f.plan).filter((r) => r.orient === run.orient && Math.abs(r.line - run.line) < 0.02 && !!r.exterior === !!run.exterior
+      && Math.min(r.hi, run.hi) - Math.max(r.lo, run.lo) > 0.3)
+      .sort((p, q) => (Math.min(q.hi, run.hi) - Math.max(q.lo, run.lo)) - (Math.min(p.hi, run.hi) - Math.max(p.lo, run.lo)));
+    for (const r of cands) {
+      const q = partition(f.plan, r.orient, r.line, r.a, r.b, [r.lo, r.hi]);
+      if (!q.error && (!part.stairs || q.stairs)) return q;
+    }
+    return null;
+  };
+  /* Sposta un muro: i muri esterni e quelli del vano scala su tutti i piani coerenti (un solo annulla), gli altri su questo piano. */
+  const moveWall = async (run, part, delta) => {
+    const multi = part.exterior || part.stairs;
+    if (!multi) {
+      const res = movePartition(plan, part, delta);
+      if (res.error) setError(res.error); else { setError(null); applyPlanEdit(res); }
+      return;
+    }
+    const fl = part.exterior ? outlineFloors() : stairFloors();
+    const parts = fl.map((f) => (f.id === floor.id ? { f, part } : { f, part: sameWall(f, run, part) }));
+    const missing = parts.find((x) => !x.part);
+    if (missing) { setError(`${missing.f.name}: qui il muro non si può spostare come negli altri piani`); return; }
+    const d = Math.max(Math.max(...parts.map((x) => x.part.min)), Math.min(Math.min(...parts.map((x) => x.part.max)), delta));
+    if (!d) { setError('Su un altro piano il muro non può spostarsi di più'); return; }
+    setError(null);
+    const results = parts.map((x) => ({ f: x.f, res: movePartition(x.f.plan, x.part, d) }));
+    const bad = results.find((r) => r.res.error);
+    if (bad) { setError(`${results.length > 1 ? `${bad.f.name}: ` : ''}${bad.res.error}`); return; }
+    setFurnishing(true);
+    try {
+      for (const r of results) {
+        r.plan = r.res.plan;
+        if (r.res.moved?.length && r.plan.furniture?.length && base && engineHas('furnish_plan')) {
+          try {
+            const out = await readJson(await postJson(base, '/furnish-plan', { plan: r.plan, style: r.f.meta?.style || form.style, room_ids: r.res.moved }));
+            r.plan = { ...r.plan, furniture: out.furniture };
+          } catch { say('Muro spostato, ma gli arredi vicini non sono stati aggiornati'); }
+        }
+      }
+    } finally {
+      setFurnishing(false);
+    }
+    commitFloors(results);
+    setSelectedWall(null);
+    if (results.length > 1) say(`Muro spostato su ${results.length} piani`);
   };
   const moveStairs = async ({ axis, delta }) => {
     const fl = stairFloors();
@@ -1157,10 +1208,10 @@ export default function App() {
     try {
       setImporting('Apro la pagina del PDF da ricalcare…');
       const background = await pdfPageImage(file);
-      setSketch({ shapes: [], background: { ...background, name } });
+      setSketch({ shapes: [], background: { ...background, name, file } });
       say(`${hint} ${background.scaleFound
-        ? `Ricalca le stanze sopra la pianta: scala 1:${background.scale} letta sul foglio.`
-        : 'Ricalca le stanze sopra la pianta dopo aver controllato la scala.'}`);
+        ? `Clicca nei locali con la bacchetta magica: scala 1:${background.scale} letta sul foglio.`
+        : 'Controlla la scala, poi clicca nei locali con la bacchetta magica.'}${background.pages > 1 ? ` Il PDF ha ${background.pages} pagine: scegli la pagina nello schizzo; per ogni piano usa «+ Piano» e importalo di nuovo.` : ''}`);
     } catch (err) {
       setError(`Non riesco ad aprire il PDF: ${err.message}`);
     }
@@ -1794,7 +1845,13 @@ export default function App() {
           )}
           <div className={`pf-canvas ${panOn.current ? 'is-pannable' : ''} ${panning ? 'is-panning' : ''}`} ref={stageRef}>
             {sketch ? (
-              <SketchBoard initialShapes={sketch.shapes} background={sketch.background}
+              <SketchBoard key={`sk-${sketch.background?.page || 0}`} initialShapes={sketch.shapes} background={sketch.background}
+                onPage={async (n, shapes) => {
+                  try {
+                    const next = await pdfPageImage(sketch.background.file, { page: n });
+                    setSketch((s) => ({ ...s, shapes, background: { ...next, name: s.background.name, file: s.background.file } }));
+                  } catch (err) { setError(`Non riesco ad aprire la pagina ${n}: ${err.message}`); }
+                }}
                 onClose={() => { setSketch(null); if (!sketch.floorId) setPendingFloor(null); }}
                 onGenerate={generateFromSketch} />
             ) : plan && sheets ? (
@@ -1824,7 +1881,7 @@ export default function App() {
                   editable={!readOnly && !showElectric && !showPlumbing && !wallEdit} selectedItem={selectedItem}
                   wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? {
                     selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
-                    onSelectStair: setSelectedStair, onApply: applyPlanEdit, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
+                    onSelectStair: setSelectedStair, onApply: applyPlanEdit, onMoveWall: moveWall, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
                   } : null} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
@@ -1875,6 +1932,11 @@ export default function App() {
                 title="Attiva o disattiva la modifica di muri, aperture, locali e scale: resta attiva finché non la ripremi">
                 <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
               </button>
+              {wallEdit && (
+                <EditTools addMode={addMode} splitDir={splitDir}
+                  onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
+                  onSplitDir={setSplitDir} />
+              )}
             </div>
           )}
           {plan && stats ? (
@@ -1896,10 +1958,8 @@ export default function App() {
                   onClose={() => setSelectedDevice(null)} />
               )}
               {editable && wallEdit && (
-                <EditPlanPanel plan={plan} addMode={addMode} splitDir={splitDir} selected={selectedOpening} selectedWall={selectedWall}
-                  selectedStair={selectedStair} stairsHere={stairFloors().length}
-                  onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
-                  onSplitDir={setSplitDir}
+                <EditPlanPanel plan={plan} selected={selectedOpening} selectedWall={selectedWall}
+                  selectedStair={selectedStair} stairsHere={stairFloors().length} warning={editWarning}
                   onResize={(w) => openingEdit((p, o) => resizeOpening(p, o.kind, o.index, w))}
                   onFlip={() => openingEdit((p, o) => flipDoor(p, o.index))}
                   onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}

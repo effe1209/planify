@@ -4,13 +4,13 @@
  */
 const PT = 0.0254 / 72;   // un punto PDF in metri sulla carta
 
-export async function pdfPageImage(file, { maxPx = 2600 } = {}) {
+export async function pdfPageImage(file, { maxPx = 2600, page: wanted = 1 } = {}) {
   const pdfjs = await import('pdfjs-dist');
   const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   try {
-    const page = await doc.getPage(1);
+    const page = await doc.getPage(Math.max(1, Math.min(wanted, doc.numPages)));
     const base = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: Math.min(4, maxPx / Math.max(base.width, base.height)) });
     const canvas = document.createElement('canvas');
@@ -28,6 +28,7 @@ export async function pdfPageImage(file, { maxPx = 2600 } = {}) {
       scale: m ? Number(m[1]) : 100,
       scaleFound: !!m,
       pages: doc.numPages,
+      page: Math.max(1, Math.min(wanted, doc.numPages)),
     };
   } finally {
     doc.destroy();
