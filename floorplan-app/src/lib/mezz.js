@@ -82,8 +82,9 @@ export function resizeMezz(plan, size) {
 }
 
 /*
- * Porta scorrevole esterna del bagnetto: anta chiusa sul varco, davanti al muro (lato soppalco), che scorre lungo il muro
- * verso il lato con più posto. Restituisce l'anta chiusa, la posizione aperta (ombra) e il binario, in metri.
+ * Porta scorrevole del bagnetto, tutta DENTRO il bagno: l'anta chiusa sta sul varco, sul filo interno del muro, e scorre lungo
+ * il muro verso il tratto più lungo; il binario sta sopra, lungo lo stesso muro. Fuori dal bagno non sporge niente.
+ * Restituisce l'anta chiusa, la posizione aperta (ombra) e il binario, in metri.
  */
 export function slideDoor(mz) {
   const b = mz?.bath;
@@ -92,18 +93,25 @@ export function slideDoor(mz) {
   const vertical = d.h > d.w;   // il varco corre lungo y: muro verticale
   const bx = b.walls.reduce((a, q) => [Math.min(a[0], q.x), Math.max(a[1], q.x + q.w)], [Infinity, -Infinity]);
   const by = b.walls.reduce((a, q) => [Math.min(a[0], q.y), Math.max(a[1], q.y + q.h)], [Infinity, -Infinity]);
-  const out = vertical ? ((bx[0] + bx[1]) / 2 > d.x + d.w / 2 ? -1 : 1) : ((by[0] + by[1]) / 2 > d.y + d.h / 2 ? -1 : 1);
+  // lato interno del bagno: verso il centro dei suoi muri
+  const inn = vertical ? ((bx[0] + bx[1]) / 2 > d.x + d.w / 2 ? 1 : -1) : ((by[0] + by[1]) / 2 > d.y + d.h / 2 ? 1 : -1);
   const len = vertical ? d.h : d.w;
   const a0 = vertical ? d.y : d.x;
-  const lo = vertical ? mz.y : mz.x;
-  const hi = lo + (vertical ? mz.h : mz.w);
-  const dir = hi - (a0 + len) >= a0 - lo ? 1 : -1;
+  // il muro prima e dopo il varco, lungo l'asse della porta: l'anta scorre verso il tratto più lungo
+  const segs = b.walls.filter((q) => (vertical ? q.h > q.w && Math.abs(q.x - d.x) < 1e-6 : q.w > q.h && Math.abs(q.y - d.y) < 1e-6));
+  const before = segs.filter((q) => (vertical ? q.y + q.h <= a0 + 1e-6 : q.x + q.w <= a0 + 1e-6)).reduce((m, q) => m + (vertical ? q.h : q.w), 0);
+  const after = segs.filter((q) => (vertical ? q.y >= a0 + len - 1e-6 : q.x >= a0 + len - 1e-6)).reduce((m, q) => m + (vertical ? q.h : q.w), 0);
+  const dir = after >= before ? 1 : -1;
   const T = 0.04;
-  const face = vertical ? (out > 0 ? d.x + d.w + 0.01 : d.x - 0.01 - T) : (out > 0 ? d.y + d.h + 0.01 : d.y - 0.01 - T);
+  const face = vertical ? (inn > 0 ? d.x + d.w + 0.01 : d.x - 0.01 - T) : (inn > 0 ? d.y + d.h + 0.01 : d.y - 0.01 - T);
   const mk = (s0, l, t, across) => (vertical ? { x: across, y: s0, w: t, h: l } : { x: s0, y: across, w: l, h: t });
   const closed = mk(a0 - 0.02, len + 0.04, T, face);
   const open = mk(a0 - 0.02 + dir * len, len + 0.04, T, face);
-  const r0 = Math.min(a0, a0 + dir * len) - 0.04;
-  const rail = mk(r0, len * 2 + 0.08, 0.03, out > 0 ? face + T : face - 0.03);
+  // il binario copre varco e posizione aperta, ma non esce dal muro: al più fino alla fine del tratto
+  const lo = Math.min(a0, a0 + dir * len) - 0.02;
+  const hi = Math.max(a0 + len, a0 + len + dir * len) + 0.02;
+  const wallLo = Math.min(...segs.map((q) => (vertical ? q.y : q.x)), a0);
+  const wallHi = Math.max(...segs.map((q) => (vertical ? q.y + q.h : q.x + q.w)), a0 + len);
+  const rail = mk(Math.max(lo, wallLo), Math.min(hi, wallHi) - Math.max(lo, wallLo), 0.03, inn > 0 ? face : face + T - 0.03);
   return { closed, open, rail, vertical };
 }

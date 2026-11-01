@@ -265,8 +265,9 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
             box(g, 0.32, 0.035, 0.32, white, 0, -0.0175, 0);
             box(g, 0.27, 0.01, 0.27, lamp, 0, -0.04, 0);
           }
-          at(g, p.x, WALL_H, p.y, G('lights'));
-          lightsSeen.push({ x: p.x, y: y + WALL_H - 0.15, z: p.y, g: G('lights') });
+          const fl = p.ceil ?? WALL_H;   // sotto il soppalco il soffitto è il suo solaio
+          at(g, p.x, fl, p.y, G('lights'));
+          lightsSeen.push({ x: p.x, y: y + fl - 0.15, z: p.y, g: G('lights') });
           continue;
         }
         g.name = 'LAMPADARIO';
@@ -424,7 +425,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         const len = Math.hypot(bx - ax, bz - az);
         if (len < 0.02) continue;
         const c = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, len, 6), lm);
-        c.position.set((ax + bx) / 2, y + WALL_H - 0.1, (az + bz) / 2);
+        c.position.set((ax + bx) / 2, y + (link.h ?? WALL_H - 0.1), (az + bz) / 2);
         c.rotation.z = Math.PI / 2;
         c.rotation.y = -Math.atan2(bz - az, bx - ax);
         c.userData.layer = 'IMP_CAVI';

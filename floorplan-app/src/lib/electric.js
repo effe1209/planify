@@ -671,6 +671,17 @@ function planFloor(project, floor, level, stairRole, main) {
     }
   }
 
+  /* ── quota dei cavi: sotto il solaio del soppalco, sul soppalco o sotto il soffitto alto del loft ── */
+  if (mz) {
+    const inM = (q) => q[0] > mz.x && q[0] < mz.x + mz.w && q[1] > mz.y && q[1] < mz.y + mz.h;
+    const upIds = new Set(points.filter((q) => q.elev).map((q) => `${q.x},${q.y}`));
+    for (const l of links) {
+      if (l.points.every((q) => upIds.has(`${q[0]},${q[1]}`))) l.h = +(mz.elev + 2.3).toFixed(2);
+      else if (l.points.some(inM)) l.h = +(mz.elev - mz.slab - 0.1).toFixed(2);
+      else if (plan.height) l.h = +(plan.height - 0.1).toFixed(2);
+    }
+  }
+
   /* ── circuiti ── */
   const night = (p) => {
     const r = plan.rooms.find((x) => x.id === p.room);
