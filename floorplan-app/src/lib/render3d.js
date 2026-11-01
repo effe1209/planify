@@ -126,12 +126,9 @@ export async function houseImage(project, {
       const { pathTraceImage } = await import('./pathTrace');
       try {
         const res = await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal, project });
-        // l'immagine del path tracing si controlla come le altre: se è nera o vuota si cade sul tempo reale
-        const img = new Image();
-        await new Promise((ok, ko) => { img.onload = ok; img.onerror = ko; img.src = res.data; });
-        const st = canvasStats(img, bgSrgb, bg.alpha);
-        if (st.visible > 0.02 && (st.median > 0.03 || st.shown < 0.02)) return { ...res, info: { ...info, exposure: res.exposure, mode: res.denoised ? 'path tracing con filtro' : 'path tracing' } };
-        info.notes.push('il path tracing è uscito nero: salvato in tempo reale');
+        // l'immagine del path tracing si controlla come le altre: bianca, vuota o nera → si cade sul tempo reale
+        if (res.ok) return { ...res, info: { ...info, exposure: res.exposure, mode: res.denoised ? 'path tracing con filtro' : 'path tracing', notes: [...info.notes, ...(res.notes || [])] } };
+        info.notes.push(`il path tracing è uscito ${res.notes?.length ? 'storto' : 'vuoto o nero'} (${(res.notes || []).join(', ') || 'nessuna esposizione utile'}): salvato in tempo reale`);
       } catch (e) {
         if (e.message === 'interrotto') throw e;
         info.notes.push(`path tracing non riuscito (${e.message}): salvato in tempo reale`);
