@@ -127,7 +127,7 @@ export async function houseImage(project, {
       try {
         const res = await pathTraceImage(THREE, renderer, built, camera, { width, height, bg, samples, onProgress, signal, project });
         // l'immagine del path tracing si controlla come le altre: bianca, vuota o nera → si cade sul tempo reale
-        if (res.ok) return { ...res, info: { ...info, exposure: res.exposure, mode: res.denoised ? 'path tracing con filtro' : 'path tracing', notes: [...info.notes, ...(res.notes || [])] } };
+        if (res.ok) return { ...res, info: { ...info, exposure: res.exposure, mode: res.denoised ? `path tracing con filtro ${res.filterKind === 'guided' ? 'guidato' : 'semplice'}` : 'path tracing', notes: [...info.notes, ...(res.notes || [])] } };
         info.notes.push(`il path tracing è uscito ${res.notes?.length ? 'storto' : 'vuoto o nero'} (${(res.notes || []).join(', ') || 'nessuna esposizione utile'}): salvato in tempo reale`);
       } catch (e) {
         if (e.message === 'interrotto') throw e;
