@@ -471,37 +471,39 @@
 .pf-history-list { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 .pf-thumb { min-width: 0; overflow: hidden; }
 .pf-thumb-open span { font-size: 11px; font-weight: 600; color: var(--text); }
-.pf-thumb-actions { top: 8px; right: 8px; gap: 6px; }
+/* Pulsanti sulla miniatura: stanno sempre sopra il foglio bianco della pianta, quindi hanno una superficie chiara fissa (in tutti e due i temi)
+   con icona scura: contrasto pieno, 30 px, un'ombra che li stacca dal disegno. La stella resta visibile; il cestino compare al passaggio. */
+.pf-thumb-actions { top: 8px; right: 8px; gap: 6px; display: flex; z-index: 2; }
 .pf-thumb-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 999px;
   cursor: pointer;
-  color: var(--text);
-  background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  backdrop-filter: blur(16px) saturate(180%);
-  box-shadow: 0 0 0 0.5px var(--hairline), 0 2px 8px rgba(0, 0, 0, 0.16);
+  color: #1d1d1f;
+  background: rgba(255, 255, 255, 0.96);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 4px 12px rgba(0, 0, 0, 0.16);
 }
-.pf-thumb-btn:hover { transform: scale(1.06); }
+.pf-thumb-btn svg { width: 15px; height: 15px; stroke-width: 2; }
+.pf-thumb-btn:hover { background: #fff; transform: scale(1.08); }
 .pf-thumb-btn:active { transform: scale(0.94); }
-/* salvata: stella piena gialla (systemYellow) */
-.pf-thumb-btn.is-star.is-on { color: #fff; background: #ffcc00; box-shadow: 0 2px 8px rgba(255, 204, 0, 0.45); }
-.pf-thumb-btn.is-star:not(.is-on):hover { color: #c99a00; }
-/* elimina: cestino che diventa rosso (systemRed) */
-.pf-thumb-btn.is-delete:hover { color: #fff; background: #ff3b30; box-shadow: 0 2px 8px rgba(255, 59, 48, 0.4); }
-.pf-app[data-theme="dark"] .pf-thumb-btn.is-star.is-on { color: #1c1c1e; background: #ffd60a; }
-.pf-app[data-theme="dark"] .pf-thumb-btn.is-delete:hover { background: #ff453a; }
-.pf-thumb-actions:has(.is-on) { opacity: 1; }
-.pf-thumb-actions:has(.is-on) .is-delete { opacity: 0; transition: opacity 200ms var(--ease-out); }
+.pf-thumb-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* salvata: stella piena su giallo, icona scura (12:1) */
+.pf-thumb-btn.is-star:not(.is-on):hover svg { fill: #ffcc00; stroke: #1d1d1f; }
+.pf-thumb-btn.is-star.is-on { color: #1d1d1f; background: #ffcc00; border-color: rgba(0, 0, 0, 0.18); box-shadow: 0 2px 10px rgba(255, 204, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.18); }
+/* elimina: cestino che diventa rosso al passaggio */
+.pf-thumb-btn.is-delete:hover { color: #fff; background: #ff3b30; border-color: transparent; }
+.pf-thumb-actions { opacity: 1; }
+.pf-thumb-actions .is-delete { opacity: 0; transition: opacity 200ms var(--ease-out), transform 160ms var(--ease-out); }
 .pf-thumb:hover .pf-thumb-actions .is-delete, .pf-thumb:focus-within .pf-thumb-actions .is-delete { opacity: 1; }
 @media (hover: none) {
-  .pf-thumb-actions, .pf-thumb-actions .is-delete { opacity: 1; }
+  .pf-thumb-actions .is-delete { opacity: 1; }
 }
 .pf-clear-btn {
   display: inline-flex;

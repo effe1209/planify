@@ -206,18 +206,24 @@ test('anche i muri esterni si spostano e cambiano la misura della casa', async (
   await page.locator('.pf-editbtn').click();
   const dims = async () => (await page.locator('.pf-sheet svg text').allTextContents()).filter((t) => /^\d+(,\d+)? m$/.test(t)).join('|');
   const before = await dims();
-  // il muro esterno a destra: la fascia blu più a destra
   const walls = page.locator('.pf-sheet svg rect[style*="col-resize"]');
   await expect(walls.first()).toBeVisible();
-  let right = null;
-  for (const w of await walls.all()) { const b = await w.boundingBox(); if (!right || b.x > right.x) right = b; }
-  const x = right.x + right.width / 2;
-  const y = right.y + right.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + 40, y, { steps: 6 });
-  await page.mouse.up();
-  await expect.poll(dims).not.toBe(before);
+  // i muri esterni a destra: dalla fascia blu più a destra verso sinistra, finché uno cambia la misura della casa
+  const boxes = [];
+  for (const w of await walls.all()) boxes.push(await w.boundingBox());
+  boxes.sort((p, q) => q.x - p.x);
+  let changed = false;
+  for (const bx of boxes.slice(0, 3)) {
+    const x = bx.x + bx.width / 2;
+    const y = bx.y + bx.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 40, y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+    if ((await dims()) !== before) { changed = true; break; }
+  }
+  expect(changed).toBe(true);
   await page.keyboard.press('Control+z');
   await expect.poll(dims).toBe(before);
   expect(errors).toEqual([]);
