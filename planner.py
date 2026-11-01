@@ -25,6 +25,7 @@ EPS = 1e-6
 CORRIDOR = 1.3         # larghezza disimpegno
 DOOR_W = 0.90
 DOOR_W_BATH = 0.80
+MEZZ_DOOR_W = 0.75   # luce della porta scorrevole del bagnetto sul soppalco
 DAY_MIN = 3.8          # larghezza minima zona giorno
 # Vano scala nelle file accanto al disimpegno: (larghezza del vano lungo la fila, profondità minima della fila).
 # Si parte e si arriva sempre dal lato del disimpegno: a U le due rampe tornano indietro; a L e a rampa
@@ -2857,7 +2858,7 @@ def furnish_mezzanine(lay: Layout) -> None:
         out.append(it)
         return it
 
-    cd, cl = 1.4, 1.5   # bagnetto chiuso: profondità dal muro esterno e lunghezza lungo il muro
+    cd, cl = 1.4, 1.6   # bagnetto chiuso: profondità dal muro esterno e lunghezza lungo il muro (porta scorrevole 0,75 + 0,75 di muro dove scorre)
     can_bath = x1 - x0 >= cd + 0.9
     wide = clear >= 0.85
     if not wide and x1 - x0 < 1.6 + 0.4:
@@ -2905,10 +2906,12 @@ def furnish_mezzanine(lay: Layout) -> None:
         cx0 = x1 - cd if side == "E" else x0
         dx = cx0 if side == "E" else cx0 + cd - 0.1    # il muro verso il soppalco (con la porta)
         tk = 0.1
-        gap0 = y + (cl - DOOR_W_BATH) / 2
+        # porta scorrevole DENTRO il bagno, sul filo interno del muro: il varco sta vicino all'angolo e l'anta scorre sul tratto
+        # di muro più lungo (0,75 m): niente binario fuori, il letto e il passaggio restano liberi
+        gap0 = y + 0.1
         m["walls"] = [Rect(cx0, y + cl - tk, cd, tk),   # il lato in fondo è il muro esterno del loft
-                      Rect(dx, y, tk, gap0 - y), Rect(dx, gap0 + DOOR_W_BATH, tk, y + cl - gap0 - DOOR_W_BATH)]
-        m["door"] = Rect(dx, gap0, tk, DOOR_W_BATH)
+                      Rect(dx, y, tk, gap0 - y), Rect(dx, gap0 + MEZZ_DOOR_W, tk, y + cl - gap0 - MEZZ_DOOR_W)]
+        m["door"] = Rect(dx, gap0, tk, MEZZ_DOOR_W)
     elif ystart + 1.2 <= stop - 0.6 and wide:
         desk = put("desk", 0.55, 1.2, ystart)
         ch = Rect(desk.rect.x - 0.52 if side == "E" else desk.rect.x2 + 0.02, desk.rect.cy - 0.25, 0.5, 0.5)

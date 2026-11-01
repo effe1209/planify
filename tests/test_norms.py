@@ -60,6 +60,12 @@ def test_loft_is_a_real_loft_with_a_mezzanine():
             gap = max(war["y"] - (bed["y"] + bed["h"]), bed["y"] - (war["y"] + war["h"]), war["x"] - (bed["x"] + bed["w"]), bed["x"] - (war["x"] + war["w"]))
             assert gap >= (0.4 if mz["w"] >= 3.4 else 0.1), (w, l, seed, gap)
             if "bath" in mz:
+                # porta scorrevole dentro il bagno: varco da 0,75 m e un tratto di muro altrettanto lungo dove scorre l'anta
+                dr = mz["bath"]["door"]
+                run = max(dr["w"], dr["h"])
+                assert abs(run - 0.75) < 0.01, (w, l, seed, dr)
+                lens = sorted(max(q["w"], q["h"]) for q in mz["bath"]["walls"] if abs(min(q["w"], q["h"]) - 0.1) < 1e-6)
+                assert lens[-2] >= 0.75 - 1e-6 or lens[-1] >= 0.75 - 1e-6, (w, l, seed, lens)
                 bx0 = min(q["y"] for q in mz["bath"]["walls"]); bx1 = max(q["y"] + q["h"] for q in mz["bath"]["walls"])
                 assert not (min(bed["y"], war["y"]) < bx0 and bx1 < max(bed["y"] + bed["h"], war["y"] + war["h"])), (w, l, seed)
             assert not [n for n in plan["notes"] if "non" in n.lower() and "raggiungibile" in n.lower()]
