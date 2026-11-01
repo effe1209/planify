@@ -12,5 +12,5 @@ export function ShapeGlyph({ d }) {
 }
 
 export function Logo() {
-  return <img src="/favicon.svg" alt="Planify" width="30" height="30" style={{ borderRadius: '8px' }} />;
+  return <img src="/planify-mark.svg" alt="Planify" width="30" height="30" />;
 }
