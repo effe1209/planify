@@ -22,14 +22,14 @@ def _core(plan):
 def test_house_stairs_aligned_on_every_floor():
     for W, L in SIZES:
         for stair in ("auto", "u", "l", "straight"):
-            house = planner.generate_house(W, L, [{"level": 0, "program": "day"}, NIGHT], seed=7, stair_type=stair)
+            house = planner.generate_house(W, L, [{"level": 0, "program": "day"}, NIGHT], seed=7, stair_type=stair, stair_style="closed")
             assert not house["notes"], (W, L, stair, house["notes"])
             cores = [_core(f["plan"]) for f in house["floors"]]
             assert all(abs(c[k] - cores[0][k]) < 1e-3 for c in cores for k in "xywh"), (W, L, stair)
 
 
 def test_stairs_open_on_circulation_and_upper_floor_has_no_front_door():
-    house = planner.generate_house(11, 9, [{"level": 0, "program": "day"}, NIGHT], seed=3)
+    house = planner.generate_house(11, 9, [{"level": 0, "program": "day"}, NIGHT], seed=3, stair_style="closed")
     for f in house["floors"]:
         plan = f["plan"]
         stair = next(r for r in plan["rooms"] if r["kind"] == "stairs")
@@ -44,7 +44,7 @@ def test_stairs_open_on_circulation_and_upper_floor_has_no_front_door():
 
 def test_three_floors_share_the_same_stair():
     floors = [{"level": 0, "program": "day"}, NIGHT, {"level": 2, "program": "night", "double_bedrooms": 1}]
-    house = planner.generate_house(12, 10, floors, seed=11)
+    house = planner.generate_house(12, 10, floors, seed=11, stair_style="closed")
     cores = [_core(f["plan"]) for f in house["floors"]]
     assert all(c == cores[0] for c in cores)
 
@@ -52,7 +52,7 @@ def test_three_floors_share_the_same_stair():
 def test_garage_under_the_house_has_the_same_stair_behind_a_door():
     floors = [{"level": -1, "program": "garage"}, {"level": 0, "program": "day"}, NIGHT]
     for W, L in SIZES:
-        house = planner.generate_house(W, L, floors, seed=5)
+        house = planner.generate_house(W, L, floors, seed=5, stair_style="closed")
         assert not house["notes"], (W, L, house["notes"])
         plans = {f["level"]: f["plan"] for f in house["floors"]}
         assert _core(plans[-1]) == _core(plans[0]) == _core(plans[1])
@@ -76,7 +76,7 @@ def test_bathrooms_upstairs_sit_over_the_ones_below():
     covered = []
     for seed in range(1, 6):
         for W, L in SIZES:
-            house = planner.generate_house(W, L, [{"level": 0, "program": "day"}, NIGHT], seed=seed)
+            house = planner.generate_house(W, L, [{"level": 0, "program": "day"}, NIGHT], seed=seed, stair_style="closed")
             plans = {f["level"]: f["plan"] for f in house["floors"]}
             covered.append(_wet_cover(plans[0], plans[1]))
     assert sum(c >= 0.9 for c in covered) >= 0.9 * len(covered), covered

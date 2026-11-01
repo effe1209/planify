@@ -3544,6 +3544,30 @@ def generate(width: float, length: float, room_type: str = "apartment",
         # si confronta il punteggio grezzo: il tetto a 100 appiattirebbe le differenze tra varianti buone
         drafts.append((design_review(lay, [], wants, furnished=False)["raw"] - len(lay.notes) + _wet_bonus(lay),
                        k, lay, rng))
+    if not drafts and core and rt == "apartment" and not getattr(generate, "_extending", False):
+        # il piano accanto ha la scala a vista (vano ridotto alla rampa): si genera con la fascia intera, fino alla facciata,
+        # e poi la si riduce allo stesso modo, così il vano resta nello stesso punto
+        ent = core.get("entry")
+        x0, y0, w0, h0 = core["x"], core["y"], core["w"], core["h"]
+        ext = None
+        if ent == "S" and y0 > 0.5:
+            ext = {**core, "y": 0.0, "h": round(y0 + h0, 3)}
+        elif ent == "N" and y0 + h0 < L0 - 0.5:
+            ext = {**core, "h": round(L0 - y0, 3)}
+        elif ent == "E" and x0 > 0.5:
+            ext = {**core, "x": 0.0, "w": round(x0 + w0, 3)}
+        elif ent == "W" and x0 + w0 < W0 - 0.5:
+            ext = {**core, "w": round(W0 - x0, 3)}
+        if ext:
+            generate._extending = True
+            try:
+                full = generate(width, length, room_type, num_rooms, style, shape, seed, double_bedrooms, single_bedrooms,
+                                bathrooms, kitchen, peninsula, needs, program, access, stair_type, core=ext, wet=wet or None)
+            finally:
+                generate._extending = False
+            trimmed = open_stair_plan(full, style) if full.get("stairs") else None
+            if trimmed and all(abs(trimmed["stairs"][0]["core"][k] - core[k]) < 0.05 for k in "xywh"):
+                return trimmed
     if not drafts:
         # la scala del piano accanto non trova posto: si genera con una scala propria; se non entra
         # neanche quella, senza scala (e lo si dice nelle note)
@@ -3591,7 +3615,7 @@ HOUSE_PROGRAMS = ("full", "day", "night", "garage")
 
 
 def generate_house(width: float, length: float, floors: List[dict], style: str = "modern",
-                   seed: Optional[int] = None, stair_type: str = "auto") -> dict:
+                   seed: Optional[int] = None, stair_type: str = "auto", stair_style: str = "auto") -> dict:
     """Casa su più piani generata insieme: una sola casa con la scala che collega tutti i piani.
 
     floors: [{level, program (full | day | night | garage), double_bedrooms, single_bedrooms, bathrooms,
@@ -3600,6 +3624,8 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
     su tutti i piani (il garage la ha in un vano chiuso con porta sul box). I piani si generano dal piano
     d'ingresso verso l'esterno e ognuno cerca di avere i bagni sopra/sotto quelli del piano accanto.
     Se la scala non si allinea si riprova con altre varianti del piano d'ingresso.
+    stair_style: "closed" (vano scala a tutta profondità, come prima), "open" (scala a vista: vano ridotto al minimo, aperto sul
+    soggiorno o sul disimpegno, con il resto della fascia usato come locale) o "auto" (a vista nei lotti piccoli, fino a 110 m²).
     Ritorna {"floors": [{level, program, plan}], "seed", "notes"}.
     """
     floors = sorted(floors, key=lambda f: f.get("level", 0))
@@ -3615,6 +3641,10 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         lead = min((i for i, f in enumerate(floors) if f.get("program") != "garage"), key=lambda i: abs(i - entry))
     base = int(seed) if seed is not None else random.randrange(1, 1_000_000)
     many = len(floors) > 1
+    # scala a vista: con il garage al piano strada la scala ha le sue regole (porta di casa, rampa libera), quindi resta chiusa
+    want_open = many and not street_garage and (stair_style == "open" or (stair_style == "auto" and width * length <= OPEN_STAIR_AUTO_M2))
+    if want_open and stair_type == "auto":
+        stair_type = "u"   # la U è la più corta: lascia più fascia da usare come locale
 
     def one(f: dict, s: int, access: str, core: Optional[dict] = None, wet: Optional[list] = None,
             st_type: Optional[str] = None) -> dict:
@@ -3683,7 +3713,192 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         if p is None:   # il piano d'ingresso non ha posto per la scala: gli altri piani si generano da soli
             p = one(f, s + 101 * (i + 1), "stairs")
         out.append({"level": levels[i], "program": f.get("program") or "full", "plan": p})
+    if want_open and aligned:
+        def _open(i: int, f: dict):
+            if f["program"] == "garage":
+                return open_garage_plan(f["plan"], style)
+            above_garage = i > 0 and out[i - 1]["program"] == "garage"
+            return open_stair_plan(f["plan"], style, "rei" if above_garage else "open")
+        opened = [_open(i, f) for i, f in enumerate(out)]
+        if all(o is not None for o in opened):
+            for f, o in zip(out, opened):
+                f["plan"] = o
+            notes.append("Scala a vista: il vano si apre sul soggiorno e sul disimpegno; dove la fascia è abbastanza profonda si riduce alla rampa e il resto diventa un locale.")
+        elif stair_style == "open":
+            notes.append("Con queste misure la scala a vista non si può fare.")
     return {"floors": out, "seed": s, "notes": notes}
+
+
+OPEN_STAIR_AUTO_M2 = 110.0   # fino a questa superficie lorda per piano, con «auto» la scala è a vista
+OPEN_STAIR_EXTRA = 1.8       # profondità minima del locale che si ricava dalla fascia avanzata
+
+
+def _trim_core(core: Rect, entry: str, kind: str) -> Tuple[Rect, Optional[Rect]]:
+    """Il vano ridotto alla sola rampa (dal lato d'ingresso) e il resto della fascia, o (core, None) se la fascia non è abbastanza profonda."""
+    need = STAIR_SLOT[kind][1] + 0.2
+    vertical = entry in ("N", "S")
+    depth = core.h if vertical else core.w
+    if depth < need + OPEN_STAIR_EXTRA:
+        return core, None
+    if vertical:
+        return (Rect(core.x, core.y if entry == "N" else core.y2 - need, core.w, need),
+                Rect(core.x, core.y + need if entry == "N" else core.y, core.w, depth - need))
+    return (Rect(core.x if entry == "W" else core.x2 - need, core.y, need, core.h),
+            Rect(core.x + need if entry == "W" else core.x, core.y, depth - need, core.h))
+
+
+def _cut_room(room: Rect, core: Rect, s_core: Rect, entry: str) -> Tuple[Rect, Optional[Rect]]:
+    """Il locale del vano (che può essere più grande del core) tagliato dal lato opposto all'ingresso, fin dove arriva la rampa ridotta;
+    il resto è un rettangolo a parte."""
+    if s_core is core or (s_core.w == core.w and s_core.h == core.h and s_core.x == core.x and s_core.y == core.y):
+        return room, None
+    if entry == "N":
+        return Rect(room.x, room.y, room.w, s_core.y2 - room.y), Rect(room.x, s_core.y2, room.w, room.y2 - s_core.y2)
+    if entry == "S":
+        return Rect(room.x, s_core.y, room.w, room.y2 - s_core.y), Rect(room.x, room.y, room.w, s_core.y - room.y)
+    if entry == "W":
+        return Rect(room.x, room.y, s_core.x2 - room.x, room.h), Rect(s_core.x2, room.y, room.x2 - s_core.x2, room.h)
+    return Rect(s_core.x, room.y, room.x2 - s_core.x, room.h), Rect(room.x, room.y, s_core.x - room.x, room.h)
+
+
+def open_stair_plan(plan: dict, style: str = "modern", mode: str = "open") -> Optional[dict]:
+    """Scala a vista: il vano (una fascia a tutta profondità accanto al disimpegno) si riduce alla sola rampa, sul lato da cui si parte;
+    il resto della fascia diventa un locale (ripostiglio, lavanderia, studio o cabina armadio). Il vano non ha più muri verso il
+    disimpegno e, al piano terra, verso il soggiorno: il soggiorno, il disimpegno e la scala sono una zona unica.
+    Senza una fascia abbastanza profonda il vano resta com'è, ma si apre lo stesso. Ritorna la pianta nuova o None se non c'è la scala.
+    La stessa regola vale su tutti i piani: il vano resta allineato.
+    mode "rei": il piano sopra il garage: il vano resta una zona a sé, con una porta REI 60 a chiusura automatica verso il disimpegno
+    (la scala sale dal box: tra box e abitazione ci vuole una separazione, DM 1/2/1986, da verificare)."""
+    st = (plan.get("stairs") or [None])[0]
+    if not st:
+        return None
+    c = st["core"]
+    core = Rect(float(c["x"]), float(c["y"]), float(c["w"]), float(c["h"]))
+    entry = st["entry"]
+    s_core, _ = _trim_core(core, entry, st["type"])
+    lay = layout_from_plan(plan)
+    room = lay.room(st["room"])
+    s_new, rest = _cut_room(room.rect, core, s_core, entry)
+    room.rect = s_new
+    room.stair = {**room.stair, "core": s_core}
+    left = None
+    if rest is not None:
+        new_id = max(r.id for r in lay.rooms) + 1
+        # il resto della fascia: che locale?
+        near = [(r, shared_edge(rest, r.rect)) for r in lay.rooms if r.id != room.id]
+        near = [(r, e) for r, e in near if e and e[3] - e[2] >= 1.0]
+        area = rest.w * rest.h
+        wet = any(r.kind in ("bath", "wc") for r, _ in near)
+        upper = not any(r.kind in ("living", "living_kitchen", "zone_day", "kitchen") for r in lay.rooms)
+        if upper:
+            kind, name = ("study", "Studio") if area >= 6.5 else ("closet", "Cabina armadio")
+        else:
+            kind, name = ("laundry", "Lavanderia") if (area >= 5.0 and wet) else ("storage", "Ripostiglio")
+        pref = {"bed": 0, "living": 1, "living_kitchen": 1, "zone_day": 1, "kitchen": 2, "study": 3, "corridor": 4, "entry": 4}
+        cand = [(pref[r.kind], -(e[3] - e[2]), r) for r, e in near if r.kind in pref and not (kind == "closet" and r.kind != "bed" and any(q.kind == "bed" for q, _ in near))]
+        if not cand:
+            return None
+        cand.sort(key=lambda t: (t[0], t[1]))
+        owner = cand[0][2]
+        left = lay.add_room(name, kind, rest.x, rest.y, rest.x2, rest.y2)
+        left.id = new_id
+        lay._by_id = {r.id: r for r in lay.rooms}
+        left.group = left.id
+        lay.add_door(left.id, owner.id, DOOR_W_BATH if kind in ("closet", "storage") else DOOR_W, 0.5, into=left.id)
+    rei = None
+    if mode == "rei":
+        # il vano diventa una zona a sé e si apre con una porta REI verso il disimpegno (o l'ingresso, o il soggiorno)
+        others = [(r, shared_edge(room.rect, r.rect)) for r in lay.rooms if r.id != room.id and r.id != (left.id if left else -1)]
+        others = [(r, e) for r, e in others if e and e[3] - e[2] >= 1.1]
+        order = {"corridor": 0, "entry": 1, "living": 2, "living_kitchen": 2, "zone_day": 2}
+        others = [(order[r.kind], -(e[3] - e[2]), r) for r, e in others if r.kind in order]
+        if not others:
+            return None
+        others.sort(key=lambda t: (t[0], t[1]))
+        target = others[0][2]
+        room.group = max(r.group for r in lay.rooms) + 1
+        for d in list(lay.doors):
+            if room.id in (d.room_a, d.room_b) and not d.kind:
+                lay.doors.remove(d)
+        rei = lay.add_door(room.id, target.id, DOOR_W, 0.5, into=target.id)
+        if rei is None:
+            return None
+        rei.kind = "rei"
+    # zona unica: soggiorno + disimpegno + scala (piano terra) o disimpegno + scala (piani sopra)
+    living = None if mode == "rei" else next((r for r in lay.rooms if r.kind in ("living", "living_kitchen", "zone_day") and r.id != room.id
+                   and (lambda e: e and e[3] - e[2] >= 1.0)(shared_edge(s_new, r.rect))), None)
+    if living is not None:
+        zone = living.group
+        for r in lay.rooms:
+            if r.group == room.group:
+                r.group = zone
+        room.group = zone
+    kept = []
+    for d in lay.doors:
+        a = lay.room(d.room_a)
+        b = lay.room(d.room_b) if d.room_b is not None else None
+        if b is not None and a.group == b.group and not d.kind:
+            continue   # una porta dentro la stessa zona aperta non serve
+        kept.append(d)
+    lay.doors = kept
+    if left is not None:
+        side = lay.best_ext_side(left)
+        if side and not any(w.room_a == left.id for w in lay.windows):
+            lay.add_windows(left.id, side, 1.2 if left.kind == "study" else 0.7, 1)
+    # il resto del piano com'era: arredi esistenti + quelli del nuovo locale
+    palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
+    furn_old = list(plan.get("furniture") or [])
+    lay.items = []
+    if left is not None:
+        furnish(lay, only={left.id}, access=False)
+    out = serialize(lay, palette, plan.get("seed", 0))
+    out["furniture"] = furn_old + ([f for f in out["furniture"] if f["room"] == left.id] if left is not None else [])
+    for k in ("design", "roomType", "house"):
+        if k in plan:
+            out[k] = plan[k]
+    out["notes"] = list(plan.get("notes") or []) + ([f"{left.name} ricavato dalla fascia della scala."] if left is not None else []) + \
+        (["Porta REI 60 a chiusura automatica tra la scala del box e la casa (DM 1/2/1986, da verificare)."] if rei else [])
+    return out
+
+
+def open_garage_plan(plan: dict, style: str = "modern") -> Optional[dict]:
+    """Scala a vista nel box (interrato): il vano scala si apre sul box, senza muri né porte tra i due. La separazione dalla casa è la
+    porta REI al piano sopra (open_stair_plan con mode "rei")."""
+    st = (plan.get("stairs") or [None])[0]
+    if not st:
+        return None
+    lay = layout_from_plan(plan)
+    room = lay.room(st["room"])
+    boxes = [(r, shared_edge(room.rect, r.rect)) for r in lay.rooms if r.kind == "garage" and r.id != room.id]
+    boxes = [(r, e) for r, e in boxes if e and e[3] - e[2] >= 1.0]
+    if not boxes:
+        return None
+    box = max(boxes, key=lambda t: t[1][3] - t[1][2])[0]
+    c = st["core"]
+    core = Rect(float(c["x"]), float(c["y"]), float(c["w"]), float(c["h"]))
+    s_core, _ = _trim_core(core, st["entry"], st["type"])
+    s_new, rest = _cut_room(room.rect, core, s_core, st["entry"])
+    room.rect = s_new
+    room.stair = {**room.stair, "core": s_core}
+    room.group = box.group
+    if rest is not None:
+        piece = lay.add_room("", "garage", rest.x, rest.y, rest.x2, rest.y2)
+        piece.group = box.group   # il resto della fascia è altro spazio del box
+    kept = []
+    for d in lay.doors:
+        b = lay.room(d.room_b) if d.room_b is not None else None
+        if b is not None and lay.room(d.room_a).group == b.group and not d.kind:
+            continue
+        kept.append(d)
+    lay.doors = kept
+    palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
+    out = serialize(lay, palette, plan.get("seed", 0))
+    out["furniture"] = list(plan.get("furniture") or [])
+    for k in ("design", "roomType", "house"):
+        if k in plan:
+            out[k] = plan[k]
+    out["notes"] = list(plan.get("notes") or []) + ["Scala a vista nel box: aperta sull'autorimessa."]
+    return out
 
 
 def _waste(plan: dict) -> float:

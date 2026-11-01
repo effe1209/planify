@@ -1245,7 +1245,7 @@ export default function PlanSvg({
         {plan.doors.map((d, i) => {
           const sw = d.w * s;
           const dir = d.openDir;
-          const col = d.entrance ? '#d92d20' : '#1f4fd8';
+          const col = d.entrance ? '#d92d20' : d.kind === 'rei' ? '#b45309' : '#1f4fd8';   // la porta REI (scala del box) in ambra
           const cy = wt / 2;
           if (d.kind === 'gate') return null;   // il cancello è disegnato con gli arredi del giardino
           if (d.kind === 'garage') {

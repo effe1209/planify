@@ -35,7 +35,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan"]
+            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "open_stairs"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,6 +98,7 @@ class HouseRequest(BaseModel):
     style: Optional[str] = "modern"
     seed: Optional[int] = Field(None, ge=0)
     stair_type: Literal["auto", "u", "l", "straight"] = "auto"
+    stair_style: Literal["auto", "closed", "open"] = "auto"   # scala chiusa nel vano o a vista
     floors: List[HouseFloor] = Field(..., min_length=1, max_length=5)
 
 
@@ -274,6 +275,7 @@ def generate_house(request: HouseRequest):
             style=request.style or "modern",
             seed=request.seed,
             stair_type=request.stair_type,
+            stair_style=request.stair_style,
             floors=[{**f.model_dump(), "needs": f.needs.model_dump() if f.needs else None} for f in request.floors],
         )
     except Exception as e:  # noqa: BLE001
