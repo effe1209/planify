@@ -360,6 +360,11 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(120_000);
   const errors = await open(page);
+  if (process.env.RLOFT) {
+    await page.getByRole('radio', { name: 'Loft' }).click();
+    await page.getByLabel('Larghezza').fill('12');
+    await page.getByLabel('Lunghezza').fill('8');
+  }
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: '3D', exact: true }).click();

@@ -90,6 +90,7 @@ export async function houseImage(project, {
     // colore dello sfondo in sRGB 0-255 (per non contarlo nella luminosità)
     const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
 
+    let directMedian = null;
     // esposizione automatica: si prova il render in piccolo, si misura la luminosità di ciò che non è sfondo e si corregge
     // l'esposizione finché l'immagine non è né nera né bruciata (stile scuro, sera, GPU diversa: non importa)
     {
@@ -102,6 +103,7 @@ export async function houseImage(project, {
         renderer.toneMappingExposure = exposure;
         renderer.render(scene, camera);
         const st = canvasStats(canvas, bgSrgb, bg.alpha, pw);
+        directMedian = st.median;
         if (st.shown < 0.03) break;
         if (st.median < 0.004) { info.notes.push('anteprima di esposizione nera'); break; }   // nera davvero: non è questione di esposizione
         const target = built.lampsOn ? 0.2 : 0.52;   // la sera resta più scura, ma mai nera
@@ -138,6 +140,34 @@ export async function houseImage(project, {
         .then((r) => r && { ...r, info: { ...r.info, notes: [...info.notes, ...(r.info?.notes || [])] } });
     }
 
+    // l'occlusione ambientale dipende molto dalla scheda grafica: si prova in piccolo e, se rende l'immagine molto più scura
+    // del render diretto (pareti nere), si lascia da parte
+    let aoOk = !bg.alpha;
+    if (aoOk && directMedian != null && directMedian > 0.02) {
+      try {
+        const pw = 256;
+        const ph = Math.max(2, Math.round((256 * height) / width));
+        renderer.setSize(pw, ph, false);
+        camera.aspect = pw / ph;
+        camera.updateProjectionMatrix();
+        const { run, done } = await composerFor(THREE, renderer, scene, camera, { width: pw, height: ph, size, t, built, heavy: false, gl, ao: true });
+        run();
+        const st = canvasStats(canvas, bgSrgb, bg.alpha, pw);
+        done();
+        if (st.median < directMedian * 0.72) {
+          aoOk = false;
+          info.notes.push(`occlusione ambientale disattivata: su questa scheda grafica scuriva troppo (${st.median.toFixed(2)} contro ${directMedian.toFixed(2)})`);
+        }
+      } catch (e) {
+        aoOk = false;
+        info.notes.push(`occlusione ambientale disattivata (${e.message})`);
+      }
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.toneMappingExposure = exposure;
+    }
+
     // tempo reale: più strade, dalla più bella alla più sicura; ognuna si controlla (immagine nera = si passa alla successiva)
     const attempts = [];
     if (!bg.alpha) attempts.push('post');        // render + occlusione ambientale + bagliore + mappa tonale (target a mezzo float, 4 campioni)
@@ -150,30 +180,10 @@ export async function houseImage(project, {
           renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
           renderer.render(scene, camera);
         } else {
-          const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
-          const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
-          const { GTAOPass } = await import('three/examples/jsm/postprocessing/GTAOPass.js');
-          const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
-          const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
-          const heavy = mode === 'post';
-          const maxMs = gl.getParameter(gl.MAX_SAMPLES) || 0;
-          const target = new THREE.WebGLRenderTarget(width, height, heavy
-            ? { type: THREE.HalfFloatType, samples: Math.min(4, maxMs) }
-            : { type: THREE.UnsignedByteType, samples: 0 });
-          const composer = new EffectComposer(renderer, target);
-          composer.setPixelRatio(1);
-          composer.setSize(width, height);
-          composer.addPass(new RenderPass(scene, camera));
-          const ao = new GTAOPass(scene, camera, width, height);
-          ao.updateGtaoMaterial({ radius: Math.max(0.35, Math.min(1.2, Math.max(size.x, size.z) / 25)), distanceExponent: 1.5, thickness: 1.5, scale: 1.1, samples: heavy ? 16 : 8, distanceFallOff: 1 });
-          ao.normalMaterial.side = THREE.DoubleSide;   // il tetto e i soffitti si disegnano da due lati: senza, l'AO "vede" l'interno attraverso
-          ao.blendIntensity = 0.85;
-          composer.addPass(ao);
-          if (t.bloom > 0) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), t.bloom, 0.6, built.lampsOn ? 0.85 : 0.95));
-          composer.addPass(new OutputPass());
-          composer.render();
-          composer.dispose?.();
-          target.dispose();
+          const useAo = mode === 'post' || mode === 'post-light';
+          const { run, done } = await composerFor(THREE, renderer, scene, camera, { width, height, size, t, built, heavy: mode === 'post', gl, ao: useAo && aoOk });
+          run();
+          done();   // l'immagine resta nel canvas (preserveDrawingBuffer)
         }
         const st = canvasStats(canvas, bgSrgb, bg.alpha);
         if (gl.isContextLost()) throw new Error('contesto grafico perso');
@@ -199,5 +209,34 @@ export async function houseImage(project, {
   } finally {
     renderer.dispose();
   }
+}
+/* Passaggi di post-produzione: render, (occlusione ambientale), bagliore delle luci, mappa tonale e sRGB. run() disegna; done() libera. */
+async function composerFor(THREE, renderer, scene, camera, { width, height, size, t, built, heavy, gl, ao }) {
+  const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+  const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+  const { GTAOPass } = await import('three/examples/jsm/postprocessing/GTAOPass.js');
+  const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
+  const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
+  const maxMs = gl.getParameter(gl.MAX_SAMPLES) || 0;
+  const target = new THREE.WebGLRenderTarget(width, height, heavy
+    ? { type: THREE.HalfFloatType, samples: Math.min(4, maxMs) }
+    : { type: THREE.UnsignedByteType, samples: 0 });
+  const composer = new EffectComposer(renderer, target);
+  composer.setPixelRatio(1);
+  composer.setSize(width, height);
+  composer.addPass(new RenderPass(scene, camera));
+  if (ao) {
+    const pass = new GTAOPass(scene, camera, width, height);
+    pass.updateGtaoMaterial({ radius: Math.max(0.35, Math.min(1.2, Math.max(size.x, size.z) / 25)), distanceExponent: 1.5, thickness: 1.5, scale: 1.1, samples: heavy ? 16 : 8, distanceFallOff: 1 });
+    pass.normalMaterial.side = THREE.DoubleSide;   // il tetto e i soffitti si disegnano da due lati: senza, l'AO "vede" l'interno attraverso
+    pass.blendIntensity = 0.85;
+    composer.addPass(pass);
+  }
+  if (t.bloom > 0) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), t.bloom, 0.6, built.lampsOn ? 0.85 : 0.95));
+  composer.addPass(new OutputPass());
+  return {
+    run: () => composer.render(),
+    done: () => { composer.dispose?.(); target.dispose(); },
+  };
 }
 export { houseBounds };
