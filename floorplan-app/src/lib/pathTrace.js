@@ -14,6 +14,7 @@ import { timeById } from './renderStudio';
 
 export const SAMPLE_PRESETS = [
   { id: 'preview', label: 'Anteprima (16 campioni)', samples: 16 },
+  { id: 'medium', label: 'Media (64 campioni)', samples: 64 },
   { id: 'high', label: 'Alta (400 campioni)', samples: 400 },
   { id: 'max', label: 'Massima (1200 campioni)', samples: 1200 },
 ];
@@ -212,27 +213,11 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   pt.tiles.set(width > 2500 ? 4 : 2, width > 2500 ? 4 : 2);
   pt.setScene(scene, camera);
 
-  // l'esposizione si regola mentre i campioni si accumulano: ogni tanto si guarda l'immagine e si corregge
-  const measure = async () => {
-    const { canvasStats } = await import('./render3d');
-    const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
-    return canvasStats(renderer.domElement, bgSrgb, true, 192);
-  };
   const started = Date.now();
   let guard = 0;
-  let nextCheck = 4;
   while (pt.samples < samples) {
     if (signal?.aborted) throw new Error('interrotto');
     pt.renderSample();
-    if (pt.samples >= nextCheck && pt.samples < Math.max(40, samples * 0.4)) {
-      const st = await measure();
-      const target = lampsOn ? 0.3 : 0.5;
-      if (st.shown > 0.03 && Math.abs(st.median - target) > 0.05) {
-        exposure = Math.min(40, Math.max(0.2, exposure * (target / Math.max(0.01, st.median)) ** 0.8));
-        renderer.toneMappingExposure = exposure;
-      }
-      nextCheck = pt.samples + Math.max(4, Math.round(samples / 20));
-    }
     if (++guard % 2 === 0) {
       onProgress?.(Math.min(1, pt.samples / samples));
       await new Promise((r) => setTimeout(r, 0));
@@ -241,35 +226,63 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   }
   const done = Math.round(pt.samples);
 
-  // filtro finale: leviga la grana che resta senza sfocare i bordi (sul risultato accumulato, già tonale e sRGB)
-  let denoised = false;
-  try {
-    const quad = new FullScreenQuad(new DenoiseMaterial({ map: pt.target.texture, sigma: 4, threshold: 0.05, kSigma: 1 }));
+  /*
+   * Immagine finale. L'esposizione si trova ora, sul risultato accumulato (si ridisegna senza altri campioni): si prova, si guarda
+   * l'immagine vera (già composta sullo sfondo) e si corregge a piccoli passi. Se l'immagine esce bianca o vuota (alcune schede
+   * grafiche o troppi campioni) si riprova senza filtro e con altre esposizioni; nell'ultimo caso si dichiara e basta.
+   */
+  const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
+  const { canvasStats } = await import('./render3d');
+  const notes = [];
+  const draw = async (exp, filter) => {
+    renderer.toneMappingExposure = exp;
     renderer.setRenderTarget(null);
     renderer.autoClear = true;
-    quad.render(renderer);
-    quad.material.dispose();
-    quad.dispose();
-    denoised = true;
-  } catch {
-    denoised = false;   // resta l'immagine accumulata, più granulosa
-  }
-  let data = renderer.domElement.toDataURL('image/png');
-  if (!bg.alpha) {
-    // composizione sul colore dello sfondo
+    if (filter) {
+      const quad = new FullScreenQuad(new DenoiseMaterial({ map: pt.target.texture, sigma: 4, threshold: 0.05, kSigma: 1 }));
+      quad.render(renderer);
+      quad.material.dispose();
+      quad.dispose();
+    } else {
+      pt.renderSample();   // ridisegna l'accumulato (un campione in più, innocuo) con la mappa tonale all'esposizione data
+    }
+    let data = renderer.domElement.toDataURL('image/png');
     const img = new Image();
     await new Promise((ok, ko) => { img.onload = ok; img.onerror = ko; img.src = data; });
-    const c = document.createElement('canvas');
-    c.width = width;
-    c.height = height;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = bg.color;
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0);
-    data = c.toDataURL('image/png');
+    if (!bg.alpha) {
+      const c = document.createElement('canvas');
+      c.width = width;
+      c.height = height;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = bg.color;
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0);
+      data = c.toDataURL('image/png');
+      return { data, st: canvasStats(c, bgSrgb, false, 192) };
+    }
+    return { data, st: canvasStats(img, bgSrgb, true, 192) };
+  };
+  const target = lampsOn ? 0.3 : 0.5;
+  const good = (st) => st.shown >= 0.03 && st.median > 0.03 && st.median < 0.93;
+  let best = null;
+  let filter = true;
+  let exp = exposure;
+  for (let attempt = 0; attempt < 14 && !best; attempt++) {
+    const r = await draw(exp, filter);
+    if (good(r.st)) {
+      if (Math.abs(r.st.median - target) < 0.06 || attempt >= 9) { best = { ...r, exp, filter }; break; }
+      exp = Math.min(60, Math.max(0.1, exp * Math.min(2, Math.max(0.5, (target / Math.max(0.02, r.st.median)) ** 0.8))));
+      continue;
+    }
+    // immagine bianca o vuota
+    if (r.st.shown < 0.03 || r.st.median >= 0.93) { exp = Math.max(0.05, exp * 0.35); notes.push(`esposizione ridotta (${exp.toFixed(2)})`); }
+    else { exp = Math.min(60, exp * 3); notes.push(`esposizione aumentata (${exp.toFixed(2)})`); }
+    if (attempt === 4 && filter) { filter = false; exp = exposure; notes.push('senza filtro del rumore'); }
   }
+  if (!best) best = { ...(await draw(exposure, false)), exp: exposure, filter: false };
+  const ok = good(best.st);
   onProgress?.(1);
   // pt.dispose() della libreria (0.0.23) punta a un campo che non esiste: si libera a mano
   try { pt._pathTracer?.dispose?.(); pt._lowResPathTracer?.dispose?.(); pt._quad?.dispose?.(); pt._quad?.material?.dispose?.(); } catch { /* già liberato */ }
-  return { data, w: width, h: height, samples: done, exposure: +exposure.toFixed(2), denoised };
+  return { data: best.data, w: width, h: height, samples: done, exposure: +best.exp.toFixed(2), denoised: best.filter, ok, notes };
 }
