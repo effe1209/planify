@@ -707,3 +707,10 @@
 /* I riempimenti lime su pannello bianco hanno poco stacco (1,25 : 1): un filo scuro ne definisce il bordo */
 .pf-primary, .pf-btn-add, .pf-chip.is-on, .pf-furnish .pf-chip.is-on, .pf-editbtn.is-on { outline: 1px solid rgba(23, 33, 0, 0.22); outline-offset: -1px; }
 .pf-app[data-theme="dark"] :is(.pf-primary, .pf-btn-add, .pf-chip.is-on, .pf-furnish .pf-chip.is-on, .pf-editbtn.is-on) { outline: none; }
+
+/* Scritta «Planify» dell'intestazione: due immagini, una per tema */
+.pf-wordmark { display: inline-flex; align-items: center; line-height: 0; }
+.pf-wordmark img { display: block; height: 30px; width: auto; }
+.pf-wordmark-dark { display: none !important; }
+.pf-app[data-theme="dark"] .pf-wordmark-light { display: none !important; }
+.pf-app[data-theme="dark"] .pf-wordmark-dark { display: block !important; }

@@ -50,7 +50,7 @@ import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
 import { activeFloor, addFloor, houseFor, houseFront, houseRequest, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
-import { Logo, ShapeGlyph } from './components/Icons';
+import { Logo, ShapeGlyph, Wordmark } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
 import { usePlanHistory } from './hooks/usePlanHistory';
 import { useEngine } from './hooks/useEngine';
@@ -1508,7 +1508,7 @@ export default function App() {
             {panels.left ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>
           <Logo />
-          <span className="pf-name">Planify</span>
+          <Wordmark />
         </div>
         <div className="pf-top-right">
           <span className={`pf-status is-${engine.status}`}

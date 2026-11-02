@@ -604,7 +604,7 @@ export async function exportProjectPdf(project) {
   // la casa in 3D: tutti i piani impilati con i solai (se la scheda grafica non è disponibile si salta)
   try {
     const { houseImage } = await import('./render3d');
-    const img = await houseImage(project);
+    const img = await houseImage(project, { effects: false });   // senza occlusione ambientale e bagliore: il PDF deve essere rapido
     if (img) {
       doc.addPage('a4', 'landscape');
       const pw = doc.internal.pageSize.getWidth();
@@ -629,7 +629,7 @@ export async function exportProjectPdf(project) {
     const picks = [all.find((v) => v.id === 'plan3d'), all.find((v) => v.id === 'front'), living, bedroom].filter(Boolean);
     const shots = [];
     for (const v of picks) {
-      const img = await houseImage(project, { width: 1280, height: 720, view: v });
+      const img = await houseImage(project, { width: 1280, height: 720, view: v, effects: false });
       if (img) shots.push({ v, img });
     }
     if (shots.length) {

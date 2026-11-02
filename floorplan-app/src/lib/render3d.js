@@ -50,7 +50,7 @@ export function canvasStats(source, bgSrgb, alphaBg, pw = 256) {
 
 export async function houseImage(project, {
   width = 1800, height = 1100, lowWalls = false, view = null, time = 'afternoon', background = 'white', roof = true,
-  quality = 'fast', samples = undefined, onProgress = null, signal = null,
+  quality = 'fast', samples = undefined, onProgress = null, signal = null, effects = true,
 } = {}) {
   clearTextureCache();   // il render ha texture sue: non condivide con la vista 3D quelle che un altro contesto grafico potrebbe lasciare in uno stato strano
   const THREE = await import('three');
@@ -135,13 +135,13 @@ export async function houseImage(project, {
       }
       // ripiego: si rifà la scena e si disegna in tempo reale (il path tracing ha cambiato materiali e luci)
       disposeScene(scene);
-      return houseImage(project, { width, height, lowWalls, view, time, background, roof, quality: 'fast', onProgress, signal })
+      return houseImage(project, { width, height, lowWalls, view, time, background, roof, quality: 'fast', onProgress, signal, effects })
         .then((r) => r && { ...r, info: { ...r.info, notes: [...info.notes, ...(r.info?.notes || [])] } });
     }
 
     // l'occlusione ambientale dipende molto dalla scheda grafica: si prova in piccolo e, se rende l'immagine molto più scura
     // del render diretto (pareti nere), si lascia da parte
-    let aoOk = !bg.alpha;
+    let aoOk = !bg.alpha && effects;
     if (aoOk && directMedian != null && directMedian > 0.02) {
       try {
         const pw = 256;
@@ -169,8 +169,8 @@ export async function houseImage(project, {
 
     // tempo reale: più strade, dalla più bella alla più sicura; ognuna si controlla (immagine nera = si passa alla successiva)
     const attempts = [];
-    if (!bg.alpha) attempts.push('post');        // render + occlusione ambientale + bagliore + mappa tonale (target a mezzo float, 4 campioni)
-    if (!bg.alpha) attempts.push('post-light');  // come sopra, ma con target a 8 bit e senza antialias multicampione
+    if (!bg.alpha && effects) attempts.push('post');        // render + occlusione ambientale + bagliore + mappa tonale (target a mezzo float, 4 campioni)
+    if (!bg.alpha && effects) attempts.push('post-light');  // come sopra, ma con target a 8 bit e senza antialias multicampione
     attempts.push('direct');                    // render diretto, senza effetti
     let data = null;
     for (const mode of attempts) {
