@@ -1,10 +1,20 @@
 /* Colori principali della casa (lib/palette.js): derivazione dei colori e applicazione a kit, tema e scena 3D. */
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { cleanPalette, kitWithPalette, styleColors, themeFor, themeWithPalette } from '../src/lib/palette.js';
+import { parseColor, toRgb, cleanPalette, kitWithPalette, styleColors, themeFor, themeWithPalette } from '../src/lib/palette.js';
 import { STYLE_KITS, styleKit } from '../src/lib/style3d.js';
 import { THEMES } from '../src/lib/themes.js';
 import { buildScene } from '../src/lib/scene3d.js';
+
+// colori scritti a mano: esadecimale (con o senza #, anche corto) e RGB
+assert.equal(parseColor('#b7773f'), '#b7773f');
+assert.equal(parseColor('B7773F'), '#b7773f');
+assert.equal(parseColor('#b73'), '#bb7733');
+assert.equal(parseColor('rgb(183, 119, 63)'), '#b7773f');
+assert.equal(parseColor('183 119 63'), '#b7773f');
+assert.equal(parseColor('300, 0, 0'), null);
+assert.equal(parseColor('#b7773'), null);
+assert.deepEqual(toRgb('#b7773f'), [183, 119, 63]);
 
 // pulizia: solo colori esadecimali validi, niente palette vuota
 assert.equal(cleanPalette(null), null);

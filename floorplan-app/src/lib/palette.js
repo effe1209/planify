@@ -22,6 +22,21 @@ const mix = (a, b, t) => { const p = rgb(a); const q = rgb(b); return hex(p.map(
 const tint = (c, t) => mix(c, '#ffffff', t);
 const shade = (c, t) => mix(c, '#000000', t);
 
+/* Un colore scritto a mano → '#rrggbb', o null se non si capisce: «#b7773f», «b7773f», «#b73», «rgb(183, 119, 63)», «183 119 63». */
+export function parseColor(text) {
+  const t = String(text ?? '').trim().toLowerCase();
+  let m = /^#?([0-9a-f]{6})$/.exec(t);
+  if (m) return `#${m[1]}`;
+  m = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(t);
+  if (m) return `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}`;
+  m = /^(?:rgb\(\s*)?(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})\s*\)?$/.exec(t);
+  if (m && [m[1], m[2], m[3]].every((v) => Number(v) <= 255)) return hex([m[1], m[2], m[3]].map(Number));
+  return null;
+}
+
+/* '#rrggbb' → [r, g, b]. */
+export const toRgb = (c) => rgb(c);
+
 /* Solo le chiavi valide: ciò che non è un colore esadecimale si ignora. */
 export function cleanPalette(p) {
   const out = {};

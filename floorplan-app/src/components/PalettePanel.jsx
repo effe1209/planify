@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
-import { PALETTE_KEYS, cleanPalette, styleColors } from '../lib/palette';
+import { PALETTE_KEYS, cleanPalette, parseColor, styleColors, toRgb } from '../lib/palette';
 
 /* Palette pronte: cinque colori armonici (pareti, facciata, pavimenti, legno, tessuti) da cui partire e ritoccare. */
 const PRESETS = [
@@ -9,6 +10,41 @@ const PRESETS = [
   { name: 'Grafite e noce', colors: { walls: '#d6d6d4', facade: '#6b7076', floor: '#7a5a3b', wood: '#6e4d32', fabric: '#8b9199' } },
   { name: 'Blu e bianco', colors: { walls: '#f5f7fa', facade: '#cfd9e6', floor: '#e0d2b8', wood: '#efe4cf', fabric: '#6f8fb5' } },
 ];
+
+/* Una voce: selettore, codice esadecimale (#b7773f) e canali R G B, tutti legati allo stesso colore. */
+function ColorRow({ label, value, custom, onChange }) {
+  const [hex, setHex] = useState(value.toUpperCase());
+  useEffect(() => { setHex(value.toUpperCase()); }, [value]);
+  const rgb = toRgb(value);
+  const typeHex = (v) => {
+    setHex(v);
+    const c = parseColor(v);
+    if (c) onChange(c);
+  };
+  const typeChannel = (i, v) => {
+    const n = Math.max(0, Math.min(255, Math.round(Number(v) || 0)));
+    const next = rgb.map((x, k) => (k === i ? n : x));
+    onChange(parseColor(`rgb(${next.join(',')})`));
+  };
+  return (
+    <li>
+      <div className="pf-pal-head">
+        <input type="color" value={value} aria-label={label} onChange={(e) => onChange(e.target.value)} />
+        <span>{label}{!custom && <em> · stile</em>}</span>
+      </div>
+      <div className="pf-pal-codes">
+        <input type="text" className="pf-pal-hex" value={hex} aria-label={`${label}: codice esadecimale`} spellCheck="false" maxLength={9}
+          onChange={(e) => typeHex(e.target.value)} onBlur={() => setHex(value.toUpperCase())} placeholder="#B7773F" />
+        {['R', 'G', 'B'].map((ch, i) => (
+          <label key={ch} className="pf-pal-ch">
+            <span>{ch}</span>
+            <input type="number" min="0" max="255" step="1" value={rgb[i]} aria-label={`${label}: ${ch}`} onChange={(e) => typeChannel(i, e.target.value)} />
+          </label>
+        ))}
+      </div>
+    </li>
+  );
+}
 
 /* Colori principali della casa: i selettori partono dai colori dello stile; chi si cambia ricolora tutto il resto. */
 export default function PalettePanel({ palette, styleId, onChange }) {
@@ -30,13 +66,7 @@ export default function PalettePanel({ palette, styleId, onChange }) {
       </div>
       <ul className="pf-pal-list">
         {PALETTE_KEYS.map(({ key, label }) => (
-          <li key={key}>
-            <label>
-              <input type="color" value={cur[key] || base[key]} aria-label={label} onChange={(e) => set(key, e.target.value)} />
-              <span>{label}</span>
-              <em>{cur[key] ? cur[key].toUpperCase() : 'stile'}</em>
-            </label>
-          </li>
+          <ColorRow key={key} label={label} value={cur[key] || base[key]} custom={!!cur[key]} onChange={(v) => set(key, v)} />
         ))}
       </ul>
       <div className="pf-row">
