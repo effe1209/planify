@@ -297,14 +297,23 @@ export function kitMaterials(THREE, mat, kit) {
   const over = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 };
   const tex = (spec, extra = {}) => {
     const map = texture(THREE, spec.tex, spec.color, spec.tone);
-    return mat(map ? '#ffffff' : spec.color, { ...(map && { map }), ...extra });   // con la texture il colore è già nell'immagine
+    const m = mat(map ? '#ffffff' : spec.color, { ...(map && { map }), ...extra });   // con la texture il colore è già nell'immagine
+    m.userData.pbr = spec.tex;        // il render può sostituire la texture con una PBR vera (lib/pbr.js)
+    m.userData.pbrTint = spec.color;
+    return m;
   };
   const roofTex = { slate: 'slateroof', tile: 'tileroof', metal: 'metalroof' }[kit.roof.kind];
   const floorTex = (f) => {
     const map = texture(THREE, f.kind, f.a, f.b, f.joint);
-    return mat(map ? '#ffffff' : f.a, { ...(map && { map }), roughness: f.kind === 'marble' ? 0.25 : f.kind === 'concrete' ? 0.95 : 0.7 });
+    const m = mat(map ? '#ffffff' : f.a, { ...(map && { map }), roughness: f.kind === 'marble' ? 0.25 : f.kind === 'concrete' ? 0.95 : 0.7 });
+    m.userData.pbr = f.kind;
+    m.userData.pbrTint = f.a;
+    return m;
   };
   const roofMap = texture(THREE, roofTex, kit.roof.color, kit.roof.tone);
+  const roofMat = mat(roofMap ? '#ffffff' : kit.roof.color, { ...(roofMap && { map: roofMap }), side: THREE.DoubleSide, roughness: kit.roof.kind === 'metal' ? 0.45 : 0.85 });
+  roofMat.userData.pbr = roofTex;
+  roofMat.userData.pbrTint = kit.roof.color;
   return {
     wallIn: tex(kit.wallIn),
     facade: tex(kit.facade, over),
@@ -313,7 +322,7 @@ export function kitMaterials(THREE, mat, kit) {
     baseboard: mat(kit.baseboard.color),
     floor: floorTex(kit.floor),
     wet: floorTex(kit.wet),
-    roof: mat(roofMap ? '#ffffff' : kit.roof.color, { ...(roofMap && { map: roofMap }), side: THREE.DoubleSide, roughness: kit.roof.kind === 'metal' ? 0.45 : 0.85 }),
+    roof: roofMat,
     frame: mat(kit.frame, { roughness: 0.5 }),
     door: mat(kit.door, { roughness: 0.6 }),
     handle: mat(kit.handle, { metalness: 0.7, roughness: 0.3 }),

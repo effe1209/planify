@@ -62,7 +62,7 @@ const overlayFloors = (project) => project.floors
  * { scene, model, bounds: { bb, center, size }, lamps: [{ x, y, z }], sun, built }
  *   opts: renderer (per l'ambiente), view (la vista: la «pianta 3D dall'alto» toglie il tetto), time, background, roof (false per toglierlo)
  */
-export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false } = {}) {
+export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false } = {}) {
   const t = timeById(time);
   const scene = new THREE.Scene();
   const model = buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, ceiling: true });
@@ -93,15 +93,20 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + H * 2 + sunSet.position[1] });
   scene.add(sun, sun.target);
   if (renderer) {
-    // riflessi e luce d'ambiente morbida da uno studio neutro (gli oggetti non sono più «piatti»)
-    if (RoomEnvironment) {
-      const pm = new THREE.PMREMGenerator(renderer);
+    // riflessi e luce d'ambiente: il cielo HDRI dell'ora (se si è caricato), altrimenti uno studio neutro
+    const pm = new THREE.PMREMGenerator(renderer);
+    if (hdri) {
+      scene.environment = pm.fromEquirectangular(hdri.userData.soft || hdri).texture;
+      scene.environmentIntensity = t.env * 1.2;
+    } else if (RoomEnvironment) {
       scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
       scene.environmentIntensity = t.env;
     }
   }
   const bg = backgroundFor(background, time);
-  if (!bg.alpha) scene.background = new THREE.Color(bg.color);
+  // sfondo «Cielo»: il cielo vero dell'ora (HDRI) dietro la casa; con gli altri sfondi, il colore scelto
+  if (!bg.alpha) scene.background = background === 'sky' && hdri ? hdri : new THREE.Color(bg.color);
+  if (background === 'sky' && hdri) { scene.backgroundBlurriness = 0.04; scene.backgroundIntensity = Math.max(0.35, t.env * 2.2); }
 
   // corpi illuminanti (sempre) e sensori dell'allarme (se ci sono): accesi al tramonto e di sera
   const devices = project.security?.devices || [];

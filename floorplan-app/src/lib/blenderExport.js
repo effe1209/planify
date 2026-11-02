@@ -182,6 +182,7 @@ export async function blenderPackage(project, { time = 'afternoon', name = proje
   const { buildRenderScene } = await import('./renderScene');
   const built = buildRenderScene(THREE, project, { time, background: 'white', roof: true });
   if (!built) throw new Error('niente da esportare');
+  try { const { upgradeMaterials } = await import('./pbr'); await upgradeMaterials(THREE, built.model, { aniso: 8 }); } catch { /* restano le texture disegnate */ }
   const { scene, bounds } = built;
   const views = cameraViews(project, { aspect: size[0] / size[1] });
   // la radice dell'esportazione: casa, terreno, luci e sensori; sole e hemisphere non servono (li rimette lo script)
