@@ -2617,9 +2617,13 @@ def layout_garden(W: float, L: float, rng: Optional[random.Random] = None,
     lay.add_entrance(garden.id, "S", gate_w, (plan["gate_x"] - 0.35) / max(0.01, W - 0.7 - gate_w), kind="gate")
     if house:
         lay.options["house"] = {"x": plan["house_x"], "w": round(float(house.get("w") or 0), 3)}
-        lay.notes.append("Giardino davanti alla facciata d'ingresso della casa: cancello pedonale davanti al "
-                         "portoncino" + ("" if not plan.get("garage") else ", vialetto davanti al garage."
-                                         if plan.get("garage_side") == "front" else ", vialetto verso il garage."))
+        if (house.get("door") or {}).get("side", "front") != "front":
+            lay.notes.append("Giardino davanti alla facciata della basculante del garage" +
+                             (", con la rampa." if plan.get("ramp") else "."))
+        else:
+            lay.notes.append("Giardino davanti alla facciata d'ingresso della casa: cancello pedonale davanti al "
+                             "portoncino" + ("" if not plan.get("garage") else ", vialetto davanti al garage."
+                                             if plan.get("garage_side") == "front" else ", vialetto verso il garage."))
     else:
         lay.notes.append("Giardino: casa sul lato nord, strada sul lato sud.")
     return lay
@@ -2665,10 +2669,23 @@ def _garden_plan(W: float, L: float, house: Optional[dict], notes: List[str]) ->
         out["drive"] = (x0, round(gw, 3))
         out["garage"] = True
         out["ramp"] = bool(g.get("ramp")) and side == "front"   # di lato o sul retro la rampa non è qui davanti
+        if g.get("ramp") and side != "front":
+            notes.append("Garage interrato con la basculante non davanti al giardino: la rampa scende lungo il fianco della casa, "
+                         "fuori da questo lotto. Si può scegliere il giardino davanti alla basculante.")
         out["garage_side"] = side
     door = house.get("door")
     if door:
         cx = hx + float(door.get("x") or 0)
+        dside = door.get("side") or "front"
+        if dside != "front":
+            # portoncino su un'altra facciata (il giardino sta davanti alla basculante): il cancello pedonale e il vialetto
+            # arrivano all'angolo della casa dal lato del portoncino
+            names = {"left": "sinistro", "right": "destro", "back": "posteriore"}
+            if dside in ("left", "right"):
+                cx = hx if dside == "left" else hx + hw
+            notes.append(f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il cancello pedonale e il camminamento "
+                         "arrivano all'angolo, davanti alla basculante c'è il vialetto con la rampa." if out.get("ramp") else
+                         f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il camminamento arriva all'angolo.")
         gx = snap(clamp(cx - gate_w / 2, EDGE, W - EDGE - gate_w))
         if out["drive"]:
             dx, dw = out["drive"]

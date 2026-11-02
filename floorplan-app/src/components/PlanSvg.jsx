@@ -222,7 +222,7 @@ const BASE_FURNITURE = {
         ))}
         <path d={`M ${cx} ${h - 10} L ${cx} 14 M ${cx - 7} 24 L ${cx} 14 L ${cx + 7} 24`} fill="none" stroke="#5b6472" strokeWidth="1.6" />
         <text x={cx} y={h / 2} textAnchor="middle" fontSize="9" fontWeight="700" fill="#5b6472" stroke="#dcdfe3" strokeWidth="3"
-          paintOrder="stroke" transform={`rotate(-90 ${cx} ${h / 2})`}>RAMPA</text>
+          paintOrder="stroke" transform={`rotate(-90 ${cx} ${h / 2})`}>RAMPA · −3 m</text>
       </>
     );
   },
@@ -879,7 +879,14 @@ function HouseMark({ plan, s, house }) {
       {cut && <path d={`M ${zig.join(' L ')}`} fill="none" stroke={INK} strokeWidth="1.2" />}
       {label(clamp(hx + (house.w * s) / 2, 50, W - 50), -D / 2 - 6,
         `${house.name ? `${house.name} · ` : ''}facciata d'ingresso`)}
-      {house.door && mark(hx + (house.door.x - house.door.w / 2) * s, house.door.w * s, house.door.d, '#d92d20', 'ingresso')}
+      {house.door && (!house.door.side || house.door.side === 'front') && mark(hx + (house.door.x - house.door.w / 2) * s, house.door.w * s, house.door.d, '#d92d20', 'ingresso')}
+      {house.door && house.door.side && house.door.side !== 'front' && (
+        <text x={house.door.side === 'left' ? hx - 6 : house.door.side === 'right' ? hx + house.w * s + 6 : hx + (house.w * s) / 2}
+          y={house.door.side === 'back' ? -D + 30 : -30} textAnchor={house.door.side === 'left' ? 'end' : house.door.side === 'right' ? 'start' : 'middle'}
+          fontSize="8.5" fontWeight="700" fill="#d92d20" stroke="#fff" strokeWidth="3" paintOrder="stroke">
+          {house.door.side === 'left' ? '↑ ' : ''}ingresso sul fianco{house.door.side === 'right' ? ' ↑' : ''}
+        </text>
+      )}
       {g?.side === 'front' && mark(hx + (g.x - g.w / 2) * s, g.w * s, g.ramp ? 0 : g.d, '#3d4654',
         g.ramp ? 'rampa al garage interrato' : 'garage')}
       {g && g.side !== 'front' && (

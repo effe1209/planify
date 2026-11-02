@@ -295,6 +295,7 @@ test('la scala a vista si sceglie nel modulo e riduce il vano', async ({ page },
   test.setTimeout(90_000);
   const errors = await open(page);
   await page.getByRole('checkbox', { name: /Casa su più piani/ }).check();
+  await page.locator('details.pf-fold > summary', { hasText: 'Scala' }).click();
   await page.getByRole('radiogroup', { name: 'Posizione della scala' }).getByRole('radio', { name: 'A vista' }).click();
   await page.getByRole('radiogroup', { name: 'Scala', exact: true }).getByRole('radio', { name: 'A U' }).click();
   await page.getByRole('button', { name: /Genera/ }).first().click();
@@ -823,5 +824,21 @@ test('una palette si salva, si riapplica dopo il reset e si elimina', async ({ p
   await page.locator('section.pf-palette').getByRole('group', { name: 'Le mie palette' }).evaluate((el) => el.scrollIntoView({ block: 'center' }));
   await page.locator('section.pf-palette').getByRole('button', { name: 'Elimina la palette Mia rossa' }).click();
   await expect(page.locator('section.pf-palette').getByRole('button', { name: 'Mia rossa', exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('il menu «Aggiungi piano» resta dentro lo schermo', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Aggiungi un piano' }).click();
+  const menu = page.getByRole('dialog', { name: 'Aggiungi piano' });
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  const vp = page.viewportSize();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(vp.height);
   expect(errors).toEqual([]);
 });

@@ -66,6 +66,27 @@ def test_side_garage_and_narrow_lot():
     _no_overlaps(plan)
 
 
+def test_door_on_a_side_facade_with_garage_ramp_in_front():
+    """Garage interrato con la basculante davanti ma il portoncino su un fianco: la rampa c'è, il cancello va all'angolo."""
+    for side, cx in (("right", 10), ("left", 0)):
+        house = {"w": 10, "door": {"x": cx, "w": 1, "side": side}, "garage": {"x": 2.25, "w": 2.5, "side": "front", "ramp": True}}
+        plan = planner.generate(14, 10, "garden", seed=1, house=house)
+        assert _items(plan, "ramp")
+        gate = _items(plan, "gate_pedestrian")[0]
+        corner = 2 + (10 if side == "right" else 0)           # la casa è centrata nel lotto (hx = 2)
+        assert abs(gate["x"] + gate["w"] / 2 - corner) <= 1.0
+        assert any("sul fianco" in n and "rampa" in n for n in plan["notes"])
+        assert any("davanti alla facciata della basculante" in n for n in plan["notes"])
+        _no_overlaps(plan)
+
+
+def test_side_garage_with_ramp_explains_itself():
+    house = {"w": 10, "door": {"x": 5, "w": 1}, "garage": {"x": 0, "w": 2.5, "side": "left", "ramp": True}}
+    plan = planner.generate(14, 10, "garden", seed=1, house=house)
+    assert not _items(plan, "ramp")
+    assert any("non davanti al giardino" in n for n in plan["notes"])
+
+
 def test_street_level_garage_has_the_front_door_on_the_stair():
     """Garage al piano strada: la casa parte dal primo piano, si entra dal vano scala del garage."""
     h = planner.generate_house(10, 8, [{"level": 0, "program": "garage"}, {"level": 1, "program": "day"},
