@@ -122,31 +122,39 @@ export function frontOf(project) {
   if (!f) return null;
   const { width: W, length: L } = f.plan.dimensions;
   const door = f.plan.doors.find((d) => d.entrance && !d.kind) || f.plan.doors.find((d) => d.entrance);
-  const front = door ? openingSide(door, W, L).side : 'S';
+  const doorSide = door ? openingSide(door, W, L).side : 'S';
+  // garage: prima sullo stesso piano, poi ai piani sotto (rampa)
+  const floors = (project.floors || []).filter((x) => typeof x.level === 'number' && x.level <= f.level && x.plan)
+    .sort((a, b) => b.level - a.level);
+  let gar = null;
+  for (const g of floors) {
+    const gd = g.plan.doors.find((d) => d.kind === 'garage');
+    if (!gd) continue;
+    const { width: gW, length: gL } = g.plan.dimensions;
+    gar = { gd, side: openingSide(gd, gW, gL).side, ramp: g.level < f.level };
+    break;
+  }
+  // il giardino sta davanti alla facciata della strada: con il garage interrato è quella della basculante (la rampa scende da lì),
+  // altrimenti quella del portoncino; chi preferisce il portoncino lo sceglie con `project.gardenFace = 'door'`
+  const byGarage = !!gar && gar.ramp && project?.gardenFace !== 'door';
+  const front = byGarage ? gar.side : doorSide;
+  const rel = (side) => (side === front ? 'front' : side === OPPOSITE[front] ? 'back' : side === LEFT_OF[front] ? 'left' : 'right');
   const map = toFront(front, W, L);
   const fw = front === 'S' || front === 'N' ? W : L;
   const rects = f.plan.rooms.map((r) => {
     const [a, b] = [map(r.x, r.y), map(r.x + r.w, r.y + r.h)];
     return { t: Math.min(a[0], b[0]), d: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]), kind: r.kind };
   });
-  const out = { w: fw, front, rects };
+  const out = { w: fw, front, rects, face: byGarage ? 'garage' : 'door' };
   if (door) {
     const o = openingSide(door, W, L);
     const [t, d] = map(o.cx, o.cy);
-    out.door = { x: t, w: door.w, d };
+    out.door = { x: t, w: door.w, d, side: rel(o.side) };
   }
-  // garage: prima sullo stesso piano, poi ai piani sotto (rampa)
-  const floors = (project.floors || []).filter((x) => typeof x.level === 'number' && x.level <= f.level && x.plan)
-    .sort((a, b) => b.level - a.level);
-  for (const g of floors) {
-    const gd = g.plan.doors.find((d) => d.kind === 'garage');
-    if (!gd) continue;
-    const { width: gW, length: gL } = g.plan.dimensions;
-    const o = openingSide(gd, gW, gL);
-    const side = o.side === front ? 'front' : o.side === OPPOSITE[front] ? 'back' : o.side === LEFT_OF[front] ? 'left' : 'right';
+  if (gar) {
+    const o = openingSide(gar.gd, W, L);
     const [t, d] = map(o.cx, o.cy);
-    out.garage = { x: t, w: gd.w, d, side, ramp: g.level < f.level };
-    break;
+    out.garage = { x: t, w: gar.gd.w, d, side: rel(gar.side), ramp: gar.ramp };
   }
   return { facade: out, floor: f, W, L };
 }
@@ -154,7 +162,7 @@ export function frontOf(project) {
 /* Quello che serve al motore per disegnare il giardino davanti alla casa (POST /generate-plan, house). */
 export const houseRequest = (h) => h && {
   w: h.w,
-  ...(h.door && { door: { x: h.door.x, w: h.door.w } }),
+  ...(h.door && { door: { x: h.door.x, w: h.door.w, side: h.door.side } }),
   ...(h.garage && { garage: { x: h.garage.x, w: h.garage.w, side: h.garage.side, ramp: h.garage.ramp } }),
 };
 

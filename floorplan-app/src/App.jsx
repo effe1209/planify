@@ -233,7 +233,8 @@ export default function App() {
     if (wasLoading.current && !isLoading && !error && narrow()) setPanels((p) => ({ ...p, left: false }));
     wasLoading.current = isLoading;
   }, [isLoading, error]);
-  const togglePanel = (side) => setPanels((p) => ({ ...p, [side]: !p[side] }));
+  // sugli schermi stretti i cassetti stanno sopra la pianta: se ne apre uno solo alla volta
+  const togglePanel = (side) => setPanels((p) => (narrow() && !p[side] ? { left: false, right: false, [side]: true } : { ...p, [side]: !p[side] }));
   useEffect(() => { storage.set('planify.backend', backendUrl); }, [backendUrl]);
   useEffect(() => () => clearTimeout(flashTimer.current), []);
 
@@ -1032,10 +1033,10 @@ export default function App() {
   /* Giardino: rigenerato davanti alla casa del progetto (portoncino, garage), con le stesse misure. */
   const gardenFront = floor?.meta?.type === 'garden' && plan && engineHas('garden_house') ? houseFront(current) : null;
   const gardenAligned = gardenFront && plan.house && Math.abs(plan.house.w - gardenFront.w) < 0.01;
-  const realignGarden = async () => {
-    if (!gardenFront || !base) return;
+  const realignGarden = async (front = gardenFront) => {
+    if (!front || !base) return;
     const params = { ...form, ...floor.params, roomType: 'garden' };
-    const body = { ...planBody(params, plan.dimensions.width, plan.dimensions.length, randomSeed()), house: houseRequest(gardenFront) };
+    const body = { ...planBody(params, plan.dimensions.width, plan.dimensions.length, randomSeed()), house: houseRequest(front) };
     setError(null);
     setIsLoading(true);
     try {
@@ -1519,20 +1520,20 @@ export default function App() {
           <span className={`pf-status is-${engine.status}`}
             title={engine.status === 'error' ? engine.reason : engine.version ? `Versione del motore: ${engine.version}` : undefined}>
             <i aria-hidden="true" />
-            {{
+            <span className="pf-status-text">{{
               off: 'Motore offline (schizzi e DXF funzionano in locale)',
               checking: 'Verifico il motore…',
               waking: `Motore in avvio… ${engine.seconds || 0} s`,
               ok: `Motore collegato · v${engine.version}`,
               old: `Motore da aggiornare · v${engine.version || '?'}`,
               error: 'Motore non raggiungibile',
-            }[engine.status]}
+            }[engine.status]}</span>
           </span>
           {engine.status === 'error' && (
             <button type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</button>
           )}
           <button type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
-            <Cookie size={14} /> Cookie
+            <Cookie size={14} /> <span className="pf-tl-mobile">Cookie</span>
           </button>
           <button type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('right')}
             aria-label={panels.right ? 'Nascondi il pannello dei dettagli' : 'Mostra il pannello dei dettagli'} aria-pressed={panels.right}
@@ -2213,8 +2214,25 @@ export default function App() {
                       <Shuffle size={15} /> Rigenera questo piano con la scala allineata
                     </button>
                   )}
+                  {gardenFront?.garage?.ramp && !readOnly && (
+                    <div className="pf-field-sm">
+                      <span>Giardino davanti a</span>
+                      <div className="pf-seg" role="radiogroup" aria-label="Giardino davanti a">
+                        {[['garage', 'Basculante del garage'], ['door', 'Portoncino']].map(([v, text]) => (
+                          <button key={v} type="button" role="radio" aria-checked={gardenFront.face === v} disabled={isLoading}
+                            className={gardenFront.face === v ? 'is-on' : ''}
+                            onClick={() => {
+                              if (gardenFront.face === v) return;
+                              editProject((p) => ({ ...p, gardenFace: v }));
+                              realignGarden(houseFront({ ...current, gardenFace: v }));
+                            }}>{text}</button>
+                        ))}
+                      </div>
+                      <p className="pf-hint">Con il garage interrato il giardino sta davanti alla basculante, così la rampa c&apos;è sempre; il portoncino può restare sul fianco.</p>
+                    </div>
+                  )}
                   {gardenFront && (
-                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignGarden}>
+                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={() => realignGarden()}>
                       <Shuffle size={15} /> {gardenAligned ? 'Rigenera il giardino davanti alla casa' : 'Allinea il giardino alla casa'}
                     </button>
                   )}

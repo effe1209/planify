@@ -14,18 +14,29 @@ const project = { floors: [{ level: 0, plan }, { level: -1, plan: basement, meta
 let h = houseFront(project);
 assert.equal(h.front, 'S');
 assert.equal(h.w, 10);
-assert.deepEqual(h.door, { x: 7.5, w: 1, d: 2 });
+assert.deepEqual(h.door, { x: 7.5, w: 1, d: 2, side: 'front' });
 assert.deepEqual(h.garage, { x: 2.25, w: 2.5, d: 0, side: 'front', ramp: true });
 assert.deepEqual(h.rects[1], { t: 6, d: 2, w: 4, h: 6, kind: 'bed' });
 
-// ingresso a est: la facciata è la lunghezza, vista da est la sinistra è il sud
+// ingresso a est ma basculante del garage interrato a sud: il giardino sta davanti alla basculante (c'è la rampa) e il portoncino è sul fianco
 plan.doors = [{ x: 10, y: 2, w: 1, rot: 90, entrance: true }];
 h = houseFront(project);
+assert.equal(h.front, 'S');
+assert.equal(h.face, 'garage');
+assert.equal(h.w, 10);
+assert.deepEqual(h.garage, { x: 2.25, w: 2.5, d: 0, side: 'front', ramp: true });
+assert.deepEqual({ x: h.door.x, d: h.door.d, side: h.door.side }, { x: 10, d: 5.5, side: 'right' });
+assert.deepEqual(houseRequest(h), { w: 10, door: { x: 10, w: 1, side: 'right' }, garage: { x: 2.25, w: 2.5, side: 'front', ramp: true } });
+
+// a chi preferisce il portoncino: la facciata è quella dell'ingresso (est), vista da est la sinistra è il sud
+h = houseFront({ ...project, gardenFace: 'door' });
 assert.equal(h.front, 'E');
+assert.equal(h.face, 'door');
 assert.equal(h.w, 8);
 assert.equal(h.door.x, 5.5);
+assert.equal(h.door.side, 'front');
 assert.equal(h.garage.side, 'left');
-assert.deepEqual(houseRequest(h), { w: 8, door: { x: 5.5, w: 1 }, garage: { x: 0, w: 2.5, side: 'left', ramp: true } });
+assert.deepEqual(houseRequest(h), { w: 8, door: { x: 5.5, w: 1, side: 'front' }, garage: { x: 0, w: 2.5, side: 'left', ramp: true } });
 
 assert.equal(houseFront({ floors: [{ level: 'out', plan, meta: { type: 'garden' } }] }), null);
 // garage al piano strada: il piano terra è il garage, la porta di casa è sul vano scala, niente rampa

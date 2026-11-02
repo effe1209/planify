@@ -768,3 +768,23 @@
 .pf-mat-list { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 8px; }
 .pf-mat-list label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
 .pf-mat-list select { min-width: 150px; max-width: 190px; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line, rgba(0,0,0,.15)); border-radius: 8px; background: var(--card, #fff); color: var(--text); }
+
+/* Intestazione stretta (telefono): lo stato del motore diventa un puntino con il testo solo per i lettori di schermo, «Cookie» solo icona */
+@media (max-width: 720px) {
+  .pf-top { padding: 0 8px 0 10px; gap: 4px; }
+  .pf-top .pf-brand { min-width: 0; flex: 0 1 auto; }
+  .pf-top-right { gap: 2px; min-width: 0; }
+  .pf-status { width: 32px; padding: 0; justify-content: center; flex: none; }
+  .pf-status-text, .pf-tl-mobile { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .pf-top .pf-mini { padding: 0; width: 36px; justify-content: center; }
+}
+
+/* Gruppi richiudibili del pannello dei comandi: titolo con il valore scelto, dettagli solo se servono */
+.pf-fold { border-top: 1px solid var(--hairline); padding-top: 8px; display: grid; gap: 8px; }
+.pf-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; font-size: 13px; min-height: 28px; }
+.pf-fold > summary::-webkit-details-marker { display: none; }
+.pf-fold > summary::after { content: '›'; color: var(--text-muted); transition: transform .2s ease; }
+.pf-fold[open] > summary::after { transform: rotate(90deg); }
+.pf-fold > summary em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--text-muted); }
+.pf-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .pf-fold > summary::after { transition: none; } }

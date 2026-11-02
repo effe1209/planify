@@ -92,17 +92,26 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
               </p>
             </>
           )}
-          <Seg label="Scala" value={form.stairType} options={STAIR_TYPES} onChange={(v) => setF('stairType', v)} />
-          <Seg label="Posizione della scala" value={form.stairStyle} options={STAIR_STYLES} onChange={(v) => setF('stairStyle', v)} />
-          <p className="pf-hint">
-            «A vista»: il vano si riduce alla rampa e si apre sul soggiorno e sul disimpegno; la fascia che avanza diventa un locale
-            (ripostiglio, lavanderia, studio). «Auto» la sceglie nei lotti piccoli.
-          </p>
-          <p className="pf-hint">
-            Le misure valgono per ogni piano; la pianta è rettangolare così i piani si sovrappongono. Le camere si
-            dividono tra i piani «Notte» (poi «Completo»); studio, ripostiglio e lavanderia vanno al piano giorno;
-            ogni piano cerca di avere i bagni sopra quelli del piano di sotto.
-          </p>
+          <details className="pf-fold">
+            <summary>
+              <span>Scala</span>
+              <em>{STAIR_TYPES.find(([v]) => v === form.stairType)?.[1]} · {STAIR_STYLES.find(([v]) => v === form.stairStyle)?.[1]}</em>
+            </summary>
+            <Seg label="Scala" value={form.stairType} options={STAIR_TYPES} onChange={(v) => setF('stairType', v)} />
+            <Seg label="Posizione della scala" value={form.stairStyle} options={STAIR_STYLES} onChange={(v) => setF('stairStyle', v)} />
+            <p className="pf-hint">
+              «A vista»: il vano si riduce alla rampa e si apre sul soggiorno e sul disimpegno; la fascia che avanza diventa un locale
+              (ripostiglio, lavanderia, studio). «Auto» la sceglie nei lotti piccoli.
+            </p>
+          </details>
+          <details className="pf-fold">
+            <summary><span>Come si dividono i locali</span></summary>
+            <p className="pf-hint">
+              Le misure valgono per ogni piano; la pianta è rettangolare così i piani si sovrappongono. Le camere si
+              dividono tra i piani «Notte» (poi «Completo»); studio, ripostiglio e lavanderia vanno al piano giorno;
+              ogni piano cerca di avere i bagni sopra quelli del piano di sotto.
+            </p>
+          </details>
         </>
       )}
     </div>

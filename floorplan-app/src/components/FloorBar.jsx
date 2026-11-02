@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Copy, Layers, PenTool, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { FLOOR_PRESETS, levelLabel } from '../lib/project';
 
@@ -14,6 +14,21 @@ export default function FloorBar({
   const [menu, setMenu] = useState(false);
   const [preset, setPreset] = useState(1);
   const [custom, setCustom] = useState('');
+  const addBtn = useRef(null);
+  const [menuPos, setMenuPos] = useState(null);
+  // il menu è in coordinate della finestra: il contenitore della pianta ritaglia ciò che esce, quindi lo si tiene dentro lo schermo
+  useLayoutEffect(() => {
+    if (!menu || !addBtn.current) { setMenuPos(null); return undefined; }
+    const place = () => {
+      const r = addBtn.current.getBoundingClientRect();
+      const w = Math.min(280, window.innerWidth - 16);
+      setMenuPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), width: w });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [menu]);
   const floors = project.floors;
 
   const start = (mode) => {
@@ -65,11 +80,11 @@ export default function FloorBar({
       </div>
 
       <div className="pf-floor-add">
-        <button type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu} title="Aggiungi un piano">
+        <button ref={addBtn} type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu} title="Aggiungi un piano">
           <Plus size={14} /> <span className="pf-tl">Piano</span>
         </button>
         {menu && (
-          <div className="pf-floor-menu" role="dialog" aria-label="Aggiungi piano">
+          <div className="pf-floor-menu" role="dialog" aria-label="Aggiungi piano" style={menuPos ? { position: 'fixed', ...menuPos } : undefined}>
             <label className="pf-field-sm">
               <span>Livello</span>
               <select className="pf-input-sm" value={preset} onChange={(e) => setPreset(Number(e.target.value))}>
