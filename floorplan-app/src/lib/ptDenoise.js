@@ -23,11 +23,17 @@ const FRAG = /* glsl */`
   uniform float sigmaS;
   uniform float sigmaC;
   uniform float exposure;
+  uniform float opaque;         // 1 = alfa pieno ovunque (ripiego se la copertura del path tracing non è affidabile)
   varying vec2 vUv;
 
   float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
   // i «fireflies» (punti bianchissimi di un cammino fortunato) si limitano prima di mediare
-  vec3 limitFirefly(vec3 c) { float l = lum(c); return c * min(1.0, 6.0 / max(l, 1e-4)); }
+  vec3 limitFirefly(vec3 c) {
+    if (!(c.r == c.r) || !(c.g == c.g) || !(c.b == c.b)) return vec3(0.0);   // NaN di un cammino sbagliato
+    c = min(c, vec3(1.0e4));
+    float l = lum(c);
+    return c * min(1.0, 6.0 / max(l, 1e-4));
+  }
 
   void main() {
     vec4 c0 = texture2D(colorMap, vUv);
@@ -67,7 +73,9 @@ const FRAG = /* glsl */`
       gl_FragColor = vec4(col, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-      gl_FragColor = vec4(gl_FragColor.rgb * o.a, o.a);               // alfa premoltiplicato per il canvas
+      // la copertura (dentro/fuori la casa) viene dall'immagine guida, non dall'alfa accumulato dal path tracing: è sempre affidabile
+      float cover = opaque > 0.5 ? 1.0 : inside0;
+      gl_FragColor = vec4(gl_FragColor.rgb * cover, cover);               // alfa premoltiplicato per il canvas
     #else
       gl_FragColor = o;
     #endif
@@ -159,7 +167,7 @@ export function guidedDenoiser(THREE, renderer, { scene, camera, width, height, 
     uniforms: {
       colorMap: { value: null }, geoMap: { value: geo.texture }, albedoMap: { value: alb.texture },
       texel: { value: new THREE.Vector2(1 / width, 1 / height) }, radius: { value: 5 }, stride: { value: 1 },
-      sigmaS: { value: 4.5 }, sigmaC: { value: 0.4 }, exposure: { value: 1 },
+      sigmaS: { value: 4.5 }, sigmaC: { value: 0.4 }, exposure: { value: 1 }, opaque: { value: 0 },
     },
     depthTest: false, depthWrite: false, blending: THREE.NoBlending,
   });
@@ -172,7 +180,7 @@ export function guidedDenoiser(THREE, renderer, { scene, camera, width, height, 
   const tmp = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, format: THREE.RGBAFormat });
 
   return {
-    draw(exposure) {
+    draw(exposure, opaque = false) {
       // due passate a 11×11 (raggio effettivo ~10 px, senza buchi tra i campioni) → l'ultima fa mappa tonale e sRGB e scrive sul canvas
       mesh.material = matA;
       matA.uniforms.colorMap.value = colorTexture;
@@ -183,6 +191,7 @@ export function guidedDenoiser(THREE, renderer, { scene, camera, width, height, 
       matFinal.uniforms.colorMap.value = tmp.texture;
       matFinal.uniforms.stride.value = 1;
       matFinal.uniforms.exposure.value = exposure;
+      matFinal.uniforms.opaque.value = opaque ? 1 : 0;
       renderer.setRenderTarget(null);
       renderer.autoClear = true;
       renderer.toneMappingExposure = 1;   // l'esposizione la applica già lo shader (prima della mappa tonale)

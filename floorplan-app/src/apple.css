@@ -714,3 +714,8 @@
 .pf-wordmark-dark { display: none !important; }
 .pf-app[data-theme="dark"] .pf-wordmark-light { display: none !important; }
 .pf-app[data-theme="dark"] .pf-wordmark-dark { display: block !important; }
+
+/* Vista 3D: occupa tutto il riquadro centrale (prima si fermava a 72% dell'altezza e a 760 px, lasciando vuoto il resto) */
+.pf-canvas:has(.pf-3d-wrap) { align-items: stretch; justify-content: stretch; }
+.pf-3d-wrap { flex: 1; min-width: 0; display: flex; }
+.pf-3d-wrap .pf-3d { flex: 1; width: auto; height: auto; min-height: 360px; border-radius: inherit; }
