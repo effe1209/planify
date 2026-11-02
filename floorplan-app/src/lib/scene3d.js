@@ -60,9 +60,9 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     accent: mat(theme.accent || '#4f6d8f'),
   };
   // kit dello stile: interni e pavimenti dal tema del piano, facciata dallo stile della casa
-  const kit = styleKit(theme.id);
+  const kit = styleKit(theme.id, theme.palette);
   const K = kitMaterials(THREE, mat, kit);
-  const facadeKit = facade && facade !== theme.id ? styleKit(facade) : kit;
+  const facadeKit = facade && facade !== theme.id ? styleKit(facade, theme.palette) : kit;
   const KF = facadeKit === kit ? K : kitMaterials(THREE, mat, facadeKit);
   M.wall = K.wallIn;
   M.wood.userData.pbr = 'plank';          // il legno degli arredi e del soppalco: nel render diventa legno vero con venature

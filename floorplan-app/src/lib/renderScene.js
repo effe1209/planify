@@ -3,6 +3,7 @@
  * corpi illuminanti (accesi al tramonto e di sera) e sensori dell'allarme. La usano il render in tempo reale e il path tracing.
  */
 import { THEMES } from './themes';
+import { themeFor, themeWithPalette } from './palette';
 import { buildOverlays, setLights } from './overlays3d';
 import { planElectric } from './electric';
 import { backgroundFor, lampsOn, sunFor, timeById } from './renderStudio';
@@ -65,7 +66,7 @@ const overlayFloors = (project) => project.floors
 export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false, windows = false } = {}) {
   const t = timeById(time);
   const scene = new THREE.Scene();
-  const model = buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, ceiling: true });
+  const model = buildHouse(THREE, project, (f) => themeFor(project, f), { lowWalls, ceiling: true });
   if (!model.children.length) return null;
   // il tetto lo decide chi chiama (il pannello Render lo accende da solo nelle viste da fuori e lo spegne nella pianta dall'alto)
   const withRoof = roof !== false;
@@ -111,7 +112,7 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   // corpi illuminanti (sempre) e sensori dell'allarme (se ci sono): accesi al tramonto e di sera
   const devices = project.security?.devices || [];
   const electric = planElectric(project, { level: project.electric?.level || 2 });
-  const built = buildOverlays(THREE, { floors: overlayFloors(project), devices, electric, theme: THEMES[top?.floor.meta?.style] || THEMES.modern });
+  const built = buildOverlays(THREE, { floors: overlayFloors(project), devices, electric, theme: themeWithPalette(THEMES[top?.floor.meta?.style] || THEMES.modern, project.palette) });
   scene.add(built.lights);
   if (devices.length) scene.add(built.sensors);
   setLights(built, lampsOn(time));

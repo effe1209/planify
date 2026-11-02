@@ -734,3 +734,15 @@
 .pf-app[data-theme="dark"] .pf-logo-light { display: none !important; }
 .pf-app[data-theme="dark"] .pf-logo-dark { display: block !important; }
 .pf-brand { gap: 6px; }
+
+/* Colori della casa */
+.pf-pal-list { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 6px; }
+.pf-pal-list label { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+.pf-pal-list input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line, rgba(0,0,0,.15)); border-radius: 7px; background: none; cursor: pointer; }
+.pf-pal-list span { flex: 1; }
+.pf-pal-list em { font-style: normal; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pf-chip-pal { display: inline-flex; align-items: center; gap: 6px; }
+.pf-pal-dots { display: inline-flex; }
+.pf-pal-dots i { width: 9px; height: 14px; display: block; }
+.pf-pal-dots i:first-child { border-radius: 4px 0 0 4px; }
+.pf-pal-dots i:last-child { border-radius: 0 4px 4px 0; }

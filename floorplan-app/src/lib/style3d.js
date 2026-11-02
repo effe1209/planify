@@ -62,7 +62,10 @@ export const STYLE_KITS = {
   },
 };
 
-export const styleKit = (id) => STYLE_KITS[id] || STYLE_KITS.modern;
+import { kitWithPalette } from './palette';
+
+/* Il kit dello stile, con la palette dei colori principali della casa se c'è (lib/palette.js). */
+export const styleKit = (id, palette = null) => kitWithPalette(STYLE_KITS[id] || STYLE_KITS.modern, palette);
 
 /* ── texture ───────────────────────────────────────────────────────────── */
 const cache = new Map();

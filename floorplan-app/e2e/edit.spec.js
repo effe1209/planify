@@ -708,3 +708,47 @@ test('un loft con il giardino si vede in 3D insieme: casa intera con il giardino
   expect(names.some((n) => /VEGETAZIONE|SIEPI|RECINZIONE|PRATO|PIETRA/.test(n)) || names.length > 3).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('i colori principali della casa ricolorano pianta e 3D, e si possono ripristinare', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const panel = page.locator('section.pf-palette');
+  await expect(panel).toBeVisible();
+  const before = await page.locator('.pf-sheet svg').first().innerHTML();
+  await panel.getByLabel('Pareti interne').fill('#ff0000');
+  await panel.getByLabel('Facciata').fill('#00ff00');
+  await panel.getByLabel('Tessuti e divani').fill('#0000ff');
+  await expect(panel).toContainText('#FF0000');
+  await expect(panel.getByRole('button', { name: /Torna ai colori dello stile/ })).toBeEnabled();
+  expect(await page.locator('.pf-sheet svg').first().innerHTML()).not.toBe(before);   // i tessuti cambiano in pianta
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  // le pareti hanno la texture dello stile disegnata al volo: si misura il colore medio dell'immagine
+  const cols = await page.evaluate(() => {
+    const out = [];
+    window.__planify3d.model.traverse((o) => {
+      if (!o.isMesh || o.userData.layer !== 'MURI' || !Array.isArray(o.material)) return;
+      for (const m of o.material) {
+        const im = m.map?.image;
+        if (!im) { out.push(m.color.getHexString()); continue; }
+        const c = document.createElement('canvas'); c.width = c.height = 16;
+        const x = c.getContext('2d'); x.drawImage(im, 0, 0, 16, 16);
+        const d = x.getImageData(0, 0, 16, 16).data; let r = 0, g = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+        const n = d.length / 4; out.push([r / n, g / n, b / n].map((v) => Math.round(v)));
+      }
+    });
+    return out;
+  });
+  expect(cols.some((c) => Array.isArray(c) && c[0] > 200 && c[1] < 80 && c[2] < 80)).toBe(true);   // pareti interne rosse
+  expect(cols.some((c) => Array.isArray(c) && c[1] > 200 && c[0] < 80 && c[2] < 80)).toBe(true);   // facciata verde
+  await page.getByRole('button', { name: '3D', exact: true }).click();   // torna alla pianta
+  await panel.getByRole('button', { name: /Torna ai colori dello stile/ }).click();
+  await expect(panel.getByRole('button', { name: /Torna ai colori dello stile/ })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Sabbia e salvia' }).click();
+  await expect(panel).toContainText('#A8B59A');
+  expect(errors).toEqual([]);
+});

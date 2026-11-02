@@ -22,7 +22,7 @@ export default function FloorsOverview({ project, stage, devices, stairs, electr
             title={`Apri ${f.name}`}>
             <span><em>{levelLabel(f.level)}</em> {f.name}</span>
             <div className="pf-sheet">
-              <PlanSvg plan={f.plan} layers={LAYERS} zoom={z} typeLabel={f.name} style={f.meta?.style}
+              <PlanSvg plan={f.plan} layers={LAYERS} zoom={z} typeLabel={f.name} style={f.meta?.style} palette={project.palette}
                 devices={devices?.filter((d) => d.floor === f.id)} stairs={stairs?.[f.id]} house={house}
                 electric={electric?.[f.id] || null} plumbing={plumbing?.[f.id] || null} generator={generator} />
             </div>
