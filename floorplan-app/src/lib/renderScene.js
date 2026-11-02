@@ -4,6 +4,8 @@
  */
 import { THEMES } from './themes';
 import { themeFor, themeWithPalette } from './palette';
+import { addEnvironment } from './environment';
+import { frontOf } from './project';
 import { buildOverlays, setLights } from './overlays3d';
 import { planElectric } from './electric';
 import { backgroundFor, lampsOn, sunFor, timeById } from './renderStudio';
@@ -63,7 +65,7 @@ const overlayFloors = (project) => project.floors
  * { scene, model, bounds: { bb, center, size }, lamps: [{ x, y, z }], sun, built }
  *   opts: renderer (per l'ambiente), view (la vista: la «pianta 3D dall'alto» toglie il tetto), time, background, roof (false per toglierlo)
  */
-export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false, windows = false } = {}) {
+export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false, windows = false, ground = 'horizon' } = {}) {
   const t = timeById(time);
   const scene = new THREE.Scene();
   const model = buildHouse(THREE, project, (f) => themeFor(project, f), { lowWalls, ceiling: true });
@@ -76,7 +78,11 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   if (!withRoof) model.traverse((o) => { if (o.userData?.layer === 'TRAVI' || o.userData?.layer === 'TETTO') o.visible = false; });
   refineMaterials(THREE, model, renderer?.capabilities?.getMaxAnisotropy?.() || 8);
   scene.add(model);
-  const bounds = addGround(THREE, scene, model);
+  // terreno: senza fondo trasparente si sceglie l'ambiente (orizzonte, plastico, contesto, studio); trasparente = il quadrato di prima
+  const bgNow = backgroundFor(background, time);
+  const fr = frontOf(project);
+  const bounds = bgNow.alpha ? addGround(THREE, scene, model)
+    : addEnvironment(THREE, scene, model, { mode: ground, front: fr?.facade?.front || 'S' });
   const { center, size, bb } = bounds;
   if (bounds.ground && t.ground < 1) bounds.ground.material.color.multiplyScalar(t.ground);   // di sera il prato non è chiaro come di giorno
   const W = size.x, L = size.z, H = bb.max.y;

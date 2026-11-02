@@ -79,3 +79,19 @@ console.log('materials ok');
   assert.ok(rooms.length && rooms.every((x) => x < 5), 'nessuna trave sotto il soppalco');
 }
 console.log('materials travi ok');
+
+// portico con il portoncino vicino all'angolo: resta dentro la facciata (non esce dal giardino che parte dagli spigoli della casa)
+{
+  const corner = { ...plan, doors: [{ x: 0.4, y: 8, w: 0.9, rot: 0, entrance: true }] };
+  const pj = project({ materials: { structure: 'wood' }, floors: [{ id: 'a', level: 0, plan: corner, meta: { style: 'modern' } }] });
+  const h = buildHouse(THREE, pj, (f) => themeFor(pj, f));
+  const por = h.getObjectByName('PORTICO');
+  const bb = new THREE.Box3().setFromObject(por);
+  assert.ok(bb.min.x >= -0.001 && bb.max.x <= 10.001, `portico oltre la facciata: ${bb.min.x} ${bb.max.x}`);
+  assert.ok(por.position.x - 1.4 < 0.85 && por.position.x + 1.4 > 0.4 + 0.9, 'il portoncino resta sotto il portico');
+  const far = { ...plan, doors: [{ x: 9.2, y: 8, w: 0.9, rot: 0, entrance: true }] };
+  const pj2 = project({ materials: { structure: 'wood' }, floors: [{ id: 'a', level: 0, plan: far, meta: { style: 'modern' } }] });
+  const bb2 = new THREE.Box3().setFromObject(buildHouse(THREE, pj2, (f) => themeFor(pj2, f)).getObjectByName('PORTICO'));
+  assert.ok(bb2.max.x <= 10.001 && bb2.min.x >= -0.001, `portico oltre la facciata: ${bb2.min.x} ${bb2.max.x}`);
+  console.log('materials portico ok');
+}

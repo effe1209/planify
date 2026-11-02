@@ -30,6 +30,14 @@ export const BACKGROUNDS = [
   { id: 'transparent', label: 'Trasparente (PNG)', color: null, alpha: true },
 ];
 
+/* Luminosità del render: moltiplica la luminosità a cui punta l'esposizione automatica (e, in Blender, quella a cui punta lo script). */
+export const BRIGHTNESS = [
+  { id: 'dim', label: 'Soffusa', k: 0.72 },
+  { id: 'natural', label: 'Naturale', k: 1 },
+  { id: 'bright', label: 'Luminosa', k: 1.3 },
+];
+export const brightnessById = (id) => BRIGHTNESS.find((b) => b.id === id) || BRIGHTNESS[1];
+
 /* Le luci di casa sono accese al tramonto e di sera. */
 export const lampsOn = (id) => !!timeById(id).lamps;
 export const timeById = (id) => TIMES.find((t) => t.id === id) || TIMES[2];

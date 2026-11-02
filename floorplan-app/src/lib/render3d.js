@@ -6,7 +6,7 @@
  * Ogni immagine si controlla: se esce nera o vuota (schede grafiche che non reggono gli effetti o il 4K) si riprova con meno
  * effetti, e il risultato dice quale strada ha funzionato e su quale scheda grafica. three.js si carica solo qui.
  */
-import { backgroundFor, cameraViews, houseBounds, timeById } from './renderStudio';
+import { backgroundFor, brightnessById, cameraViews, houseBounds, timeById } from './renderStudio';
 import { clearTextureCache } from './style3d';
 
 function disposeScene(scene) {
@@ -45,12 +45,14 @@ export function canvasStats(source, bgSrgb, alphaBg, pw = 256) {
   }
   lum.sort((x, y) => x - y);
   const total = px.length / 4;
-  return { median: lum.length ? lum[Math.floor(lum.length / 2)] : 0, shown: lum.length / total, visible: visible / total };
+  const at = (q) => (lum.length ? lum[Math.min(lum.length - 1, Math.floor(lum.length * q))] : 0);
+  // `level`: metà mediana e metà 85° percentile: una casa con il tetto scuro e le pareti chiare non si esporrebbe sul tetto (che farebbe bruciare le pareti)
+  return { median: at(0.5), p85: at(0.85), level: 0.5 * at(0.5) + 0.5 * at(0.85), shown: lum.length / total, visible: visible / total };
 }
 
 export async function houseImage(project, {
   width = 1800, height = 1100, lowWalls = false, view = null, time = 'afternoon', background = 'white', roof = true,
-  quality = 'fast', samples = undefined, onProgress = null, signal = null, effects = true,
+  quality = 'fast', samples = undefined, onProgress = null, signal = null, effects = true, ground = 'horizon', brightness = 'natural',
 } = {}) {
   clearTextureCache();   // il render ha texture sue: non condivide con la vista 3D quelle che un altro contesto grafico potrebbe lasciare in uno stato strano
   const THREE = await import('three');
@@ -101,7 +103,7 @@ export async function houseImage(project, {
     RectAreaLightUniformsLib.init();
     const { loadHdri } = await import('./hdri');
     const hdri = await loadHdri(THREE, time);
-    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls, windows: true });
+    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls, windows: true, ground });
     if (!built) return null;
     try {
       const { upgradeMaterials } = await import('./pbr');
@@ -122,6 +124,24 @@ export async function houseImage(project, {
     // colore dello sfondo in sRGB 0-255 (per non contarlo nella luminosità)
     const bgSrgb = bg.alpha ? [-99, -99, -99] : [1, 3, 5].map((i) => parseInt(bg.color.slice(i, i + 2), 16));
 
+    // nella misura (esposizione e controllo dell'occlusione) la casa sta da sola, su sfondo trasparente: il terreno che riempie l'inquadratura e il cielo
+    // vero non devono contare, e con un colore di sfondo le pareti bianche verrebbero scambiate per sfondo (l'esposizione salirebbe senza fine)
+    const hold = {};
+    const measureOn = () => {
+      hold.tg = scene.getObjectByName('TERRENO');
+      Object.assign(hold, { fog: scene.fog, background: scene.background, ground: hold.tg?.visible });
+      if (hold.tg) hold.tg.visible = false;
+      scene.fog = null;
+      scene.background = null;
+      renderer.setClearColor('#000000', 0);
+    };
+    const measureOff = () => {
+      if (hold.tg) hold.tg.visible = hold.ground;
+      scene.fog = hold.fog;
+      scene.background = hold.background;
+      renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
+    };
+
     let directMedian = null;
     // esposizione automatica: si prova il render in piccolo, si misura la luminosità di ciò che non è sfondo e si corregge
     // l'esposizione finché l'immagine non è né nera né bruciata (stile scuro, sera, GPU diversa: non importa)
@@ -131,19 +151,21 @@ export async function houseImage(project, {
       renderer.setSize(pw, ph, false);
       camera.aspect = pw / ph;
       camera.updateProjectionMatrix();
+      measureOn();
       for (let i = 0; i < 3; i++) {
         renderer.toneMappingExposure = exposure;
         renderer.render(scene, camera);
-        const st = canvasStats(canvas, bgSrgb, bg.alpha, pw);
-        directMedian = st.median;
+        const st = canvasStats(canvas, bgSrgb, true, pw);
+        directMedian = st.level;
         if (st.shown < 0.03) break;
-        if (st.median < 0.004) { info.notes.push('anteprima di esposizione nera'); break; }   // nera davvero: non è questione di esposizione
-        const target = built.lampsOn ? 0.2 : 0.52;   // la sera resta più scura, ma mai nera
-        if (Math.abs(st.median - target) < 0.04) break;
+        if (st.level < 0.004) { info.notes.push('anteprima di esposizione nera'); break; }   // nera davvero: non è questione di esposizione
+        const target = (built.lampsOn ? 0.2 : 0.52) * brightnessById(brightness).k;   // la sera resta più scura, ma mai nera
+        if (Math.abs(st.level - target) < 0.04) break;
         // di giorno l'esposizione può cambiare molto (stili scuri); di sera resta vicina a quella della scena, che deve restare notte
         const [lo, hi] = built.lampsOn ? [t.exposure * 0.6, t.exposure * 1.5] : [0.35, 6];
-        exposure = THREE.MathUtils.clamp(exposure * (target / Math.max(0.02, st.median)) ** 1.3, lo, hi);
+        exposure = THREE.MathUtils.clamp(exposure * (target / Math.max(0.02, st.level)) ** 1.3, lo, hi);
       }
+      measureOff();
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -165,7 +187,7 @@ export async function houseImage(project, {
       }
       // ripiego: si rifà la scena e si disegna in tempo reale (il path tracing ha cambiato materiali e luci)
       disposeScene(scene);
-      return houseImage(project, { width, height, lowWalls, view, time, background, roof, quality: 'fast', onProgress, signal, effects })
+      return houseImage(project, { width, height, lowWalls, view, time, background, roof, quality: 'fast', onProgress, signal, effects, ground, brightness })
         .then((r) => r && { ...r, info: { ...r.info, notes: [...info.notes, ...(r.info?.notes || [])] } });
     }
 
@@ -181,15 +203,22 @@ export async function houseImage(project, {
         renderer.setSize(pw, ph, false);
         camera.aspect = pw / ph;
         camera.updateProjectionMatrix();
+        measureOn();
+        // il riferimento si rifà all'esposizione finale (l'ultima misura dell'esposizione può essere stata a un valore più basso)
+        renderer.toneMappingExposure = exposure;
+        renderer.render(scene, camera);
+        const direct = canvasStats(canvas, bgSrgb, true, pw);
         const { run, done } = await composerFor(THREE, renderer, scene, camera, { width: pw, height: ph, size, t, built, heavy: false, gl, ao: true });
         run();
-        const st = canvasStats(canvas, bgSrgb, bg.alpha, pw);
+        const st = canvasStats(canvas, bgSrgb, true, pw);
         done();
-        if (st.median < directMedian * 0.72) {
+        measureOff();
+        if (st.level < direct.level * 0.72) {
           aoOk = false;
-          info.notes.push(`occlusione ambientale disattivata: su questa scheda grafica scuriva troppo (${st.median.toFixed(2)} contro ${directMedian.toFixed(2)})`);
+          info.notes.push(`occlusione ambientale disattivata: su questa scheda grafica scuriva troppo (${st.level.toFixed(2)} contro ${direct.level.toFixed(2)})`);
         }
       } catch (e) {
+        measureOff();
         aoOk = false;
         info.notes.push(`occlusione ambientale disattivata (${e.message})`);
       }

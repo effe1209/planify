@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Download, Loader2, X } from 'lucide-react';
-import { BACKGROUNDS, SIZES, TIMES, cameraViews, shiftView } from '../lib/renderStudio';
+import { BACKGROUNDS, BRIGHTNESS, SIZES, TIMES, cameraViews, shiftView } from '../lib/renderStudio';
+import { GROUNDS } from '../lib/environment';
 import { FLOOR_H } from '../lib/scene3d';
 import { saveBlob } from '../lib/utils';
 import { SAMPLE_PRESETS } from '../lib/pathTrace';
@@ -16,6 +17,8 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
   const [size, setSize] = useState('hd');
   const [time, setTime] = useState('afternoon');
   const [bg, setBg] = useState('white');
+  const [ground, setGround] = useState('horizon');
+  const [brightness, setBrightness] = useState('natural');
   const [quality, setQuality] = useState('fast');
   const [samples, setSamples] = useState('high');
   const [progress, setProgress] = useState(0);
@@ -34,7 +37,7 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
     try {
       const { blenderPackage } = await import('../lib/blenderExport');
       const px = SIZES.find((s2) => s2.id === size) || SIZES[1];
-      const res = await blenderPackage(project, { time, name, size: [px.w, px.h], samples: SAMPLE_PRESETS.find((p) => p.id === samples)?.samples });
+      const res = await blenderPackage(project, { time, name, ground, brightness, size: [px.w, px.h], samples: SAMPLE_PRESETS.find((p) => p.id === samples)?.samples });
       saveBlob(new Blob([res.zip], { type: 'application/zip' }), `${name}-blender.zip`);
       onDone?.(`Blender: ${res.meshes.toLocaleString('it-IT')} oggetti, ${res.lights} luci, ${res.cameras} camere in un solo ZIP`);
     } catch (e) {
@@ -66,7 +69,7 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
       abort.current = new AbortController();
       setProgress(0);
       const img = await houseImage(project, {
-        width: px.w, height: px.h, view, time, background: bg, lowWalls, quality, roof: !!roofOn,
+        width: px.w, height: px.h, view, time, background: bg, lowWalls, quality, roof: !!roofOn, ground, brightness,
         samples: SAMPLE_PRESETS.find((p) => p.id === samples)?.samples, onProgress: setProgress, signal: abort.current.signal,
       });
       if (!img) throw new Error('niente da disegnare');
@@ -122,6 +125,18 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
         <span>Sfondo</span>
         <select value={bg} onChange={(e) => setBg(e.target.value)} aria-label="Sfondo del render">
           {BACKGROUNDS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+        </select>
+      </label>
+      <label>
+        <span>Terreno</span>
+        <select value={ground} onChange={(e) => setGround(e.target.value)} aria-label="Terreno del render">
+          {GROUNDS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+        </select>
+      </label>
+      <label>
+        <span>Luminosità</span>
+        <select value={brightness} onChange={(e) => setBrightness(e.target.value)} aria-label="Luminosità del render">
+          {BRIGHTNESS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
         </select>
       </label>
       <label>

@@ -75,8 +75,11 @@ function porch(THREE, group, wood, roofColor, plan, y0) {
   const { width: W, length: L } = plan.dimensions;
   const vertical = door.rot === 90;
   const side = vertical ? (door.x < W / 2 ? 'W' : 'E') : (door.y < L / 2 ? 'N' : 'S');
-  const along = vertical ? door.y + door.w / 2 : door.x + door.w / 2;
-  const pw = Math.max(2.8, door.w + 1.6);
+  const wallLen = vertical ? L : W;
+  // il portico sta dentro la facciata (e quindi dentro il giardino, che parte dagli spigoli della casa): si restringe e si sposta verso l'interno se il portoncino è vicino all'angolo
+  const pw = Math.max(Math.min(Math.max(2.8, door.w + 1.6), wallLen - 0.3), Math.min(door.w + 0.6, wallLen - 0.3));
+  const margin = 0.15;
+  const along = Math.max(pw / 2 + margin, Math.min(wallLen - pw / 2 - margin, vertical ? door.y + door.w / 2 : door.x + door.w / 2));
   const D = 1.8;
   const g = new THREE.Group();                    // locale: fuori = +z, lungo il muro = x
   const post = woodMat(THREE, '#6b4a2e');
