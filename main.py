@@ -151,6 +151,7 @@ class Room(BaseModel):
     size: str = ""          # camere: "double" (matrimoniale) | "single"
     poly: Optional[List[List[float]]] = None   # contorno libero (schizzi): se presente vale questo, non il rettangolo
     label: Optional[List[float]] = None        # dove scrivere il nome, se non è il centro del riquadro
+    base: Optional[List[float]] = None         # stanza con un lato ad arco: il rettangolo prima dell'arco [x, y, w, h], dove si mettono gli arredi
 
 
 class Wall(BaseModel):

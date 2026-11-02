@@ -2,6 +2,7 @@
 disegnato in modi diversi, per provare che l'importazione DXF dia sempre la stessa pianta.
 """
 import io
+import math
 
 import ezdxf
 
@@ -83,3 +84,46 @@ def build(style, door_style='arc', win_style='lines', sym_layer=None):
         msp.add_blockref('W140', (4.0, 4.1), dxfattribs={'layer': sym_layer or 'A-GLAZ'})
     s = io.StringIO(); doc.write(s); return s.getvalue()
 
+
+
+def build_curved(partial=False, inward=False, win_on_arc=True):
+    """L'appartamento di build() con la facciata sud ad arco: faccia esterna e interna come archi concentrici (freccia 1 m sulla
+    corda di 6,4 m; con partial solo sul tratto da 1,2 a 5,2 m), una finestra come arco di vetro sul layer dei serramenti."""
+    doc = ezdxf.new('R2018'); doc.header['$INSUNITS'] = 6
+    msp = doc.modelspace()
+    for n in ('A-WALL', 'A-DOOR', 'A-GLAZ'):
+        doc.layers.add(n)
+    wall = {'layer': 'A-WALL'}
+
+    def pair(x0, y0, x1, y1):
+        if (x1 - x0) >= (y1 - y0):
+            msp.add_line((x0, y0), (x1, y0), dxfattribs=wall); msp.add_line((x0, y1), (x1, y1), dxfattribs=wall)
+        else:
+            msp.add_line((x0, y0), (x0, y1), dxfattribs=wall); msp.add_line((x1, y0), (x1, y1), dxfattribs=wall)
+    # nord con finestra, ovest, est, tramezzo con porta interna
+    for r in [(-0.1, 4.1, 4.0, 4.3), (5.4, 4.1, 6.3, 4.3), (-0.1, 0.1, 0.1, 4.1), (6.1, 0.1, 6.3, 4.1), (3.5, 0.1, 3.7, 1.0), (3.5, 1.9, 3.7, 4.1)]:
+        pair(*r)
+    for y in (4.15, 4.2, 4.25):
+        msp.add_line((4.0, y), (5.4, y), dxfattribs={'layer': 'A-GLAZ'})
+    msp.add_arc((3.6, 1.45 - 0.45), 0.9, 0, 90, dxfattribs={'layer': 'A-DOOR'})
+    # sud: archi concentrici (faccia esterna R, interna R - 0,2); corda a y = -0.1 (faccia esterna), freccia verso -y (sud)
+    lo, hi = (1.2, 5.2) if partial else (-0.1, 6.3)
+    chord, bulge = hi - lo, 1.0
+    if inward:
+        bulge = -1.0
+    R = (chord ** 2 / 4 + bulge ** 2) / (2 * abs(bulge))
+    cx, cy = (lo + hi) / 2, -0.1 - abs(bulge) + R if not inward else -0.1 + abs(bulge) - R
+    half = math.degrees(math.asin(chord / (2 * R)))
+    a0, a1 = ((-90 - half) % 360, (-90 + half) % 360) if not inward else ((90 - half) % 360, (90 + half) % 360)
+    for rr in (R, R - 0.2):
+        msp.add_arc((cx, cy), rr, a0, a1, dxfattribs=wall)
+    if partial:
+        # il resto della facciata: muro dritto a destra e a sinistra del tratto curvo
+        pair(-0.1, -0.1, lo, 0.1); pair(hi, -0.1, 6.3, 0.1)
+    if win_on_arc:
+        g0 = (-90 - 14) % 360 + (0 if not partial else 0)
+        for rr in (R - 0.05, R - 0.1, R - 0.15):
+            msp.add_arc((cx, cy), rr, (-90 - 14) % 360, (-90 + 14) % 360, dxfattribs={'layer': 'A-GLAZ'})
+    # ingresso sull'ovest? niente: un varco nel muro est come porta d'ingresso con anta ad arco
+    msp.add_arc((6.1, 2.5), 0.9, 90, 180, dxfattribs={'layer': 'A-DOOR'})
+    s = io.StringIO(); doc.write(s); return s.getvalue()

@@ -868,14 +868,23 @@ def _drop_adjacent_thin(walls):
 def _join_lines(lines, gap=0.12):
     """Linee dello stesso asse (±5 mm) spezzate da un muro che le attraversa (≤ gap): una linea sola, così la coppia di
     facce del muro si abbina per tutta la lunghezza."""
-    lines = sorted(lines)
-    out = []
-    for c, a, b in lines:
-        if out and abs(out[-1][0] - c) <= 0.005 and a - out[-1][2] <= gap:
-            out[-1][2] = max(out[-1][2], b)
+    groups = []   # [asse, [(da, a)]]: gli assi si raggruppano prima di ordinare (differenze di arrotondamento non devono mescolare i tratti)
+    for c, a, b in sorted(lines):
+        g = next((g for g in groups if abs(g[0] - c) <= 0.005), None)
+        if g is None:
+            groups.append([c, [(a, b)]])
         else:
-            out.append([c, a, b])
-    return [tuple(x) for x in out]
+            g[1].append((a, b))
+    out = []
+    for c, spans in groups:
+        cur = None
+        for a, b in sorted(spans):
+            if cur and a - cur[1] <= gap:
+                cur[1] = max(cur[1], b)
+            else:
+                cur = [a, b]
+                out.append((c, cur))
+    return [(c, cur[0], cur[1]) for c, cur in out]
 
 
 def _glazed_gaps(segs, k, hwalls, vwalls, box):
@@ -973,6 +982,64 @@ def _balcony_rect(segs, k, box, rooms):
         if r[2] - r[0] >= 1.0 and r[3] - r[1] >= 0.6 and (best is None or along * depth > best[0]):
             best = (along * depth, r)
     return best[1] if best else None
+
+
+def _facade_arcs(arcs, k):
+    """Facciate ad arco: archi di muro (o coppie di archi concentrici, faccia esterna e interna) con la corda orizzontale o
+    verticale, lunga almeno 2 m e con una freccia di almeno 25 cm. Si raddrizzano: al posto dell'arco, due muri dritti lungo la
+    corda (con lo stesso spessore), così la pianta si ricostruisce come una pianta rettangolare; l'arco si rimette dopo
+    (curves.bow_facade). Gli archi di vetro concentrici (finestre curve) diventano linee di vetro sulla corda.
+    Ritorna ([segmenti dritti (unità del disegno)], [facciate {axis, c, lo, hi, bulge, dir, t}] in metri)."""
+    cands = []
+    for cx, cy, r, a0, a1, role in arcs:
+        rm = r * k
+        sweep = (a1 - a0) % 360
+        if role not in ("wall", "window") or rm < 1.5 or not 6 <= sweep <= 175:
+            continue
+        half = math.radians(sweep / 2)
+        chord, bulge = 2 * rm * math.sin(half), rm * (1 - math.cos(half))
+        # i muri curvi sono lunghi e sporgono; il vetro di una finestra curva può essere corto e quasi piatto
+        if (chord < 2.0 or bulge < 0.25) if role == "wall" else chord < 0.4:
+            continue
+        p0 = (cx * k + rm * math.cos(math.radians(a0)), cy * k + rm * math.sin(math.radians(a0)))
+        p1 = (cx * k + rm * math.cos(math.radians(a1)), cy * k + rm * math.sin(math.radians(a1)))
+        mid = math.radians(a0 + sweep / 2)
+        m = (cx * k + rm * math.cos(mid), cy * k + rm * math.sin(mid))
+        if abs(p0[1] - p1[1]) <= 0.1 * chord:
+            axis, c, lo, hi, d = "h", (p0[1] + p1[1]) / 2, min(p0[0], p1[0]), max(p0[0], p1[0]), 1 if m[1] > (p0[1] + p1[1]) / 2 else -1
+        elif abs(p0[0] - p1[0]) <= 0.1 * chord:
+            axis, c, lo, hi, d = "v", (p0[0] + p1[0]) / 2, min(p0[1], p1[1]), max(p0[1], p1[1]), 1 if m[0] > (p0[0] + p1[0]) / 2 else -1
+        else:
+            continue
+        cands.append({"cx": cx * k, "cy": cy * k, "r": rm, "a0": a0, "sweep": sweep, "role": role, "axis": axis, "c": c,
+                      "lo": lo, "hi": hi, "dir": d, "bulge": bulge})
+    walls = [c for c in cands if c["role"] == "wall"]
+    used, facades, segs = set(), [], []
+    for i, a in sorted(enumerate(walls), key=lambda ia: -ia[1]["r"]):
+        if i in used:
+            continue
+        # la faccia interna: stesso centro e stessa apertura, raggio più piccolo di uno spessore
+        inner = next((j for j, b in enumerate(walls) if j not in used and j != i and abs(b["cx"] - a["cx"]) < 0.03 and abs(b["cy"] - a["cy"]) < 0.03
+                      and T_MIN <= a["r"] - b["r"] <= T_MAX and abs(b["sweep"] - a["sweep"]) < 6), None)
+        t = (a["r"] - walls[inner]["r"]) if inner is not None else 0.2
+        used.add(i)
+        if inner is not None:
+            used.add(inner)
+        d = a["dir"]
+        c_in = a["c"] - d * t   # la faccia interna sta verso il centro, cioè dalla parte opposta alla freccia
+        for cc in (a["c"], c_in):
+            segs.append((a["lo"], cc, a["hi"], cc) if a["axis"] == "h" else (cc, a["lo"], cc, a["hi"]))
+        facades.append({"axis": a["axis"], "c": a["c"], "lo": a["lo"], "hi": a["hi"], "bulge": a["bulge"], "dir": d, "t": t,
+                        "cx": a["cx"], "cy": a["cy"], "r_in": a["r"] - t, "r_out": a["r"]})
+    # archi di vetro concentrici: linee di vetro sulla corda, a metà spessore
+    glass = []
+    for g in (c for c in cands if c["role"] == "window"):
+        f = next((f for f in facades if abs(f["cx"] - g["cx"]) < 0.05 and abs(f["cy"] - g["cy"]) < 0.05
+                  and f["r_in"] - 0.2 <= g["r"] <= f["r_out"] + 0.2), None)
+        if f:
+            cc = f["c"] - f["dir"] * f["t"] / 2
+            glass.append((g["lo"], cc, g["hi"], cc) if g["axis"] == "h" else (cc, g["lo"], cc, g["hi"]))
+    return segs, glass, facades
 
 
 def _corner_doors(arcs, k, hwalls, vwalls, known):
@@ -1215,6 +1282,10 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
         return None
     segs, arcs, texts, boxes, units, doc = data
     k = _scale(units, segs)
+    # facciate ad arco: si raddrizzano sulla corda e si rimettono dopo
+    arc_segs, arc_glass, facades = _facade_arcs(arcs, k) if not scan else ([], [], [])
+    segs = segs + [(x0 / k, y0 / k, x1 / k, y1 / k, "wall") for x0, y0, x1, y1 in arc_segs] \
+        + [(x0 / k, y0 / k, x1 / k, y1 / k, "window") for x0, y0, x1, y1 in arc_glass]
     roles = {"wall"} if any(s[4] == "wall" for s in segs) else {"wall", "other"}
     # l'anta di una porta va dal centro dell'arco (cardine) a uno dei suoi estremi: non è un muro.
     # Indice dei cardini a celle di ~1 m, così ogni linea si confronta solo con gli archi vicini.
@@ -1517,6 +1588,11 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
     L = RY1 - min(r[1] for r in rooms)
     lay = Layout(round(W, 3), round(L, 3))
     lay.shape = "rect"
+    # facciate ad arco da rimettere dopo la serializzazione: coordinate del layout (origine in alto a sinistra, y verso il basso)
+    lay.options["bows"] = [
+        ({"axis": "h", "c": RY1 - f["c"], "lo": f["lo"] - RX0, "hi": f["hi"] - RX0, "bulge": f["bulge"], "out": -f["dir"]} if f["axis"] == "h"
+         else {"axis": "v", "c": f["c"] - RX0, "lo": RY1 - f["hi"], "hi": RY1 - f["lo"], "bulge": f["bulge"], "out": f["dir"]})
+        for f in facades]
     counts: Dict[str, int] = {}
     group_room: Dict[int, int] = {}
     outside = guessed = 0

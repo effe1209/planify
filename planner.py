@@ -4378,7 +4378,9 @@ def layout_from_plan(plan: dict) -> Layout:
     lay = Layout(dims["width"], dims["length"])
     lay.room_type = plan.get("roomType", "") or ""
     for r in plan["rooms"]:
-        rect = Rect(float(r["x"]), float(r["y"]), float(r["w"]), float(r["h"]))
+        # stanza con un lato ad arco: si arreda la parte rettangolare (`base`), l'arco aggiunge solo spazio libero
+        bx, by, bw, bh = r["base"] if r.get("base") else (r["x"], r["y"], r["w"], r["h"])
+        rect = Rect(float(bx), float(by), float(bw), float(bh))
         room = Room(int(r["id"]), r.get("name", ""), r.get("kind", "living"), rect, int(r.get("zone") or r["id"]),
                     bool(r.get("master")), r.get("size") or "")
         lay.rooms.append(room)
@@ -4389,12 +4391,13 @@ def layout_from_plan(plan: dict) -> Layout:
         if room and c:
             room.stair = {"type": st["type"], "entry": st.get("entry", "S"), "hand": st.get("hand", "W"),
                           "core": Rect(float(c["x"]), float(c["y"]), float(c["w"]), float(c["h"]))}
+    straight = lambda o: abs(o.get("rot", 0)) < 0.01 or abs(o.get("rot", 0) - 90) < 0.01   # le aperture sull'arco non sono su un muro dritto
     for d in plan.get("doors") or []:
-        o = _opening_from_plan(lay, d, True)
+        o = _opening_from_plan(lay, d, True) if straight(d) else None
         if o:
             lay.doors.append(o)
     for w in plan.get("windows") or []:
-        o = _opening_from_plan(lay, w, False)
+        o = _opening_from_plan(lay, w, False) if straight(w) else None
         if o:
             lay.windows.append(o)
     return lay
@@ -4427,6 +4430,30 @@ def furnish_plan(plan: dict, style: str = "modern", room_ids: Optional[List[int]
     }
 
 
+def _import_bows(plan: dict, bows: List[dict]) -> None:
+    """Facciate ad arco di un DXF importato: la pianta è stata ricostruita con la facciata dritta sulla corda, ora si rimette l'arco."""
+    from curves import bow_facade
+    W, L = plan["dimensions"]["width"], plan["dimensions"]["length"]
+    t = plan["wallThickness"] / plan["scale"]
+    done = False
+    for b in bows:
+        near = 0.35 + t
+        if b["axis"] == "h":
+            side = "N" if b["out"] < 0 and abs(b["c"]) <= near else "S" if b["out"] > 0 and abs(b["c"] - L) <= near else None
+            span = W
+        else:
+            side = "W" if b["out"] < 0 and abs(b["c"]) <= near else "E" if b["out"] > 0 and abs(b["c"] - W) <= near else None
+            span = L
+        if not side:
+            plan["notes"] = list(plan.get("notes") or []) + [
+                "Un muro curvo del disegno non sta su un lato esterno della pianta o si incurva verso l'interno: importato dritto."]
+            continue
+        if done:
+            continue   # una facciata ad arco per pianta
+        bow_facade(plan, side, b["bulge"], a0=max(0.0, b["lo"]), a1=min(span, b["hi"]))
+        done = bool(plan.get("curve"))
+
+
 class DxfNotRecognised(ValueError):
     """Il DXF non contiene muri né locali riconoscibili."""
 
@@ -4453,6 +4480,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
             if furnished:
                 furnish(lay)
             plan = serialize(lay, palette, random.randrange(1, 1_000_000))
+            _import_bows(plan, lay.options.get("bows") or [])
             # i pezzi senza nome di un locale a L / T hanno il colore del locale a cui appartengono
             main = {r["zone"]: r for r in plan["rooms"] if r["name"]}
             for r in plan["rooms"]:

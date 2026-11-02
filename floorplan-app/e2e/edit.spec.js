@@ -959,3 +959,21 @@ test('gli angoli arrotondati si scelgono nel modulo e la pianta ha i contorni ad
   expect(rotated).toBeGreaterThan(4);
   expect(errors).toEqual([]);
 });
+
+test('un DXF con la facciata ad arco si importa con il muro curvo, in pianta e in 3D', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/facciata_curva.dxf'));
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Facciata sud ad arco/)).toBeVisible();
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const tilted = await page.evaluate(() => {
+    let n = 0;
+    window.__planify3d.model.traverse((o) => { if (o.isMesh && o.userData.layer === 'MURI' && Math.abs(o.rotation.y) > 0.02 && Math.abs(Math.abs(o.rotation.y) - Math.PI / 2) > 0.02) n++; });
+    return n;
+  });
+  expect(tilted).toBeGreaterThan(10);
+  expect(errors).toEqual([]);
+});

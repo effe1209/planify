@@ -138,6 +138,7 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False, a0: Opti
         poly = [[round(p[0], 3), round(p[1], 3)] for p in base] + arc
         xs, ys = [p[0] for p in poly], [p[1] for p in poly]
         r["label"] = [round(x + w / 2, 3), round(y + h / 2, 3)]
+        r.setdefault("base", [x, y, w, h])
         r["poly"] = poly
         r["x"], r["y"] = round(min(xs), 3), round(min(ys), 3)
         r["w"], r["h"] = round(max(xs) - min(xs), 3), round(max(ys) - min(ys), 3)
@@ -307,6 +308,7 @@ def round_corners(plan: dict, radius: float) -> dict:
         new_pts = pts[:i] + arc(r) + pts[i + 1:]
         if not room.get("poly"):
             room["label"] = [round(room["x"] + room["w"] / 2, 3), round(room["y"] + room["h"] / 2, 3)]
+        room.setdefault("base", [room["x"], room["y"], room["w"], room["h"]])
         room["poly"] = new_pts
         room["area"] = round(_area(new_pts), 2)
         # muri che arrivano all'angolo: si accorciano di r
