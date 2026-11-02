@@ -378,6 +378,10 @@ test('il pannello Render salva un PNG dall\'interno di un locale e porta la tele
   const panel = page.getByRole('complementary', { name: 'Render' });
   await expect(panel).toBeVisible();
   const view = panel.getByLabel('Inquadratura del render');
+  // terreno e luminosità: scelte nel pannello, di partenza «Orizzonte infinito» e «Naturale»
+  await expect(panel.getByLabel('Terreno del render')).toHaveValue('horizon');
+  await expect(panel.getByLabel('Luminosità del render')).toHaveValue('natural');
+  await expect(panel.getByLabel('Terreno del render').locator('option')).toHaveCount(4);
   await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
   const before = await page.evaluate(() => window.__planify3d.camera.position.toArray());
   await view.selectOption({ label: process.env.RVIEW || 'Interno: Soggiorno' });

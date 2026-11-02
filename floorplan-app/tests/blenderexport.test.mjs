@@ -9,6 +9,10 @@ assert.match(day, /LAMPADE_ACCESE = False/);
 assert.match(day, /"CAM_TRE-QUARTI"/);
 assert.match(day, /ORTOGRAFICHE = \{[^\n]*\n    "CAM_PIANTA-3D-DALL-ALTO": 17\.778,/);   // 10 m × 16:9
 assert.match(day, /hide_render = dall_alto/);
+assert.match(day, /LUMINOSITA = "naturale"/);
+assert.ok(day.includes('def auto_esposizione(cam):') && day.includes('    auto_esposizione(c)\n'));
+assert.match(blenderScript({ glbName: 'casa.glb', time: 'noon', views, brightness: 'dim' }), /LUMINOSITA = "scura"/);
+assert.match(blenderScript({ glbName: 'casa.glb', time: 'noon', views, brightness: 'bright' }), /LUMINOSITA = "chiara"/);
 assert.ok(day.includes("re.search(r'_K(\\d+)', o.name)"));   // potenza relativa delle luci dal nome
 assert.match(day, /'TRAVI'/);
 assert.match(day, /"CAM_INTERNO-SOGGIORNO"/);

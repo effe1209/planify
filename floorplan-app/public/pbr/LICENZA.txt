@@ -1,3 +1,3 @@
 Texture PBR (colore, normale, rugosità) da ambientCG (https://ambientcg.com), licenza CC0 1.0: uso libero, anche commerciale.
-WoodFloor051 (plank), WoodFloor064 (herringbone), Concrete034, PaintedPlaster017, Tiles141, Marble012, RoofingTiles014A, Travertine009.
+WoodFloor051 (plank), WoodFloor064 (herringbone), Concrete034, PaintedPlaster017, Tiles141, Marble012, RoofingTiles014A, Travertine009, Planks037A (assi per pareti in legno), Fabric066 (tessuto).
 Ridotte a JPEG 1K (qualità 78). Nessuna attribuzione obbligatoria; si cita volentieri.

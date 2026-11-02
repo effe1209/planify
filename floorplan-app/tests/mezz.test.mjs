@@ -83,3 +83,14 @@ console.log('mezz ok');
   assert.equal(back.plan.rooms[1].x, 8.4);
   console.log('mezz muro sotto ok');
 }
+
+// il solaio e il parapetto del soppalco non arrivano a filo della facciata: finiscono dentro lo spessore dei muri esterni
+{
+  const g = buildScene(THREE, { ...plan, scale: 50, wallThickness: 10, walls: [{ x: 0, y: 0, w: 12, h: 0.2 }, { x: 0, y: 7.8, w: 12, h: 0.2 }, { x: 11.8, y: 0, w: 0.2, h: 8 }] }, THEMES.modern);
+  const box = new THREE.Box3();
+  let n = 0;
+  g.traverse((o) => { if (o.isMesh && (o.userData.layer === 'SOLAI' || o.userData.layer === 'RINGHIERE')) { box.expandByObject(o); n++; } });
+  assert.ok(n >= 3);
+  assert.ok(box.max.x <= 12 - 0.09 && box.min.z >= 0.09 && box.max.z <= 8 - 0.09, `soppalco fuori dal muro: ${JSON.stringify([box.min, box.max])}`);
+  console.log('mezz facciata ok');
+}

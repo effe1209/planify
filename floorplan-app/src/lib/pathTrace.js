@@ -175,6 +175,10 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   renderer.setPixelRatio(1);
   renderer.setSize(width, height, false);
   preparePathTraceScene(THREE, built.model);
+  // il terreno del render in tempo reale sfuma ai bordi con una mappa di trasparenza; il path tracing non la usa: disco pieno
+  scene.getObjectByName('TERRENO')?.traverse((o) => {
+    if (o.isMesh && o.material?.alphaMap) { o.material.alphaMap = null; o.material.transparent = false; o.material.depthWrite = true; o.material.needsUpdate = true; }
+  });
 
   // cielo come ambiente: più azzurro in alto, terreno chiaro in basso; di sera è scuro
   const sky = new GradientEquirectTexture(32);

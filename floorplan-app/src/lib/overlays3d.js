@@ -8,7 +8,7 @@ import { aimDevice, reachAt, sensorModel } from './coverage';
 import { KINDS } from './electric';
 import { WALL_H } from './scene3d';
 import { styleKit } from './style3d';
-import { localSize } from './furniture3d';
+import { decorFor } from './decor';
 
 const deg = Math.PI / 180;
 const MAX_REAL_LIGHTS = 10;   // luci puntuali vere: le altre restano bagliori emissivi (iPad e telefono)
@@ -222,22 +222,15 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         const hit = snap(p.x, p.y, 0.2);
         if (hit && hit.nx * nx + hit.nz * nz > 0.5) { px = hit.x; pz = hit.z; }
       }
-      // applique del bagno: centrata sopra lo specchio del lavabo sullo stesso muro (non spostata di lato e storta rispetto alla barra luce)
+      // applique del bagno: centrata sopra lo specchio (stessa mezzeria della cornice disegnata) sul muro dove sta, non spostata di lato
       let sconceH = null;
       if (k === 'light_wall' && (nx || nz)) {
         const rk0 = plan.rooms.find((r) => r.id === p.room)?.kind;
         if (rk0 === 'bath' || rk0 === 'wc') {
-          const FV = { S: [0, 1], N: [0, -1], E: [1, 0], W: [-1, 0] };
-          const sink = (plan.furniture || []).find((it) => {
-            if (it.type !== 'sink' || it.room !== p.room) return false;
-            const f = FV[it.facing || 'S'];
-            if (!f || f[0] * nx + f[1] * nz < 0.5) return false;
-            const [lw, ld] = localSize(it);
-            return Math.abs((nx ? (nx > 0 ? it.x : it.x + lw) : (nz > 0 ? it.y : it.y + ld)) - (nx ? px : pz)) < 0.5;
-          });
-          if (sink) {
-            const [lw, ld] = localSize(sink);
-            if (nx) pz = sink.y + ld / 2; else px = sink.x + lw / 2;
+          const mirror = decorFor(plan).find((d) => d.kind === 'mirror' && !d.elev === !p.elev && Math.abs(d.nx - nx) < 0.5 && Math.abs(d.ny - nz) < 0.5
+            && Math.abs((d.x - px) * d.nx + (d.y - pz) * d.ny) < 0.5 && Math.abs((d.x - px) * d.ux + (d.y - pz) * d.uy) < 1.6);
+          if (mirror) {
+            if (nx) pz = mirror.y; else px = mirror.x;
             sconceH = 2.05;   // sopra la barra luce dello specchio
           }
         }
@@ -288,7 +281,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
           }
           const fl = p.ceil ?? WALL_H;   // sotto il soppalco il soffitto è il suo solaio
           at(g, p.x, fl, p.y, G('lights'));
-          lightsSeen.push({ x: p.x, y: y + fl - 0.4, z: p.y, g: G('lights'), room: p.room, plan });
+          lightsSeen.push({ x: p.x, y: y + fl - 0.55, z: p.y, g: G('lights'), room: p.room, plan });
           continue;
         }
         g.name = 'LAMPADARIO';

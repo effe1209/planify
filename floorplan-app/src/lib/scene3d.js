@@ -68,6 +68,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   M.wall = K.wallIn;
   M.wood.userData.pbr = 'plank';          // il legno degli arredi e del soppalco: nel render diventa legno vero con venature
   M.wood.userData.pbrTint = theme.wood;
+  for (const k of ['fabric', 'duvet', 'accent']) { M[k].userData.pbr = 'fabric'; M[k].userData.pbrTint = k === 'duvet' ? theme.duvet : k === 'accent' ? (theme.accent || '#4f6d8f') : theme.fabric; }
   // categoria di materiale: nel DXF 3D ogni pezzo di un arredo va sul layer del suo materiale
   const CATS = { wood: 'LEGNO', fabric: 'TESSUTO', duvet: 'TESSUTO', cabinet: 'LACCATO', counter: 'PIANO', dark: 'PLASTICA', ceramic: 'CERAMICA',
     lamp: 'LUCE', plant: 'VEGETAZIONE', car: 'CARROZZERIA', metal: 'METALLO', stone: 'PIETRA', glass: 'VETRO', accent: 'TESSUTO' };
@@ -287,6 +288,8 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
 
   // tende alle finestre (sempre aperte, raccolte ai lati) e specchi con la luce sopra il lavabo
   const curtainMat = mat(theme.curtain || '#ebe4d6', { roughness: 1 });
+  curtainMat.userData.pbr = 'fabric'; curtainMat.userData.pbrTint = theme.curtain || '#ebe4d6';
+  rugMat.userData.pbr = 'fabric'; rugMat.userData.pbrTint = theme.rug || '#e6ebf2';
   const mirrorMat = mat('#dbe8f1', { roughness: 0.04, metalness: 0.85 });
   const frameMat = mat('#2b3038', { roughness: 0.6 });
   const mz0 = plan.mezzanine;
@@ -428,7 +431,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     ...(mz ? [{ ...mz.stair, id: 'mezzanine', type: 'straight' }] : [])];
   if (mz) {
     const mzFrom = root.children.length;
-    buildMezzanine(THREE, root, mz, M, K, theme, box, planDims);
+    buildMezzanine(THREE, root, mz, M, K, theme, box, { ...planDims, half: t / 2 });
     for (let i = mzFrom; i < root.children.length; i++) root.children[i].userData.mezz = true;
   }
   const stepMat = new THREE.MeshStandardMaterial({ color: theme.wood || '#cdb89a', roughness: 0.7 });
@@ -455,7 +458,10 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
 /* Soppalco del loft: solaio, parapetto (vetro e corrimano) sui lati aperti con il varco della scala. */
 function buildMezzanine(THREE, root, mz, M, K, theme, box, dims) {
   const e = mz.elev;
-  const slab = box(mz.x, mz.y, mz.w, mz.h, e - mz.slab, mz.slab, M.wood);
+  // solaio e parapetto finiscono a metà dello spessore dei muri esterni: a filo della facciata si vedrebbero come righe sul muro (z-fighting)
+  const hf = dims.half ?? 0.1;
+  const ins = { x0: mz.x <= 0.01 ? hf : 0, x1: mz.x + mz.w >= dims.width - 0.01 ? hf : 0, y0: mz.y <= 0.01 ? hf : 0, y1: mz.y + mz.h >= dims.length - 0.01 ? hf : 0 };
+  const slab = box(mz.x + ins.x0, mz.y + ins.y0, mz.w - ins.x0 - ins.x1, mz.h - ins.y0 - ins.y1, e - mz.slab, mz.slab, M.wood);
   if (slab) slab.userData.layer = 'SOLAI';
   const gap = { x0: mz.stair.x, x1: mz.stair.x + mz.stair.w, y0: mz.stair.y, y1: mz.stair.y + mz.stair.h };
   const rail = (x, z, w, d) => {
@@ -483,8 +489,8 @@ function buildMezzanine(THREE, root, mz, M, K, theme, box, dims) {
   for (const side of mz.open) {
     const vertical = side === 'W' || side === 'E';
     const at = side === 'W' ? mz.x : side === 'E' ? mz.x + mz.w : side === 'N' ? mz.y : mz.y + mz.h;
-    const a = vertical ? mz.y : mz.x;
-    const b = vertical ? mz.y + mz.h : mz.x + mz.w;
+    const a = vertical ? mz.y + ins.y0 : mz.x + ins.x0;
+    const b = vertical ? mz.y + mz.h - ins.y1 : mz.x + mz.w - ins.x1;
     // il varco: dove la rampa arriva su questo lato
     const g0 = vertical ? gap.y0 : gap.x0;
     const g1 = vertical ? gap.y1 : gap.x1;

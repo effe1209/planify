@@ -13,7 +13,7 @@ const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, 
 const py = (s) => JSON.stringify(String(s));   // una stringa JSON è una stringa Python valida
 
 /* Lo script Python (Blender 3.6 e successivi). Solo testo: si prova senza Blender. */
-export function blenderScript({ glbName, time, north = 0, views, size = [1920, 1080], samples = 256, hdriName = '' }) {
+export function blenderScript({ glbName, time, north = 0, views, size = [1920, 1080], samples = 256, hdriName = '', brightness = 'natural' }) {
   const t = timeById(time);
   const az = (t.az + north) % 360;
   const camName = (v) => `CAM_${slug(v.label).toUpperCase()}`;
@@ -44,6 +44,9 @@ LAMPADE_ACCESE = ${t.lamps ? 'True' : 'False'}   # accese al tramonto e di sera
 POTENZA_LAMPADA_W = 60
 RISOLUZIONE = (${size[0]}, ${size[1]})
 CAMPIONI = ${samples}
+LUMINOSITA = ${py({ dim: 'scura', bright: 'chiara' }[brightness] || 'naturale')}   # scura | naturale | chiara: la luminosità a cui punta l'esposizione di ogni camera
+ESPOSIZIONE_AUTO = True   # prima di ogni render una prova veloce regola l'esposizione (stanze piccole e grandi escono simili)
+LUM_OBIETTIVO = {'scura': 0.30, 'naturale': 0.40, 'chiara': 0.52}
 RENDER_TUTTE = 'tutte' in sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else False
 HDRI = ${py(hdriName)}       # cielo vero (se il file è accanto allo script)
 CAMERE = [
@@ -105,10 +108,11 @@ for o in bpy.data.objects:
         # potenza relativa dal nome (LUCE_PUNTUALE_K085 = 0,85): la luce segue la superficie del locale, né bruciata né spenta
         m = re.search(r'_K(\\d+)', o.name)
         k = int(m.group(1)) / 100 if m else 1.0
-        o.data.energy = POTENZA_LAMPADA_W * 4 * k if LAMPADE_ACCESE else 0
+        # di giorno restano accese a bassa potenza: una luce di riempimento (bagni e locali senza finestre grandi non restano al buio)
+        o.data.energy = POTENZA_LAMPADA_W * 4 * k * (1.0 if LAMPADE_ACCESE else 0.3)
         o.data.color = (1.0, 0.85, 0.63)
-        o.data.shadow_soft_size = 0.15
-        o.hide_render = not LAMPADE_ACCESE
+        o.data.shadow_soft_size = 0.3
+        o.hide_render = False
 
 # vetri: vetro vero (rifrazione), non un riquadro semitrasparente
 vetro = bpy.data.materials.new('Vetro')
@@ -177,6 +181,34 @@ def tetto():
 
 ROOF = tetto()
 
+def luminosita_media(cam):
+    # prova veloce a bassa risoluzione e pochi campioni: luminosità mediana dell'immagine, come la vedrà chi guarda
+    r = scene.render
+    salva = (r.resolution_percentage, r.filepath, scene.cycles.samples, scene.cycles.use_denoising, scene.camera)
+    r.resolution_percentage = 20
+    scene.cycles.samples = 6
+    scene.cycles.use_denoising = False
+    scene.camera = cam
+    tmp = os.path.join(bpy.app.tempdir, 'planify_prova.png')
+    r.filepath = tmp
+    bpy.ops.render.render(write_still=True)
+    r.resolution_percentage, r.filepath, scene.cycles.samples, scene.cycles.use_denoising, scene.camera = salva
+    img = bpy.data.images.load(tmp)
+    img.colorspace_settings.name = 'Non-Color'
+    px = img.pixels[:]
+    lum = sorted(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] for i in range(0, len(px), 16))
+    bpy.data.images.remove(img)
+    return lum[len(lum) // 2]
+
+def auto_esposizione(cam):
+    if not ESPOSIZIONE_AUTO:
+        return
+    obiettivo = LUM_OBIETTIVO.get(LUMINOSITA, 0.40)
+    scene.view_settings.exposure = 0.0
+    for _ in range(2):
+        m = max(luminosita_media(cam), 0.02)
+        scene.view_settings.exposure = max(-3.0, min(2.5, scene.view_settings.exposure + 2.2 * math.log2(obiettivo / m) * 0.8))
+
 def prepara(c):
     # dall'alto tetto, soffitti e travi coprirebbero tutta la casa: si tolgono e la camera diventa ortografica (nessuna prospettiva)
     dall_alto = c.name in ORTOGRAFICHE
@@ -188,6 +220,7 @@ def prepara(c):
         c.data.ortho_scale = ORTOGRAFICHE[c.name]
         c.data.sensor_fit = 'HORIZONTAL'
         c.data.clip_end = max(c.data.clip_end, 1000)
+    auto_esposizione(c)
 
 if scene.camera:
     prepara(scene.camera)
@@ -275,11 +308,11 @@ Per cambiare ora del giorno, risoluzione o numero di campioni modifica le prime 
 }
 
 /* ZIP completo: { zip: Uint8Array, name, lights, meshes } */
-export async function blenderPackage(project, { time = 'afternoon', name = project?.name || 'planimetria', size = [1920, 1080], samples = 256 } = {}) {
+export async function blenderPackage(project, { time = 'afternoon', name = project?.name || 'planimetria', size = [1920, 1080], samples = 256, ground = 'horizon', brightness = 'natural' } = {}) {
   const THREE = await import('three');
   const { sceneToGlb } = await import('./glb');
   const { buildRenderScene } = await import('./renderScene');
-  const built = buildRenderScene(THREE, project, { time, background: 'white', roof: true });
+  const built = buildRenderScene(THREE, project, { time, background: 'white', roof: true, ground });
   if (!built) throw new Error('niente da esportare');
   try { const { upgradeMaterials } = await import('./pbr'); await upgradeMaterials(THREE, built.model, { aniso: 8 }); } catch { /* restano le texture disegnate */ }
   const { scene, bounds } = built;
@@ -313,7 +346,7 @@ export async function blenderPackage(project, { time = 'afternoon', name = proje
   } catch { /* senza file il cielo resta a tinta unita */ }
   const zip = zipStore([
     { name: `${base}.glb`, data: new Uint8Array(res.buffer) },
-    { name: `${base}_blender.py`, data: blenderScript({ glbName: `${base}.glb`, time, north: project.north || 0, views, size, samples, hdriName: hdr ? 'cielo.hdr' : '' }) },
+    { name: `${base}_blender.py`, data: blenderScript({ glbName: `${base}.glb`, time, north: project.north || 0, views, size, samples, hdriName: hdr ? 'cielo.hdr' : '', brightness }) },
     ...(hdr ? [{ name: 'cielo.hdr', data: hdr }] : []),
     { name: 'RENDER.command', data: launcherMac(base), mode: 0o755 },
     { name: 'RENDER.bat', data: launcherWin(base) },
