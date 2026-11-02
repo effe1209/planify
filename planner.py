@@ -4367,6 +4367,10 @@ def furnish_plan(plan: dict, style: str = "modern", room_ids: Optional[List[int]
     }
 
 
+class DxfNotRecognised(ValueError):
+    """Il DXF non contiene muri né locali riconoscibili."""
+
+
 def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True) -> dict:
     """Importa le stanze (polilinee chiuse) da un DXF e le arreda.
 
@@ -4398,9 +4402,17 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
     polys = tagged or [p for l, p in polys if not l.strip().lower().startswith(_OTHER_LAYERS)]
     pts = [p for poly in polys for p in poly]
     if not pts:
-        plan = generate(10.0, 8.0, "apartment", 3, style)
-        plan["notes"] = ["Nessuna polilinea chiusa nel DXF: generata una pianta di esempio."] + plan["notes"]
-        return plan
+        # mai una pianta inventata: chi importa un disegno vuole il suo, non uno di esempio
+        try:
+            from dxf_import import layer_report
+            found = layer_report(dxf_content)
+        except Exception:  # noqa: BLE001
+            found = ""
+        raise DxfNotRecognised(
+            "Nel DXF non ho riconosciuto né i muri né i contorni dei locali, quindi non importo nulla"
+            + (f". Layer trovati: {found}" if found else "")
+            + ". Servono i muri su un layer chiamato come «Muri» (a doppia linea o con il riempimento), oppure i locali come "
+              "polilinee chiuse; in alternativa carica il PDF della pianta o usa «Disegna schizzo».")
 
     min_x, max_x = min(p[0] for p in pts), max(p[0] for p in pts)
     min_y, max_y = min(p[1] for p in pts), max(p[1] for p in pts)

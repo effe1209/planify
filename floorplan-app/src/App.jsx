@@ -1276,7 +1276,9 @@ export default function App() {
         if (base) {
           try {
             data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style, furnish: false }));
-          } catch {
+          } catch (err) {
+            // il motore ha letto il file e lo rifiuta (422): si dice perché, senza ripiegare su una pianta inventata
+            if (/^HTTP 4\d\d/.test(err.message)) throw new Error(err.message.replace(/^HTTP 4\d\d - /, ''));
             /* motore non raggiungibile: si prosegue in locale */
           }
         }
