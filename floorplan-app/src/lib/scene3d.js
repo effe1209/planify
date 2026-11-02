@@ -7,6 +7,7 @@ import { frontOf } from './project';
 import { rugsFor } from './rugs';
 import { decorFor } from './decor';
 import { slideDoor } from './mezz';
+import { balconyRailings } from './balcony';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -194,6 +195,22 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       cur = Math.max(cur, c.b);
     }
     if (cur < a1) seg(cur, a1, 0, wh);
+  }
+
+  // parapetto di vetro dei balconi: lastre tra i montanti, corrimano in alto
+  for (const rl of balconyRailings(plan)) {
+    const horiz = rl.y1 === rl.y2;
+    const len = horiz ? rl.x2 - rl.x1 : rl.y2 - rl.y1;
+    const t = 0.04;
+    const at = (a, b, y0, h, m) => (horiz ? box(rl.x1 + a, rl.y1 - t / 2, b - a, t, y0, h, m) : box(rl.x1 - t / 2, rl.y1 + a, t, b - a, y0, h, m));
+    const posts = Math.max(1, Math.round(len / 1.4));
+    at(0.03, len - 0.03, 0.08, 0.92, M.glass);
+    at(0, len, 1.0, 0.05, M.metal);
+    at(0, len, 0.0, 0.08, M.metal);
+    for (let i = 0; i <= posts; i++) {
+      const p0 = Math.min(len - 0.05, Math.max(0, (len * i) / posts - 0.025));
+      at(p0, p0 + 0.05, 0.0, 1.05, M.metal);
+    }
   }
 
   // infissi e porte nei colori dello stile: telaio e traversa centrale, davanzale, anta socchiusa con maniglia
@@ -618,7 +635,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     ceilMat.userData.pbrTint = '#f4f2ee';
     const yTop = quota(top.level) + (top.plan.height || WALL_H);
     for (const r of top.plan.rooms) {
-      if (r.kind === 'garden') continue;
+      if (r.kind === 'garden' || r.kind === 'balcony') continue;
       const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
       const c = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z)))), ceilMat);
       c.rotation.x = Math.PI / 2;   // la faccia guarda in basso

@@ -113,15 +113,25 @@ def test_walls_only_as_fill_glazed_facade_and_corner_door():
     """monolocale_campito.dxf (in metri): muri solo come riempimento pieno e linee a pezzi, la facciata nord fatta di soli
     serramenti e porte, le porte come archi sul layer degli arredi, la porta del bagno all'angolo, nessun testo."""
     plan = _load("monolocale_campito.dxf")
-    assert abs(plan["dimensions"]["width"] - 4.2) <= 0.06 and abs(plan["dimensions"]["length"] - 5.05) <= 0.1
+    assert abs(plan["dimensions"]["width"] - 4.2) <= 0.06 and abs(plan["dimensions"]["length"] - 6.7) <= 0.1   # 5,05 m di casa + 1,65 m di balcone
     rooms = {r["name"]: r for r in plan["rooms"] if r["name"]}
-    assert set(rooms) == {"Camera", "Bagno"} or set(rooms) == {"Camera Matrimoniale", "Bagno"}
+    assert set(rooms) == {"Camera", "Bagno", "Balcone"} or set(rooms) == {"Camera Matrimoniale", "Bagno", "Balcone"}
     bath = rooms["Bagno"]
     assert 1.9 <= bath["w"] <= 2.3 and 2.2 <= bath["h"] <= 2.6          # il bagno del disegno, 2,1 × 2,3 m a muri finiti
     assert any("campiture" in n for n in plan["notes"])
+    # il balcone di vetro davanti alla facciata nord: un locale esterno, senza muri attorno
+    balcony = next(r for r in plan["rooms"] if r["kind"] == "balcony")
+    assert balcony["name"] == "Balcone" and 3.9 <= balcony["w"] <= 4.4 and 1.4 <= balcony["h"] <= 1.9 and balcony["y"] == 0
+    house_top = min(r["y"] for r in plan["rooms"] if r["kind"] != "balcony")
+    assert abs(balcony["y"] + balcony["h"] - house_top) <= 0.01             # appoggiato alla casa
+    assert not any(w["y"] < balcony["y"] + balcony["h"] - 0.2 for w in plan["walls"])   # nessun muro attorno al balcone
     entrances = [d for d in plan["doors"] if d["entrance"]]
-    assert len(entrances) == 2                                           # ingresso a sud e porta a nord
-    assert len([d for d in plan["doors"] if not d["entrance"]]) == 1     # porta del bagno, tra due locali
+    assert len(entrances) == 1                                           # ingresso a sud; la porta a nord dà sul balcone
+    inner = [d for d in plan["doors"] if not d["entrance"]]
+    assert len(inner) == 2                                               # porta del bagno e porta sul balcone
+    bath_door = next(d for d in inner if d["rot"] == 90)
+    assert 2.0 <= bath_door["x"] <= 2.5                                  # sul lato destro del bagno (muro verticale), non sopra
+    assert any(d["rot"] == 0 and d["y"] <= balcony["y"] + balcony["h"] + 0.2 and d["w"] > 1.5 for d in inner)   # la porta a nord dà sul balcone
     assert len(plan["windows"]) == 1                                     # la finestra a nord
     assert any("nome dedotto dagli arredi" in n for n in plan["notes"])  # wc e bidet dicono che è il bagno
 

@@ -72,12 +72,13 @@ PALETTES = {
 for _p in PALETTES.values():
     _p.setdefault("garage", "#eceef1")
     _p.setdefault("garden", "#e3efd9")
+    _p.setdefault("balcony", "#e6ecef")
 KIND_GROUP = {"living": "living", "living_kitchen": "living", "zone_day": "living", "kitchen": "kitchen",
               "bed": "bed", "zone_night": "bed", "bath": "bath", "wc": "bath", "corridor": "corridor",
               "office_open": "office", "meeting": "meeting", "director": "meeting", "study": "study",
               "hotel_room": "living", "closet": "bed", "storage": "corridor", "entry": "corridor",
               "dining": "living", "garage": "garage", "laundry": "bath", "garden": "garden",
-              "stairs": "corridor"}
+              "stairs": "corridor", "balcony": "balcony"}
 
 
 def snap(v: float, step: float = 0.05) -> float:
@@ -454,18 +455,20 @@ class Layout:
 def build_walls(lay: Layout) -> List[Tuple[float, float, float, float]]:
     xs = sorted({round(v, 3) for r in lay.rooms for v in (r.rect.x, r.rect.x2)})
     ys = sorted({round(v, 3) for r in lay.rooms for v in (r.rect.y, r.rect.y2)})
+    # il balcone è aperto sull'esterno (ha il parapetto, non i muri): il suo muro è solo quello verso la casa
+    bal = {r.group for r in lay.rooms if r.kind == "balcony"}
     hs, vs = [], []
     for y in ys:
         for i in range(len(xs) - 1):
             xm = (xs[i] + xs[i + 1]) / 2
             a, b = lay.group_at(xm, y - 0.01), lay.group_at(xm, y + 0.01)
-            if a != b:
+            if a != b and not ((a in bal and b is None) or (b in bal and a is None)):
                 hs.append((y, xs[i], xs[i + 1], a is None or b is None))
     for x in xs:
         for j in range(len(ys) - 1):
             ym = (ys[j] + ys[j + 1]) / 2
             a, b = lay.group_at(x - 0.01, ym), lay.group_at(x + 0.01, ym)
-            if a != b:
+            if a != b and not ((a in bal and b is None) or (b in bal and a is None)):
                 vs.append((x, ys[j], ys[j + 1], a is None or b is None))
 
     def merge(segs):
@@ -4416,7 +4419,7 @@ class DxfNotRecognised(ValueError):
     """Il DXF non contiene muri né locali riconoscibili."""
 
 
-def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True) -> dict:
+def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True, layer_roles: Optional[dict] = None) -> dict:
     """Importa le stanze (polilinee chiuse) da un DXF e le arreda.
 
     Unità riconosciute: m, cm, mm. Se il file ha un layer delle stanze (AREE/ROOMS/STANZE) si usa
@@ -4430,7 +4433,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
         # disegno di studio (muri a doppia linea, porte, finestre, testi): pianta ricostruita dal disegno
         try:
             from dxf_import import import_real_dxf
-            lay = import_real_dxf(dxf_content, Layout, Opening, snap)
+            lay = import_real_dxf(dxf_content, Layout, Opening, snap, layer_roles=layer_roles)
         except Exception as e:  # noqa: BLE001 - si ripiega sull'importazione per polilinee
             lay = None
             print(f"import DXF reale non riuscito: {e}")
@@ -4456,8 +4459,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
         raise DxfNotRecognised(
             "Nel DXF non ho riconosciuto né i muri né i contorni dei locali, quindi non importo nulla"
             + (f". Layer trovati: {found}" if found else "")
-            + ". Servono i muri su un layer chiamato come «Muri» (a doppia linea o con il riempimento), oppure i locali come "
-              "polilinee chiuse; in alternativa carica il PDF della pianta o usa «Disegna schizzo».")
+            + ". Scegli tu quali layer sono i muri dalla finestra che si apre, oppure carica il PDF della pianta o usa «Disegna schizzo».")
 
     min_x, max_x = min(p[0] for p in pts), max(p[0] for p in pts)
     min_y, max_y = min(p[1] for p in pts), max(p[1] for p in pts)

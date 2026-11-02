@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler, Wand2 } from 'lucide-react';
+import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler, Wand2, Hand, ZoomIn, ZoomOut, ScanSearch } from 'lucide-react';
 import { ROOM_KINDS, ROOM_KIND_NAME, roomColor } from '../constants';
 import * as G from '../lib/geometry';
 import { CORRECTIONS, boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
 import { fmt, newId, storage } from '../lib/utils';
 import { wandRoom } from '../lib/wand';
 
-const PX = 40; // pixel per metro: un quadretto grande = 1 m
+const PX = 40; // pixel per metro a zoom 1: un quadretto grande = 1 m
+const Z_MIN = 0.05;
+const Z_MAX = 8;
+const clampZ = (z) => Math.max(Z_MIN, Math.min(Z_MAX, z));
 const SKETCH_KINDS = ROOM_KINDS.filter((k) => k.id !== 'hotel_room');
 
 const TOOLS = [
@@ -35,9 +38,11 @@ function sharedWalls(shapes) {
 
 const WAND_TOOL = { id: 'wand', label: 'Bacchetta', Icon: Wand2, hint: 'Clicca dentro un locale della pianta: trova i muri da sola e disegna la stanza. Se una porta aperta lascia passare, riprova da un altro punto o usa il rettangolo.' };
 
+const PAN_TOOL = { id: 'pan', label: 'Mano', Icon: Hand, hint: 'Trascina per spostare la vista; rotellina o pulsanti per ingrandire. Anche con il tasto centrale del mouse.' };
+
 const BG_TOOLS = [
   { id: 'bg', label: 'Sposta sfondo', Icon: FileImage, hint: 'Trascina la pianta di sfondo per metterla sotto la griglia; poi ricalca le stanze.' },
-  { id: 'cal', label: 'Misura nota', Icon: Ruler, hint: 'Traccia una linea su una misura che conosci (una quota, un muro) e scrivi quanto è lunga: lo sfondo va in scala.' },
+  { id: 'cal', label: 'Misura nota', Icon: Ruler, hint: 'Traccia una linea su una misura che conosci (una quota, un muro) e scrivi quanto è lunga: lo sfondo va in scala e la vista si adatta.' },
 ];
 
 /*
@@ -52,6 +57,9 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
   const [kind, setKind] = useState('living');
   const [correction, setCorrection] = useState(() => storage.get('planify.sketchCorrection', 'auto'));
   const [selectedId, setSelectedId] = useState(null);
+  const [view, setView] = useState({ z: 1, x: 0, y: 0 });   // zoom e scorrimento della vista (pixel dello schermo)
+  const areaRef = useRef(null);
+  const contentRef = useRef(null);   // dove sta il disegno sul foglio (frazioni 0..1 della pagina), se si è potuto misurare
   const [draft, setDraftState] = useState(null);
   const [msg, setMsg] = useState(null);
   const svgRef = useRef(null);
@@ -104,11 +112,83 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const tools = background ? [WAND_TOOL, ...TOOLS, ...BG_TOOLS] : TOOLS;
+  const tools = background ? [WAND_TOOL, ...TOOLS, PAN_TOOL, ...BG_TOOLS] : [...TOOLS, PAN_TOOL];
+
+  /* Adatta la vista al disegno (la parte scura della pagina, se misurata; altrimenti tutto il foglio) o, senza sfondo, alle stanze. */
+  const fitView = (b = bg, box = null) => {
+    const el = areaRef.current;
+    if (!el) return;
+    const { width: W, height: H } = el.getBoundingClientRect();
+    if (W < 50 || H < 50) return;
+    let r = box;   // { x0, y0, x1, y1 } in metri
+    if (!r && background && b) {
+      const c = contentRef.current || { x0: 0, y0: 0, x1: 1, y1: 1 };
+      const pw = background.paper[0] * b.scale;
+      const ph = background.paper[1] * b.scale;
+      r = { x0: b.x + c.x0 * pw, y0: b.y + c.y0 * ph, x1: b.x + c.x1 * pw, y1: b.y + c.y1 * ph };
+    }
+    if (!r && shapes.length) {
+      const bb = G.bounds(shapes.flatMap((sh) => sh.poly));
+      r = { x0: bb.x, y0: bb.y, x1: bb.x + bb.w, y1: bb.y + bb.h };
+    }
+    if (!r) { setView({ z: 1, x: 0, y: 0 }); return; }
+    const mw = Math.max(1, r.x1 - r.x0);
+    const mh = Math.max(1, r.y1 - r.y0);
+    const z = clampZ(Math.min((W - 60) / (mw * PX), (H - 60) / (mh * PX)));
+    setView({ z, x: W / 2 - z * PX * (r.x0 + mw / 2), y: H / 2 - z * PX * (r.y0 + mh / 2) });
+  };
+  const zoomBy = (f, cx, cy) => setView((v) => {
+    const el = areaRef.current;
+    const rect = el?.getBoundingClientRect();
+    const px = cx ?? (rect ? rect.width / 2 : 0);
+    const py = cy ?? (rect ? rect.height / 2 : 0);
+    const z = clampZ(v.z * f);
+    const k = z / v.z;
+    return { z, x: px - (px - v.x) * k, y: py - (py - v.y) * k };
+  });
+  // rotellina (o pizzico del trackpad): zoom attorno al puntatore; listener non passivo per fermare lo scorrimento della pagina
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      zoomBy(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps -- zoomBy usa solo lo stato funzionale
+  // all'apertura (e al cambio di pagina) si misura dove sta il disegno sul foglio e si adatta la vista
+  useEffect(() => {
+    if (!background) { fitView(null); return undefined; }
+    let alive = true;
+    contentRef.current = null;
+    fitView();
+    loadGray().then((g) => {
+      if (!alive) return;
+      // parte «scura» della pagina tra il 1° e il 99° percentile delle righe e delle colonne: esclude margini e cornice
+      const rows = new Float64Array(g.h);
+      const cols = new Float64Array(g.w);
+      for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) if (g.gray[j * g.w + i] < 150) { rows[j]++; cols[i]++; }
+      const pct = (arr, q) => {
+        const tot = arr.reduce((a, b) => a + b, 0);
+        if (!tot) return null;
+        let acc = 0;
+        for (let i = 0; i < arr.length; i++) { acc += arr[i]; if (acc >= tot * q) return i / arr.length; }
+        return 1;
+      };
+      const x0 = pct(cols, 0.01), x1 = pct(cols, 0.99), y0 = pct(rows, 0.01), y1 = pct(rows, 0.99);
+      if (x0 != null && x1 - x0 > 0.15 && y1 - y0 > 0.15) {
+        contentRef.current = { x0, y0, x1, y1 };
+        fitView();
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [background?.url]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // la pagina del PDF come mappa di grigi, per la bacchetta magica (si carica al primo clic)
   const grayRef = useRef(null);
-  const loadGray = async () => {
+  async function loadGray() {
     if (grayRef.current?.key === background.url) return grayRef.current;
     const img = new Image();
     img.src = background.url;
@@ -126,7 +206,7 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
     for (let i = 0; i < gray.length; i++) gray[i] = (data[i * 4] * 299 + data[i * 4 + 1] * 587 + data[i * 4 + 2] * 114) / 1000;
     grayRef.current = { key: background.url, w, h, gray };
     return grayRef.current;
-  };
+  }
   const wand = async (p) => {
     say('Cerco i muri del locale…');
     try {
@@ -160,7 +240,7 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
 
   const toMeters = (e) => {
     const r = svgRef.current.getBoundingClientRect();
-    return [(e.clientX - r.left) / PX, (e.clientY - r.top) / PX];
+    return [(e.clientX - r.left - view.x) / (view.z * PX), (e.clientY - r.top - view.y) / (view.z * PX)];
   };
 
   const addShape = (poly) => {
@@ -175,11 +255,16 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
   };
 
   const onPointerDown = (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 && e.button !== 1) return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* puntatore non catturabile (es. già rilasciato): si continua senza cattura */
+    }
+    if (e.button === 1 || tool === 'pan') {
+      e.preventDefault();
+      setDraft({ type: 'pan', sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y });
+      return;
     }
     const p = toMeters(e);
     if (tool === 'wand') {
@@ -202,6 +287,11 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
 
   const onPointerMove = (e) => {
     if (!draftRef.current) return;
+    if (draftRef.current.type === 'pan') {
+      const d = draftRef.current;
+      setView((v) => ({ ...v, x: d.ox + e.clientX - d.sx, y: d.oy + e.clientY - d.sy }));
+      return;
+    }
     const p = toMeters(e);
     if (draftRef.current.type === 'cal') {
       setDraft((d) => ({ ...d, b: p }));
@@ -228,7 +318,7 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
   const onPointerUp = () => {
     const d = draftRef.current;
     setDraft(null);
-    if (!d || d.type === 'bg') return;
+    if (!d || d.type === 'bg' || d.type === 'pan') return;
     if (d.type === 'cal') {
       // misura nota: lo sfondo si riscala attorno al punto di partenza della linea
       const drawn = G.dist(d.a, d.b);
@@ -236,9 +326,11 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
       const real = parseFloat(String(window.prompt(`Quanto è lunga davvero questa misura? (in metri; ora è ${fmt(drawn)} m)`, fmt(drawn)) || '').replace(',', '.'));
       if (!(real > 0)) return;
       const f = real / drawn;
-      setBg((b) => ({ ...b, scale: Math.round(b.scale * f * 10) / 10, x: d.a[0] - (d.a[0] - b.x) * f, y: d.a[1] - (d.a[1] - b.y) * f }));
+      const next = { ...bg, scale: Math.round(bg.scale * f * 10) / 10, x: d.a[0] - (d.a[0] - bg.x) * f, y: d.a[1] - (d.a[1] - bg.y) * f };
+      setBg(next);
       say(`Sfondo in scala: ${fmt(drawn)} m → ${fmt(real)} m`, 'ok');
       setTool('box');
+      fitView(next);
       return;
     }
     if (d.type === 'box') {
@@ -327,7 +419,11 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
           )}
           <label className="pf-sketch-bg-field">scala 1:
             <input type="number" min="10" max="1000" step="5" value={bg.scale} aria-label="Scala del disegno"
-              onChange={(e) => setBg((b) => ({ ...b, scale: Math.max(10, Number(e.target.value) || 100) }))} />
+              onChange={(e) => {
+                const next = { ...bg, scale: Math.max(10, Number(e.target.value) || 100) };
+                setBg(next);
+                fitView(next);
+              }} />
           </label>
           <label className="pf-sketch-bg-field">trasparenza
             <input type="range" min="0.1" max="1" step="0.05" value={bg.opacity} aria-label="Trasparenza dello sfondo"
@@ -349,7 +445,13 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
         </div>
       )}
 
-      <div className="pf-sketch-canvas-area">
+      <div className="pf-sketch-canvas-area" ref={areaRef}>
+        <div className="pf-sketch-zoom" role="group" aria-label="Zoom della vista" onPointerDown={(e) => e.stopPropagation()}>
+          <button type="button" onClick={() => zoomBy(1.4)} aria-label="Ingrandisci lo schizzo" title="Ingrandisci"><ZoomIn size={15} /></button>
+          <button type="button" onClick={() => zoomBy(1 / 1.4)} aria-label="Riduci lo schizzo" title="Riduci"><ZoomOut size={15} /></button>
+          <button type="button" onClick={() => fitView()} aria-label="Adatta lo schizzo alla finestra" title="Adatta la vista al disegno"><ScanSearch size={15} /></button>
+          <span aria-live="polite">{Math.round(view.z * 100)}%</span>
+        </div>
         <svg
           ref={svgRef}
           className="pf-sketch-svg"
@@ -357,22 +459,24 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={() => setDraft(null)}
-          style={{ cursor: tool === 'select' ? 'default' : tool === 'bg' ? 'move' : 'crosshair' }}
+          style={{ cursor: tool === 'select' ? 'default' : tool === 'bg' ? 'move' : tool === 'pan' ? (draft?.type === 'pan' ? 'grabbing' : 'grab') : 'crosshair' }}
         >
           <defs>
             <pattern id="sketch-grid-minor" width={PX / 4} height={PX / 4} patternUnits="userSpaceOnUse">
               <path d={`M ${PX / 4} 0 L 0 0 0 ${PX / 4}`} fill="none" stroke="currentColor" strokeOpacity="0.05" />
             </pattern>
-            <pattern id="sketch-grid" width={PX} height={PX} patternUnits="userSpaceOnUse">
+            <pattern id="sketch-grid" width={PX} height={PX} patternUnits="userSpaceOnUse"
+              patternTransform={`translate(${view.x} ${view.y}) scale(${view.z})`}>
               <rect width={PX} height={PX} fill="url(#sketch-grid-minor)" />
               <path d={`M ${PX} 0 L 0 0 0 ${PX}`} fill="none" stroke="currentColor" strokeOpacity="0.14" />
             </pattern>
           </defs>
+          <rect width="100%" height="100%" fill="url(#sketch-grid)" />
+          <g transform={`translate(${view.x} ${view.y}) scale(${view.z})`}>
           {background && bg?.show && (
             <image href={background.url} x={bg.x * PX} y={bg.y * PX} opacity={bg.opacity} preserveAspectRatio="none"
               width={background.paper[0] * bg.scale * PX} height={background.paper[1] * bg.scale * PX} />
           )}
-          <rect width="100%" height="100%" fill="url(#sketch-grid)" />
 
           {shapes.map((s) => {
             const poly = shownPoly(s);
@@ -394,8 +498,8 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
               className="pf-sketch-link" />
           ))}
 
-          {guides?.x != null && <line x1={guides.x * PX} y1="0" x2={guides.x * PX} y2="100%" className="pf-sketch-guide" />}
-          {guides?.y != null && <line x1="0" y1={guides.y * PX} x2="100%" y2={guides.y * PX} className="pf-sketch-guide" />}
+          {guides?.x != null && <line x1={guides.x * PX} y1={-1e5} x2={guides.x * PX} y2={1e5} className="pf-sketch-guide" />}
+          {guides?.y != null && <line x1={-1e5} y1={guides.y * PX} x2={1e5} y2={guides.y * PX} className="pf-sketch-guide" />}
 
           {boxPreview && (
             <g>
@@ -416,6 +520,7 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
           {draft?.type === 'pen' && (
             <polyline points={draft.pts.map(([x, y]) => `${x * PX},${y * PX}`).join(' ')} className="pf-sketch-stroke" />
           )}
+          </g>
         </svg>
 
         {selected && tool === 'select' && (
@@ -449,7 +554,7 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
         )}
 
         <div className="pf-sketch-foot">
-          <span className="pf-sketch-scale"><i /> 1 m</span>
+          <span className="pf-sketch-scale"><i style={{ width: PX * view.z }} /> 1 m</span>
           <span className={`pf-sketch-msg ${msg ? `is-${msg.tone}` : ''}`}>
             {msg?.text || activeTool.hint}
           </span>

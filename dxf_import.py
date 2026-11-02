@@ -89,7 +89,12 @@ def _plain(s: str) -> str:
 # ----------------------------------------------------------------------------
 # 1-2. lettura e ruoli
 # ----------------------------------------------------------------------------
-def _role(layer: str, block: str) -> str:
+ROLES = ("wall", "door", "window", "ignore", "other")
+
+
+def _role(layer: str, block: str, ov: Optional[Dict[str, str]] = None) -> str:
+    if ov and (layer or "") in ov and ov[layer] in ROLES:
+        return ov[layer]   # scelta dell'utente: vale più dei nomi
     # prima ciò che non è pianta (prospetti, sezioni, tetto…), poi porte e finestre, poi il resto da ignorare, poi i muri
     if HARD_IGNORE_RE.search(layer or ""):
         return "ignore"
@@ -123,7 +128,23 @@ def layer_report(text: str) -> str:
     return ", ".join(f"{name} {n}" for name, n in top)
 
 
-def _read(text: str, want_extra: bool = False):
+def layer_info(text: str) -> dict:
+    """Per la scelta dei layer: ogni layer con quanti elementi ha, il ruolo che l'importazione gli dà da sola e le sue linee
+    (al massimo 2500, per l'anteprima), più l'ingombro del disegno. {layers: [{name, n, role, segs}], bbox}."""
+    if ezdxf is None:
+        return {"layers": [], "bbox": None}
+    collect: dict = {}
+    data = _read(text, collect=collect)
+    if not data:
+        return {"layers": [], "bbox": None}
+    xs = [v for c in collect.values() for sg in c["segs"] for v in (sg[0], sg[2])]
+    ys = [v for c in collect.values() for sg in c["segs"] for v in (sg[1], sg[3])]
+    layers = [{"name": name, "n": c["n"], "role": c["role"], "segs": c["segs"]}
+              for name, c in sorted(collect.items(), key=lambda kv: -kv[1]["n"])]
+    return {"layers": layers, "bbox": [min(xs), min(ys), max(xs), max(ys)] if xs else None, "units": data[4]}
+
+
+def _read(text: str, want_extra: bool = False, ov: Optional[Dict[str, str]] = None, collect: Optional[dict] = None):
     """Elementi del disegno: segmenti, archi, testi (in unità del file), con il ruolo.
     want_extra: ritorna anche i riempimenti pieni (HATCH) e il documento ezdxf."""
     # lettura normale (veloce); quella di recupero solo per i file danneggiati
@@ -163,14 +184,35 @@ def _read(text: str, want_extra: bool = False):
             t = e.dxftype()
             lay = e.dxf.get("layer", "0")
             eff_layer = layer if (layer and lay == "0") else lay
-            role = _role(eff_layer, block)
+            role = _role(eff_layer, block, ov)
+            if collect is not None:
+                c = collect.setdefault(eff_layer, {"n": 0, "role": _role(eff_layer, block), "segs": []})
+                c["n"] += 1
+                if t == "LINE" and len(c["segs"]) < 2500:
+                    c["segs"].append((round(e.dxf.start.x, 3), round(e.dxf.start.y, 3), round(e.dxf.end.x, 3), round(e.dxf.end.y, 3)))
+                elif t in ("LWPOLYLINE", "POLYLINE") and len(c["segs"]) < 2500:
+                    try:
+                        pp = [(v[0], v[1]) for v in e.get_points("xy")] if t == "LWPOLYLINE" else [(v.dxf.location.x, v.dxf.location.y) for v in e.vertices]
+                        closed = bool(e.closed) if t == "LWPOLYLINE" else bool(e.is_closed)
+                        for i in range(len(pp) if closed else len(pp) - 1):
+                            a, b = pp[i], pp[(i + 1) % len(pp)]
+                            c["segs"].append((round(a[0], 3), round(a[1], 3), round(b[0], 3), round(b[1], 3)))
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif t == "ARC" and len(c["segs"]) < 2500:
+                    cc, r_ = e.dxf.center, e.dxf.radius
+                    for q in range(6):
+                        a0 = math.radians(e.dxf.start_angle + (((e.dxf.end_angle - e.dxf.start_angle) % 360) * q / 6))
+                        a1 = math.radians(e.dxf.start_angle + (((e.dxf.end_angle - e.dxf.start_angle) % 360) * (q + 1) / 6))
+                        c["segs"].append((round(cc.x + r_ * math.cos(a0), 3), round(cc.y + r_ * math.sin(a0), 3),
+                                          round(cc.x + r_ * math.cos(a1), 3), round(cc.y + r_ * math.sin(a1), 3)))
             try:
                 if t == "INSERT":
                     if depth > 4:
                         continue
                     name = e.dxf.name
                     sub = list(e.virtual_entities())
-                    r = _role(eff_layer, name)
+                    r = _role(eff_layer, name, ov)
                     if r in ("door", "window"):
                         xs, ys = [], []
                         for s in sub:
@@ -190,6 +232,11 @@ def _read(text: str, want_extra: bool = False):
                 elif t == "LINE":
                     s, f = e.dxf.start, e.dxf.end
                     segs.append((s.x, s.y, f.x, f.y, role))
+                elif t == "MLINE":
+                    # multilinea (muri a più linee parallele): ogni elemento è una linea
+                    for v in e.virtual_entities():
+                        if v.dxftype() == "LINE":
+                            segs.append((v.dxf.start.x, v.dxf.start.y, v.dxf.end.x, v.dxf.end.y, role))
                 elif t == "LWPOLYLINE":
                     poly_edges([(p[0], p[1], p[4]) for p in e.get_points("xyseb")], e.closed, role)
                 elif t == "POLYLINE" and not e.is_3d_polyline and not e.is_poly_face_mesh and not e.is_polygon_mesh:
@@ -455,9 +502,12 @@ def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool):
         cx, cy, r = cx * k, cy * k, r * k
         along, across = (cx, cy) if orient == "h" else (cy, cx)
         if not (abs(r - w) <= 0.2 * w + 0.05 or abs(r - w / 2) <= 0.12 * w + 0.05):
-            continue
-        if min(abs(along - g0), abs(along - g1)) > 0.3 or abs(across - c) > t / 2 + 0.3:
-            continue
+            # porta d'angolo: l'anta è più lunga del varco, ma il cardine dista dal suo centro quanto il raggio
+            if not (0.8 * w <= r <= 1.5 * w and abs(math.hypot(along - (g0 + g1) / 2, across - c) - r) <= 0.2):
+                continue
+        elif min(abs(along - g0), abs(along - g1)) > 0.3 or abs(across - c) > t / 2 + 0.3:
+            if not (0.8 * w <= r <= 1.5 * w and abs(math.hypot(along - (g0 + g1) / 2, across - c) - r) <= 0.2):
+                continue
         mid = math.radians((a0 + ((a1 - a0) % 360) / 2))
         my = (cy + r * math.sin(mid)) if orient == "h" else (cx + r * math.cos(mid))
         return "door", (1 if my > c else -1)
@@ -479,7 +529,8 @@ def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool):
         across = (p[1] + p[3]) / 2 if orient == "h" else (p[0] + p[2]) / 2
         if min(max(along), g1) - max(min(along), g0) >= w * 0.5 and abs(across - c) <= t / 2 + 0.1:
             return "window", 0
-    return ("window", 0) if exterior else ("passage", 0)
+    # nessun simbolo: un varco verso l'esterno è una finestra, ma solo per ipotesi (side 9: se manca un ingresso può essere la porta)
+    return ("window", 9) if exterior else ("passage", 0)
 
 
 # ----------------------------------------------------------------------------
@@ -626,7 +677,7 @@ def _drawings(hp, vp, texts_m):
 # ----------------------------------------------------------------------------
 # riempimenti (HATCH) come muri, serramenti come chiusura della facciata, arredi per i nomi
 # ----------------------------------------------------------------------------
-def _fill_paths(doc):
+def _fill_paths(doc, ov=None):
     """Contorni dei riempimenti pieni (HATCH solid) del disegno: lista di (layer, [percorsi]) in unità del disegno."""
     out = []
     for e in doc.modelspace().query("HATCH"):
@@ -634,7 +685,7 @@ def _fill_paths(doc):
             if not e.dxf.get("solid_fill", 0):
                 continue
             layer = e.dxf.get("layer", "0")
-            if HARD_IGNORE_RE.search(layer or ""):
+            if HARD_IGNORE_RE.search(layer or "") or (ov or {}).get(layer) in ("ignore", "door", "window"):
                 continue
             paths = []
             for pa in e.paths:
@@ -658,6 +709,39 @@ def _fill_paths(doc):
         except Exception:  # noqa: BLE001
             continue
     return out
+
+
+def _wide_pieces(doc, k, ov=None):
+    """Muri disegnati come polilinee con spessore (la linea è l'asse del muro, il «width» è lo spessore): tratti di muro
+    orizzontali e verticali (asse, inizio, fine, spessore) in metri, prolungati di mezzo spessore per riempire gli angoli."""
+    hp, vp = [], []
+    for e in doc.modelspace().query("LWPOLYLINE"):
+        try:
+            layer = e.dxf.get("layer", "0")
+            forced = (ov or {}).get(layer)
+            if forced in ("ignore", "door", "window", "other") or (forced != "wall" and (
+                    HARD_IGNORE_RE.search(layer or "") or IGNORE_RE.search(layer or "") or DOOR_RE.search(layer or "")
+                    or WINDOW_RE.search(layer or ""))):
+                continue
+            pts = list(e.get_points("xyseb"))
+            const = float(e.dxf.get("const_width", 0) or 0)
+            n = len(pts)
+            for i in range(n if e.closed else n - 1):
+                (x1, y1, w1, _, b), (x2, y2, _, _, _) = pts[i], pts[(i + 1) % n]
+                w = max(const, w1 or 0) * k
+                if abs(b) > 1e-6 or not T_MIN <= w <= T_MAX:
+                    continue
+                x1, y1, x2, y2 = x1 * k, y1 * k, x2 * k, y2 * k
+                dx, dy = x2 - x1, y2 - y1
+                if math.hypot(dx, dy) < PIECE_MIN:
+                    continue
+                if abs(dy) <= abs(dx) * math.tan(ANG):
+                    hp.append((round((y1 + y2) / 2, 3), round(min(x1, x2) - w / 2, 3), round(max(x1, x2) + w / 2, 3), round(w, 3)))
+                elif abs(dx) <= abs(dy) * math.tan(ANG):
+                    vp.append((round((x1 + x2) / 2, 3), round(min(y1, y2) - w / 2, 3), round(max(y1, y2) + w / 2, 3), round(w, 3)))
+        except Exception:  # noqa: BLE001
+            continue
+    return hp, vp
 
 
 def _bridge(pieces, gap=0.25):
@@ -762,6 +846,25 @@ def _uncovered(fill, pairs):
     return out
 
 
+def _drop_adjacent_thin(walls):
+    """Muri doppi: un tratto sottile (≤ 16 cm: cappotto, controparete, faccia isolante) accanto a un muro più spesso, o
+    dentro, che lo accompagna per almeno metà della sua lunghezza, non è un altro muro. {asse: [[da, a, spessore]]} → senza di loro."""
+    out = {}
+    for c, ivs in walls.items():
+        keep = []
+        for lo, hi, t in ivs:
+            thin = t <= 0.16
+            doubled = thin and any(
+                t2 > t + 0.02 and abs(c2 - c) <= (t + t2) / 2 + 0.12 and abs(c2 - c) > 1e-6
+                and min(hi, h2) - max(lo, l2) >= 0.5 * (hi - lo)
+                for c2, ivs2 in walls.items() for l2, h2, t2 in ivs2)
+            if not doubled:
+                keep.append([lo, hi, t])
+        if keep:
+            out[c] = keep
+    return out
+
+
 def _join_lines(lines, gap=0.12):
     """Linee dello stesso asse (±5 mm) spezzate da un muro che le attraversa (≤ gap): una linea sola, così la coppia di
     facce del muro si abbina per tutta la lunghezza."""
@@ -829,6 +932,49 @@ FIXTURE_WORDS = [
 ]
 
 
+def _balcony_rect(segs, k, box, rooms):
+    """Balcone o veranda aperta: coppie di linee di vetro (parapetto, montanti) fuori dal perimetro dei muri, appoggiate a un
+    lato della casa. Ritorna [x0, y0, x1, y1] in metri (y verso l'alto), con il lato interno sul bordo dei locali, o None."""
+    X0, X1, Y0, Y1 = box
+    rx0, rx1 = min(r[0] for r in rooms), max(r[2] for r in rooms)
+    ry0, ry1 = min(r[1] for r in rooms), max(r[3] for r in rooms)
+    beyond = {"N": [], "S": [], "E": [], "W": []}
+    for role in ("window", "door"):
+        hs, vs, _ = _axis_segments(segs, k, {role})
+        pieces = [(lo, c - t / 2, hi, c + t / 2) for c, lo, hi, t in _pair_walls(_join_lines(hs)) if t <= 0.3 and hi - lo >= 0.3] + \
+                 [(c - t / 2, lo, c + t / 2, hi) for c, lo, hi, t in _pair_walls(_join_lines(vs)) if t <= 0.3 and hi - lo >= 0.3]
+        for x0, y0, x1, y1 in pieces:
+            if y0 >= Y1 - 0.3:
+                beyond["N"].append((x0, y0, x1, y1))
+            if y1 <= Y0 + 0.3:
+                beyond["S"].append((x0, y0, x1, y1))
+            if x0 >= X1 - 0.3:
+                beyond["E"].append((x0, y0, x1, y1))
+            if x1 <= X0 + 0.3:
+                beyond["W"].append((x0, y0, x1, y1))
+    best = None
+    for side, ps in beyond.items():
+        if len(ps) < 2:
+            continue
+        bx0, by0 = min(q[0] for q in ps), min(q[1] for q in ps)
+        bx1, by1 = max(q[2] for q in ps), max(q[3] for q in ps)
+        along = (bx1 - bx0) if side in "NS" else (by1 - by0)
+        depth = (by1 - by0) if side in "NS" else (bx1 - bx0)
+        edge_gap = {"N": by0 - Y1, "S": Y0 - by1, "E": bx0 - X1, "W": X0 - bx1}[side]
+        if not (1.5 <= along <= 12 and 0.6 <= depth <= 4.5 and -0.4 <= edge_gap <= 0.6):
+            continue
+        near = lambda v, a, b: a if abs(v - a) <= 0.25 else b if abs(v - b) <= 0.25 else v
+        if side in "NS":
+            x0, x1 = near(bx0, rx0, rx1), near(bx1, rx1, rx0)
+            r = [x0, ry1, x1, by1] if side == "N" else [x0, by0, x1, ry0]
+        else:
+            y0, y1 = near(by0, ry0, ry1), near(by1, ry1, ry0)
+            r = [rx1, y0, bx1, y1] if side == "E" else [bx0, y0, rx0, y1]
+        if r[2] - r[0] >= 1.0 and r[3] - r[1] >= 0.6 and (best is None or along * depth > best[0]):
+            best = (along * depth, r)
+    return best[1] if best else None
+
+
 def _corner_doors(arcs, k, hwalls, vwalls, known):
     """Porte il cui cardine sta sulla fine di un muro e la cui anta, aperta, arriva alla fine di un altro muro senza che ci
     sia un muro perpendicolare a chiudere il varco (porta d'angolo: l'estremo dell'arco cade dentro lo spessore di un muro che
@@ -840,7 +986,7 @@ def _corner_doors(arcs, k, hwalls, vwalls, known):
                 for lo, hi, t in ivs:
                     along, across = (x, y) if orient == "h" else (y, x)
                     if abs(across - c) <= t / 2 + 0.15 and (abs(along - lo) <= 0.15 or abs(along - hi) <= 0.15):
-                        return orient, c, (lo if abs(along - lo) <= abs(along - hi) else hi), t
+                        return orient, c, (lo if abs(along - lo) <= abs(along - hi) else hi), t, (lo, hi)
         return None
 
     def on_wall(x, y):
@@ -861,20 +1007,33 @@ def _corner_doors(arcs, k, hwalls, vwalls, known):
         hinge = end_piece(hx, hy)
         if not hinge:
             continue
-        orient, c, end, t = hinge
+        orient, c, end, t, span = hinge
         for a in (a0, a1):
             ex, ey = hx + r * math.cos(math.radians(a)), hy + r * math.sin(math.radians(a))
-            if not on_wall(ex, ey) or end_piece(ex, ey) is None:
+            far = end_piece(ex, ey) if on_wall(ex, ey) else None
+            if far is None:
                 continue
-            e_along = ex if orient == "h" else ey
-            g0, g1 = sorted((end, e_along))
+            f_orient, f_c, f_end, f_t, f_span = far
+            if (f_orient, f_c, f_span) == (orient, c, span):
+                continue   # l'estremo dell'anta cade sullo stesso tratto del cardine: non c'è un varco ad angolo
+            if f_orient == orient:
+                # muri sulla stessa linea: il varco sta tra le due estremità
+                e_along = ex if orient == "h" else ey
+                g0, g1 = sorted((end, e_along))
+                gap = (orient, (c, g0, g1, t))
+                leg = ("v", (ex, min(ey, c), max(ey, c))) if orient == "h" else ("h", (ey, min(ex, c), max(ex, c)))
+            else:
+                # muri ad angolo: la porta si apre nel muro dell'estremo dell'anta (quello che finisce lì), dal suo ultimo tratto
+                # fino all'asse del muro del cardine; il muro del cardine si prolunga fino a quello per chiudere l'angolo
+                g0, g1 = sorted((f_end, c))
+                gap = (f_orient, (f_c, g0, g1, f_t))
+                lo_, hi_ = sorted((end, f_c))
+                leg = (orient, (c, lo_, hi_))
             if not OPEN_MIN <= g1 - g0 <= OPEN_MAX:
                 continue
-            if any(o == orient and abs(g[0] - c) <= 0.2 and min(g1, g[2]) - max(g0, g[1]) > 0.3 for o, g in known):
+            if any(o == gap[0] and abs(g[0] - gap[1][0]) <= 0.2 and min(g1, g[2]) - max(g0, g[1]) > 0.3 for o, g in known):
                 continue   # il varco c'è già
-            # la gamba che chiude l'angolo: dall'estremo dell'anta, perpendicolare, fino all'asse del muro del cardine
-            leg = ("v", (ex, min(ey, c), max(ey, c))) if orient == "h" else ("h", (ey, min(ex, c), max(ex, c)))
-            out.append((orient, (c, g0, g1, t), leg))
+            out.append((gap[0], gap[1], leg))
             break
     return out
 
@@ -1044,14 +1203,14 @@ def _drop_balconies(rooms):
     return [r for r in rooms if r[4] not in drop] if drop and len(drop) < len(groups) else rooms
 
 
-def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
+def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_roles: Optional[Dict[str, str]] = None):
     """DXF di studio → planner.Layout con stanze, porte e finestre (non arredato), o None.
 
     scan = linee ricavate da una scansione (planimetria catastale): i simboli di porte e finestre si leggono male,
     quindi ogni varco nei muri fino a 1,4 m chiude il locale (è una porta o una finestra)."""
     if ezdxf is None:
         return None
-    data = _read(text, want_extra=True)
+    data = _read(text, want_extra=True, ov=layer_roles)
     if not data:
         return None
     segs, arcs, texts, boxes, units, doc = data
@@ -1082,7 +1241,9 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     hp, hh = _split_infill(_pair_walls(hs))
     vp, vh = _split_infill(_pair_walls(vs))
     # muri campiti (riempimento pieno): le campiture sottili sono i muri anche dove le linee non si abbinano o mancano
-    fill_h, fill_v = _fill_pieces(_fill_paths(doc), k)
+    fill_h, fill_v = _fill_pieces(_fill_paths(doc, layer_roles), k)
+    wide_h, wide_v = _wide_pieces(doc, k, layer_roles)
+    fill_h, fill_v = fill_h + wide_h, fill_v + wide_v
     fill_h, fill_v = _uncovered(fill_h, hp), _uncovered(fill_v, vp)
     n_fill = len(fill_h) + len(fill_v)
     hp, vp = hp + fill_h, vp + fill_v
@@ -1135,6 +1296,7 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
         boxes.append(((c - t) / k, lo / k, (c + t) / k, hi / k, "window"))
     hwalls, vwalls = _merge([(c, lo, hi, t) for c, ivs in hwalls.items() for lo, hi, t in ivs]), \
         _merge([(c, lo, hi, t) for c, ivs in vwalls.items() for lo, hi, t in ivs])
+    hwalls, vwalls = _drop_adjacent_thin(hwalls), _drop_adjacent_thin(vwalls)
     n_pieces = sum(len(v) for v in hwalls.values()) + sum(len(v) for v in vwalls.values())
     if n_pieces < 4:
         return None
@@ -1226,7 +1388,18 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     # (es. verso il portico). Si chiudono anche quelle e si tengono le zone con un nome o già interne prima,
     # così i pezzi di giardino tra la casa e la recinzione non diventano locali.
     leaked = [p for p in named if grid.v[grid.ij(*p)[1] * grid.nx + grid.ij(*p)[0]] == 2]
-    if leaked and len(all_gaps) > len(gaps):
+    # senza nomi (o con nomi che non bastano): se chiudendo tutti i varchi si scoprono locali interi che con quelli aperti
+    # finivano nell'esterno (un varco largo, senza simbolo riconosciuto, verso fuori), i varchi verso l'esterno si chiudono
+    reveals = False
+    if not leaked and len(all_gaps) > len(gaps):
+        _, c_all = partition(all_gaps)
+        was_out = 0
+        for cell_list in c_all:
+            sample = cell_list[:: max(1, len(cell_list) // 100)]
+            if len(cell_list) * step * step >= 3.0 and sum(1 for i, j in sample if grid.v[j * grid.nx + i] == 2) > len(sample) * 0.5:
+                was_out += 1
+        reveals = was_out > 0
+    if (leaked or reveals) and len(all_gaps) > len(gaps):
         before = grid
 
         def keep_indoor(grid, comps2):
@@ -1242,6 +1415,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
             def indoor(c):
                 if c in with_name or not any(before.v[j * before.nx + i] == 2 for i, j in c[:: max(1, len(c) // 200)]):
                     return True
+                if not with_name:
+                    return len(c) * step * step >= 3.0   # disegno senza nomi: un locale intero ritrovato, non un pezzo di giardino
                 return box is not None and all(box[0] <= i <= box[2] and box[1] <= j <= box[3] for i, j in c)
             kept = [c for c in comps2 if indoor(c)]
             dropped = {grid.v[c[0][1] * grid.nx + c[0][0]] for c in comps2 if not indoor(c)}
@@ -1330,6 +1505,11 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     if scan:
         rooms = _drop_balconies(rooms)
 
+    # balcone / veranda aperta (vetro fuori dai muri): un locale esterno con il parapetto
+    balcony = None if scan else _balcony_rect(segs, k, (X0, X1, Y0, Y1), rooms)
+    if balcony:
+        rooms.append([*balcony, max(r[4] for r in rooms) + 1, ["\0balcone"], 0])
+
     # Layout del motore: origine in alto a sinistra, y verso il basso
     RX0 = min(r[0] for r in rooms)
     RY1 = max(r[3] for r in rooms)
@@ -1342,6 +1522,10 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     outside = guessed = 0
     for x0, y0, x1, y1, gid, inside, n in sorted(rooms, key=lambda r: (r[6], -(r[2] - r[0]) * (r[3] - r[1]))):
         area = (x1 - x0) * (y1 - y0)
+        if n == 0 and inside == ["\0balcone"]:
+            room = lay.add_room("Balcone", "balcony", x0 - RX0, RY1 - y1, x1 - RX0, RY1 - y0)
+            group_room[gid] = room.id
+            continue
         if n == 0:
             kind, name, named = _name_room(inside, area)
             guessed += not named
@@ -1384,6 +1568,16 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
         return near if abs(near - line) <= 0.2 else line
 
     n_doors = n_win = n_pass = 0
+    guessed_windows: List[tuple] = []   # finestre ipotizzate solo perché verso l'esterno e senza simbolo
+    placed: List[tuple] = []   # (orient, linea, da, a) delle aperture già create: due varchi sovrapposti sono la stessa apertura
+
+    def dup(orient, line, a, b):
+        for o2, l2, a2, b2 in placed:
+            if o2 == orient and abs(l2 - line) <= 0.2 and min(b, b2) - max(a, a2) >= 0.6 * min(b - a, b2 - a2):
+                return True
+        placed.append((orient, line, a, b))
+        return False
+
     for orient, (c, g0, g1, t) in gaps:
         if orient == "h":
             line, start = RY1 - c, g0 - RX0
@@ -1398,6 +1592,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
             continue
         if ra is not None and rb is not None and ra.group == rb.group:
             continue   # vano interno allo stesso locale
+        if dup(orient, line, start, start + (g1 - g0)):
+            continue
         exterior = ra is None or rb is None
         kind, side = _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, exterior)
         line = edge_line(orient, line)
@@ -1405,11 +1601,14 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
         start = round(start, 3)
         inner_room = ra or rb
         if kind == "window":
-            if not exterior:
+            if not exterior and not any(q is not None and q.kind == "balcony" for q in (ra, rb)):
                 kind = "passage"
             else:
-                lay.windows.append(Opening(orient, line, start, w, inner_room.id, None))
+                op = Opening(orient, line, start, w, inner_room.id, None)
+                lay.windows.append(op)
                 n_win += 1
+                if side == 9:
+                    guessed_windows.append((op, inner_room))
                 continue
         # porta (o passaggio senza anta, trattato come porta): verso l'anta → locale da quel lato
         a_id, b_id = (ra.id if ra else None), (rb.id if rb else None)
@@ -1432,6 +1631,19 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
 
     if not lay.rooms:
         return None
+    # nessun ingresso disegnato: tra i varchi verso l'esterno senza simbolo, quello largo come una porta (e vicino all'ingresso,
+    # al disimpegno o al soggiorno) è la porta di casa
+    if guessed_windows and not any(d.room_b is None for d in lay.doors):
+        rank = {"entry": 0, "corridor": 0, "living": 1, "living_kitchen": 1}
+        cands = [(rank.get(r.kind, 2), abs(op.w - 0.9), i) for i, (op, r) in enumerate(guessed_windows) if 0.75 <= op.w <= 1.25]
+        if cands:
+            op, r = guessed_windows[min(cands)[2]]
+            lay.windows.remove(op)
+            lay.doors.append(Opening(op.orient, op.line, op.start, op.w, r.id, None, r.id))
+            n_win -= 1
+            n_doors += 1
+            lay.notes.append("Nel disegno non c'è una porta d'ingresso: il varco verso l'esterno di "
+                             f"{op.w * 100:.0f} cm senza simbolo è stato trattato come ingresso.")
     thick = sorted(t for d in (hwalls, vwalls) for ivs in d.values() for _, _, t in ivs)
     msg = (f"Pianta importata dal DXF: {len(lay.rooms)} locali, {n_doors} porte"
            f"{f', {n_pass} passaggi' if n_pass else ''}, {n_win} finestre riconosciute dal disegno.")

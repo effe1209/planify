@@ -33,7 +33,7 @@ app = FastAPI(
 
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
-FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export",
+FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export", "dxf_layers",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
             "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "open_stairs", "loft_type"]
 
@@ -118,6 +118,7 @@ class DxfImportRequest(BaseModel):
     dxf_content: str
     style: Optional[str] = "modern"
     furnish: bool = True   # False: solo la struttura (stanze, muri, porte, finestre), da arredare poi con /furnish-plan
+    layer_roles: Optional[Dict[str, str]] = None   # layer → wall | door | window | ignore | other: scelta dell'utente, vale più dei nomi
 
 
 class PdfImportRequest(BaseModel):
@@ -365,11 +366,26 @@ def export_dxf(plan: dict):
 def import_dxf_endpoint(req: DxfImportRequest):
     """Riceve il testo di un file DXF e genera una planimetria arredata completa."""
     try:
-        return planner.import_dxf_data(req.dxf_content, style=req.style or "modern", furnished=req.furnish)
+        return planner.import_dxf_data(req.dxf_content, style=req.style or "modern", furnished=req.furnish,
+                                       layer_roles=req.layer_roles)
     except planner.DxfNotRecognised as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {e}")
+
+
+class DxfLayersRequest(BaseModel):
+    dxf_content: str
+
+
+@app.post("/dxf-layers")
+def dxf_layers_endpoint(req: DxfLayersRequest):
+    """I layer di un DXF con il ruolo riconosciuto e le linee per l'anteprima (scelta dei layer prima di importare)."""
+    try:
+        from dxf_import import layer_info
+        return layer_info(req.dxf_content)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore nella lettura dei layer: {e}")
 
 
 @app.post("/furnish-plan")
