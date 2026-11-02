@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { Bookmark, RotateCcw, X } from 'lucide-react';
 import { PALETTE_KEYS, cleanPalette, parseColor, styleColors, toRgb } from '../lib/palette';
+import { deletePalette, loadPalettes, savePalette } from '../lib/savedPalettes';
 
 /* Palette pronte: cinque colori armonici (pareti, facciata, pavimenti, legno, tessuti) da cui partire e ritoccare. */
 const PRESETS = [
@@ -52,6 +53,15 @@ export default function PalettePanel({ palette, styleId, onChange }) {
   const cur = cleanPalette(palette) || {};
   const set = (key, value) => onChange(cleanPalette({ ...cur, [key]: value }));
   const preset = (colors) => onChange(cleanPalette(colors));
+  const [saved, setSaved] = useState(loadPalettes);
+  const [name, setName] = useState('');
+  // si salvano i cinque colori che si vedono adesso (anche quelli ancora dello stile), così la palette resta uguale cambiando stile
+  const effective = Object.fromEntries(PALETTE_KEYS.map(({ key }) => [key, cur[key] || base[key]]));
+  const store = () => {
+    const n = name.trim() || `Palette ${saved.length + 1}`;
+    setSaved(savePalette(n, effective, saved));
+    setName('');
+  };
   return (
     <section className="pf-sec pf-palette">
       <h2>Colori della casa</h2>
@@ -64,11 +74,27 @@ export default function PalettePanel({ palette, styleId, onChange }) {
           </button>
         ))}
       </div>
+      <div className="pf-chips" role="group" aria-label="Le mie palette">
+        {saved.map((p) => (
+          <span key={p.id} className="pf-pal-saved">
+            <button type="button" onClick={() => preset(p.colors)} title={`Applica «${p.name}»`}>
+              <span className="pf-pal-dots" aria-hidden="true">{Object.values(p.colors).map((c, i) => <i key={i} style={{ background: c }} />)}</span>
+              {p.name}
+            </button>
+            <button type="button" className="pf-chip-x" onClick={() => setSaved(deletePalette(p.id, saved))} aria-label={`Elimina la palette ${p.name}`} title="Elimina"><X size={11} /></button>
+          </span>
+        ))}
+      </div>
       <ul className="pf-pal-list">
         {PALETTE_KEYS.map(({ key, label }) => (
           <ColorRow key={key} label={label} value={cur[key] || base[key]} custom={!!cur[key]} onChange={(v) => set(key, v)} />
         ))}
       </ul>
+      <div className="pf-row pf-pal-save">
+        <input type="text" value={name} maxLength={40} placeholder="Nome della palette" aria-label="Nome della palette da salvare"
+          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') store(); }} />
+        <button type="button" className="pf-btn-add" onClick={store} aria-label="Salva la palette"><Bookmark size={13} /> Salva</button>
+      </div>
       <div className="pf-row">
         <button type="button" className="pf-btn-add" disabled={!Object.keys(cur).length} onClick={() => onChange(null)}>
           <RotateCcw size={13} /> Torna ai colori dello stile
