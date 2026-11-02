@@ -529,7 +529,8 @@ def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool):
         across = (p[1] + p[3]) / 2 if orient == "h" else (p[0] + p[2]) / 2
         if min(max(along), g1) - max(min(along), g0) >= w * 0.5 and abs(across - c) <= t / 2 + 0.1:
             return "window", 0
-    return ("window", 0) if exterior else ("passage", 0)
+    # nessun simbolo: un varco verso l'esterno è una finestra, ma solo per ipotesi (side 9: se manca un ingresso può essere la porta)
+    return ("window", 9) if exterior else ("passage", 0)
 
 
 # ----------------------------------------------------------------------------
@@ -1567,6 +1568,7 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
         return near if abs(near - line) <= 0.2 else line
 
     n_doors = n_win = n_pass = 0
+    guessed_windows: List[tuple] = []   # finestre ipotizzate solo perché verso l'esterno e senza simbolo
     placed: List[tuple] = []   # (orient, linea, da, a) delle aperture già create: due varchi sovrapposti sono la stessa apertura
 
     def dup(orient, line, a, b):
@@ -1602,8 +1604,11 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
             if not exterior and not any(q is not None and q.kind == "balcony" for q in (ra, rb)):
                 kind = "passage"
             else:
-                lay.windows.append(Opening(orient, line, start, w, inner_room.id, None))
+                op = Opening(orient, line, start, w, inner_room.id, None)
+                lay.windows.append(op)
                 n_win += 1
+                if side == 9:
+                    guessed_windows.append((op, inner_room))
                 continue
         # porta (o passaggio senza anta, trattato come porta): verso l'anta → locale da quel lato
         a_id, b_id = (ra.id if ra else None), (rb.id if rb else None)
@@ -1626,6 +1631,19 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
 
     if not lay.rooms:
         return None
+    # nessun ingresso disegnato: tra i varchi verso l'esterno senza simbolo, quello largo come una porta (e vicino all'ingresso,
+    # al disimpegno o al soggiorno) è la porta di casa
+    if guessed_windows and not any(d.room_b is None for d in lay.doors):
+        rank = {"entry": 0, "corridor": 0, "living": 1, "living_kitchen": 1}
+        cands = [(rank.get(r.kind, 2), abs(op.w - 0.9), i) for i, (op, r) in enumerate(guessed_windows) if 0.75 <= op.w <= 1.25]
+        if cands:
+            op, r = guessed_windows[min(cands)[2]]
+            lay.windows.remove(op)
+            lay.doors.append(Opening(op.orient, op.line, op.start, op.w, r.id, None, r.id))
+            n_win -= 1
+            n_doors += 1
+            lay.notes.append("Nel disegno non c'è una porta d'ingresso: il varco verso l'esterno di "
+                             f"{op.w * 100:.0f} cm senza simbolo è stato trattato come ingresso.")
     thick = sorted(t for d in (hwalls, vwalls) for ivs in d.values() for _, _, t in ivs)
     msg = (f"Pianta importata dal DXF: {len(lay.rooms)} locali, {n_doors} porte"
            f"{f', {n_pass} passaggi' if n_pass else ''}, {n_win} finestre riconosciute dal disegno.")

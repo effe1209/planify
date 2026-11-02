@@ -4459,8 +4459,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
         raise DxfNotRecognised(
             "Nel DXF non ho riconosciuto né i muri né i contorni dei locali, quindi non importo nulla"
             + (f". Layer trovati: {found}" if found else "")
-            + ". Servono i muri su un layer chiamato come «Muri» (a doppia linea o con il riempimento), oppure i locali come "
-              "polilinee chiuse; in alternativa carica il PDF della pianta o usa «Disegna schizzo».")
+            + ". Scegli tu quali layer sono i muri dalla finestra che si apre, oppure carica il PDF della pianta o usa «Disegna schizzo».")
 
     min_x, max_x = min(p[0] for p in pts), max(p[0] for p in pts)
     min_y, max_y = min(p[1] for p in pts), max(p[1] for p in pts)

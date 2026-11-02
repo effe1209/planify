@@ -38,6 +38,14 @@ def test_door_and_window_symbols_on_any_layer():
             _check(build("pairs", door, win, sym_layer=layer), f"simboli su {layer} {door} {win}")
 
 
+def test_entrance_without_any_door_symbol():
+    """Nessun simbolo di porta nel disegno: il varco verso l'esterno largo come una porta è l'ingresso, la finestra resta tale."""
+    plan = planner.import_dxf_data(build("pairs", "none", "lines"), furnished=False)
+    assert len(plan["doors"]) == 2 and sum(1 for d in plan["doors"] if d["entrance"]) == 1
+    assert len(plan["windows"]) == 1 and plan["windows"][0]["w"] >= 1.3          # la finestra a nord, con le sue linee
+    assert any("non c'è una porta d'ingresso" in n for n in plan["notes"])
+
+
 def test_layer_choice_overrides_the_names():
     """La scelta dei layer vale più dei nomi: i layer con nome strano si elencano con le loro linee e si possono forzare."""
     import dxf_import
@@ -60,5 +68,6 @@ def test_layer_choice_overrides_the_names():
 if __name__ == "__main__":
     test_same_plan_whatever_the_drawing_style()
     test_door_and_window_symbols_on_any_layer()
+    test_entrance_without_any_door_symbol()
     test_layer_choice_overrides_the_names()
     print("dxf_styles ok")

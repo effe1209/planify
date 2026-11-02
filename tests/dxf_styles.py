@@ -58,6 +58,8 @@ def build(style, door_style='arc', win_style='lines', sym_layer=None):
         msp.add_line((6.3 + d, -0.1 - d), (6.3 + d, 4.3 + d), dxfattribs={'layer': 'A-WALL-INSUL'})
     # porte: ingresso sud 1.2..2.1 e interna x=3.6 y 1.0..1.9
     def door(cx, cy, w, hinge, orient):
+        if door_style == 'none':
+            return
         if door_style == 'arc':
             if orient == 'h':
                 msp.add_arc((cx - w / 2, cy), w, 0, 90, dxfattribs={'layer': sym_layer or 'A-DOOR'})

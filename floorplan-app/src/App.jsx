@@ -1282,7 +1282,13 @@ export default function App() {
             data = await readJson(await postJson(base, '/import-dxf', { dxf_content: text, style: form.style, furnish: false }));
           } catch (err) {
             // il motore ha letto il file e lo rifiuta (422): si dice perché, senza ripiegare su una pianta inventata
-            if (/^HTTP 4\d\d/.test(err.message)) throw new Error(err.message.replace(/^HTTP 4\d\d - /, ''));
+            if (/^HTTP 4\d\d/.test(err.message)) {
+              // ... e si apre la scelta dei layer: a volte basta dire al motore quali sono i muri
+              const src = { text, name: file.name.replace(/\.dxf$/i, '') };
+              setDxfSource(src);
+              openLayers(src, true);
+              throw new Error(err.message.replace(/^HTTP 4\d\d - /, ''));
+            }
             /* motore non raggiungibile: si prosegue in locale */
           }
         }
@@ -1301,24 +1307,30 @@ export default function App() {
   };
 
   /* Scelta dei layer del DXF importato: si leggono i layer dal motore e, scelto il ruolo di ognuno, si rifà la pianta. */
-  const openLayers = async () => {
-    if (!dxfSource || !base) return;
-    setLayersDialog({ info: null, error: null, busy: false });
+  const openLayers = async (src = dxfSource, fresh = false) => {
+    if (!src || !base) return;
+    setLayersDialog({ info: null, error: null, busy: false, fresh });
     try {
-      const info = await readJson(await postJson(base, '/dxf-layers', { dxf_content: dxfSource.text }));
-      setLayersDialog({ info, error: null, busy: false });
+      const info = await readJson(await postJson(base, '/dxf-layers', { dxf_content: src.text }));
+      setLayersDialog({ info, error: null, busy: false, fresh });
     } catch (err) {
-      setLayersDialog({ info: null, error: `Impossibile leggere i layer: ${err.message}`, busy: false });
+      setLayersDialog({ info: null, error: `Impossibile leggere i layer: ${err.message}`, busy: false, fresh });
     }
   };
   const reimportDxf = async (roles) => {
     setLayersDialog((d) => ({ ...d, busy: true }));
     try {
       const data = await readJson(await postJson(base, '/import-dxf', { dxf_content: dxfSource.text, style: form.style, furnish: false, layer_roles: roles }));
-      editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, plan: data })));
-      setSelectedId(null);
+      if (layersDialog?.fresh) {
+        // il primo tentativo era fallito: non c'è ancora una pianta, se ne apre una nuova
+        setError(null);
+        openNewPlan(data, { type: 'dxf', dxfName: dxfSource.name }, { name: dxfSource.name });
+      } else {
+        editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, plan: data })));
+        setSelectedId(null);
+      }
       setLayersDialog(null);
-      say('Pianta reimportata con la scelta dei layer');
+      say('Pianta importata con la scelta dei layer');
     } catch (err) {
       setLayersDialog((d) => ({ ...d, busy: false, error: String(err.message).replace(/^HTTP \d+ - /, '') }));
     }
@@ -2243,7 +2255,7 @@ export default function App() {
                     ))}
                   </ul>
                   {dxfSource && floor?.meta?.dxfName === dxfSource.name && base && engineHas('dxf_layers') && !readOnly && (
-                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={openLayers}>
+                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={() => openLayers()}>
                       <Layers size={15} /> Controlla i layer del DXF
                     </button>
                   )}

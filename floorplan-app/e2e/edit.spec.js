@@ -860,8 +860,11 @@ test('un DXF con muri solo campiti si importa con i suoi locali; uno senza muri 
     name: 'senza-muri.dxf', mimeType: 'application/dxf',
     buffer: Buffer.from('0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nQuote\n10\n0\n20\n0\n11\n5\n21\n0\n0\nENDSEC\n0\nEOF\n'),
   });
-  await expect(page.getByRole('alert')).toContainText('non importo nulla', { timeout: 30_000 });
-  await expect(page.getByRole('alert')).toContainText('Quote');
+  await expect(page.getByRole('alert').first()).toContainText('non importo nulla', { timeout: 30_000 });
+  await expect(page.getByRole('alert').first()).toContainText('Quote');
+  // e si apre la scelta dei layer, con il layer trovato
+  await expect(page.getByRole('dialog', { name: 'Layer del DXF' })).toBeVisible();
+  await expect(page.getByLabel('Ruolo del layer Quote')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -911,6 +914,6 @@ test('i layer di un DXF si controllano e si correggono con la scelta del ruolo d
   await dialog.getByLabel('Ruolo del layer XX-GENERIC').selectOption('ignore');
   await dialog.getByRole('button', { name: /Reimporta/ }).click();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
-  await expect(page.getByText('Pianta reimportata con la scelta dei layer')).toBeVisible();
+  await expect(page.getByText('Pianta importata con la scelta dei layer')).toBeVisible();
   expect(errors).toEqual([]);
 });
