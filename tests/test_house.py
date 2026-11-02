@@ -72,6 +72,26 @@ def _wet_cover(lower, upper):
     return over / area
 
 
+def test_basement_garage_door_is_on_the_same_facade_as_the_front_door():
+    """Garage interrato: la basculante sta sulla stessa facciata del portoncino (così il giardino ha davanti la rampa),
+    con la stessa scala su tutti i piani, per lotti più larghi e più lunghi che larghi."""
+    for W, L in [(10, 8), (9, 11), (12, 9), (8, 12), (14, 10)]:
+        for seed in (1, 2, 3, 4):
+            h = planner.generate_house(W, L, [{"level": -1, "program": "garage"}, {"level": 0, "program": "full"},
+                                              {"level": 1, "program": "night"}], seed=seed)
+            by = {f["level"]: f["plan"] for f in h["floors"]}
+            side = planner.entrance_side(by[0])
+            garage = by[-1]
+            door = next(d for d in garage["doors"] if d.get("kind") == "garage")
+            gw, gl = garage["dimensions"]["width"], garage["dimensions"]["length"]
+            gside = ("W" if door["x"] < gw / 2 else "E") if door.get("rot") == 90 else ("N" if door["y"] < gl / 2 else "S")
+            assert gside == side, (W, L, seed, side, gside)
+            for c in (f for f in garage["furniture"] if f["type"] == "car"):
+                assert c["x"] >= -0.01 and c["y"] >= -0.01 and c["x"] + c["w"] <= gw + 0.01 and c["y"] + c["h"] <= gl + 0.01
+            if not any("non si allinea" in n for n in h["notes"]):
+                assert _core(by[-1]) == _core(by[0]) == _core(by[1])
+
+
 def test_bathrooms_upstairs_sit_over_the_ones_below():
     covered = []
     for seed in range(1, 6):
