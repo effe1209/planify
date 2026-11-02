@@ -1,6 +1,6 @@
 /* Render: viste automatiche, sole e sfondo (lib/renderStudio.js). */
 import assert from 'node:assert/strict';
-import { cameraViews, backgroundFor, houseBounds, sunFor, shiftView, EYE, SIZES } from '../src/lib/renderStudio.js';
+import { cameraViews, gardenFrame, backgroundFor, houseBounds, sunFor, shiftView, EYE, SIZES } from '../src/lib/renderStudio.js';
 import { FLOOR_H } from '../src/lib/scene3d.js';
 
 const plan = (rooms, extra = {}) => ({ dimensions: { width: 10, length: 8 }, rooms, doors: [{ x: 4, y: 8, w: 1, rot: 0, entrance: true }], windows: [], furniture: [], ...extra });
@@ -68,4 +68,23 @@ assert.deepEqual(backgroundFor('white', 'noon'), { color: '#ffffff', alpha: fals
 assert.equal(backgroundFor('sky', 'evening').color, '#1e2a47');
 assert.equal(backgroundFor('transparent', 'noon').alpha, true);
 assert.deepEqual(SIZES.map((s) => s.w), [960, 1920, 3840]);
+
+// giardino davanti alla casa (ingresso a sud): due viste in più, davanti alla facciata (z oltre la pianta) e rivolte alla casa
+{
+  const garden = { dimensions: { width: 14, length: 10 }, rooms: [{ id: 9, kind: 'garden', name: 'Prato', x: 0, y: 0, w: 14, h: 10 }], doors: [], windows: [], furniture: [], house: { x: 2, w: 10 } };
+  const withGarden = { floors: [...project.floors, { id: 'g', name: 'Giardino', level: 'out', plan: garden, meta: { type: 'garden' } }] };
+  const gf = gardenFrame(withGarden);
+  assert.deepEqual(gf.toWorld(2, 0), [0, 8]);              // l'angolo sinistro della facciata sta all'inizio della casa, sul filo sud
+  assert.deepEqual(gf.toWorld(7, 10), [5, 18]);            // il fondo del giardino sta 10 m oltre la facciata
+  assert.equal(gardenFrame(project), null);
+  const gv = cameraViews(withGarden);
+  const aerial = gv.find((v) => v.id === 'garden-aerial');
+  const eye = gv.find((v) => v.id === 'garden-view');
+  assert.ok(aerial && eye && aerial.kind === 'outside' && eye.kind === 'outside');
+  assert.ok(aerial.position[1] > 5 && aerial.position[2] > 8, 'dall\'alto, dal lato del giardino');
+  assert.ok(Math.abs(eye.position[1] - (EYE + 0.1)) < 1e-9 && eye.position[2] > 8 + 5, 'a quota d\'occhi in fondo al giardino');
+  assert.ok(eye.target[2] <= 8 + 1e-9, 'rivolta alla facciata');
+  assert.ok(gv.every((v) => v.position.every(Number.isFinite) && v.target.every(Number.isFinite)));
+  assert.equal(cameraViews(project).some((v) => v.id.startsWith('garden')), false);
+}
 console.log('renderstudio ok');

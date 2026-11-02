@@ -72,6 +72,8 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   const withRoof = roof !== false;
   const top = withRoof ? roofFloor(project) : null;
   if (top) model.add(buildRoof(THREE, top.floor.plan, top.y, { ...ROOF_DEFAULTS, style: top.floor.meta?.style || 'modern', palette: project.palette, materials: project.materials }));
+  // senza tetto (pianta dall'alto) niente travi a vista né tettoia del portico: coprirebbero la planimetria
+  if (!withRoof) model.traverse((o) => { if (o.userData?.layer === 'TRAVI' || o.userData?.layer === 'TETTO') o.visible = false; });
   refineMaterials(THREE, model, renderer?.capabilities?.getMaxAnisotropy?.() || 8);
   scene.add(model);
   const bounds = addGround(THREE, scene, model);
@@ -117,7 +119,7 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   if (devices.length) scene.add(built.sensors);
   setLights(built, lampsOn(time));
   // le lampade accese illuminano la stanza con calore, senza bruciare l'immagine (setLights è tarato per la vista interattiva)
-  for (const l of built.realLights) l.intensity = lampsOn(time) ? 1.6 : 0;
+  for (const l of built.realLights) l.intensity = lampsOn(time) ? 1.6 * (l.userData.k ?? 1) : 0;
   for (const g of built.glow) g.emissiveIntensity = lampsOn(time) ? 1.3 : 0.1;
   const windowLights = windowAreaLights(THREE, model, bounds, view, t, lampsOn(time), windows);
   for (const l of windowLights) scene.add(l);

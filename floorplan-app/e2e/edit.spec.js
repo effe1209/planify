@@ -704,6 +704,11 @@ test('un loft con il giardino si vede in 3D insieme: casa intera con il giardino
   const whole = page.getByRole('button', { name: 'Tutta la casa' });
   await expect(whole).toBeVisible();   // anche con un solo piano più il giardino
   await expect(whole).toHaveAttribute('aria-pressed', 'true');
+  // il pannello Render propone anche le viste del giardino
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const views = page.getByRole('complementary', { name: 'Render' }).getByLabel('Inquadratura del render');
+  await expect(views.locator('option', { hasText: 'Giardino' })).toHaveCount(2);
+  await page.getByRole('button', { name: /^Render/ }).click();
   await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
   const names = await page.evaluate(() => { const n = []; window.__planify3d.model.traverse((o) => { if (o.userData?.layer) n.push(o.userData.layer); }); return [...new Set(n)]; });
   expect(names).toContain('MURI');   // la casa

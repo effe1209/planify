@@ -192,7 +192,7 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   (built.windowLights || []).forEach((l) => l.parent?.remove(l));
   if (lampsOn) {
     for (const p of lamps.slice(0, 28)) {
-      const l = new THREE.PointLight('#ffd9a0', 7, 0, 2);
+      const l = new THREE.PointLight('#ffd9a0', 7 * (p.k ?? 1), 0, 2);
       l.position.set(p.x, p.y, p.z);
       scene.add(l);
     }

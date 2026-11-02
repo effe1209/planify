@@ -29,7 +29,7 @@ export function blenderScript({ glbName, time, north = 0, views, size = [1920, 1
 # Per renderizzare tutte le inquadrature: metti RENDER_TUTTE = True (le immagini escono accanto al file),
 # oppure fai doppio clic su RENDER.command (Mac) / RENDER.bat (Windows): fa tutto da solo.
 
-import bpy, math, os, sys
+import bpy, math, os, re, sys
 from mathutils import Vector
 
 GLB = ${py(glbName)}
@@ -102,9 +102,12 @@ scene.world = world
 # lampade: i punti luce del GLB, accesi o spenti secondo l'ora
 for o in bpy.data.objects:
     if o.type == 'LIGHT' and o.data.type == 'POINT':
-        o.data.energy = POTENZA_LAMPADA_W * 4 if LAMPADE_ACCESE else 0
+        # potenza relativa dal nome (LUCE_PUNTUALE_K085 = 0,85): la luce segue la superficie del locale, né bruciata né spenta
+        m = re.search(r'_K(\\d+)', o.name)
+        k = int(m.group(1)) / 100 if m else 1.0
+        o.data.energy = POTENZA_LAMPADA_W * 4 * k if LAMPADE_ACCESE else 0
         o.data.color = (1.0, 0.85, 0.63)
-        o.data.shadow_soft_size = 0.08
+        o.data.shadow_soft_size = 0.15
         o.hide_render = not LAMPADE_ACCESE
 
 # vetri: vetro vero (rifrazione), non un riquadro semitrasparente
@@ -161,7 +164,7 @@ if camere:
     scene.camera = camere[0]
 
 def tetto():
-    radici = [o for o in bpy.data.objects if o.name.upper().startswith(('TETTO', 'SOFFITT'))]
+    radici = [o for o in bpy.data.objects if o.name.upper().startswith(('TETTO', 'SOFFITT', 'TRAVI'))]
     tutti = set(radici)
     for o in bpy.data.objects:
         p = o.parent
@@ -175,7 +178,7 @@ def tetto():
 ROOF = tetto()
 
 def prepara(c):
-    # dall'alto tetto e soffitti coprirebbero tutta la casa: si tolgono e la camera diventa ortografica (nessuna prospettiva)
+    # dall'alto tetto, soffitti e travi coprirebbero tutta la casa: si tolgono e la camera diventa ortografica (nessuna prospettiva)
     dall_alto = c.name in ORTOGRAFICHE
     for o in ROOF:
         o.hide_render = dall_alto

@@ -9,6 +9,8 @@ assert.match(day, /LAMPADE_ACCESE = False/);
 assert.match(day, /"CAM_TRE-QUARTI"/);
 assert.match(day, /ORTOGRAFICHE = \{[^\n]*\n    "CAM_PIANTA-3D-DALL-ALTO": 17\.778,/);   // 10 m × 16:9
 assert.match(day, /hide_render = dall_alto/);
+assert.ok(day.includes("re.search(r'_K(\\d+)', o.name)"));   // potenza relativa delle luci dal nome
+assert.match(day, /'TRAVI'/);
 assert.match(day, /"CAM_INTERNO-SOGGIORNO"/);
 assert.match(day, /scene\.render\.engine = 'CYCLES'/);
 assert.match(day, /RENDER_TUTTE = 'tutte' in sys/);

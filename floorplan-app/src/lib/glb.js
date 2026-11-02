@@ -28,8 +28,9 @@ export async function sceneToGlb(THREE, root, { lightPoints = [], sun = null } =
   const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
   let lights = 0;
   for (const p of lightPoints) {
-    const l = new THREE.PointLight('#ffd9a0', CANDELA, 0, 2);
-    l.name = 'LUCE_PUNTUALE';
+    const k = p.k ?? 1;   // potenza relativa del punto luce (la luce di un locale segue la sua superficie)
+    const l = new THREE.PointLight('#ffd9a0', CANDELA * k, 0, 2);
+    l.name = `LUCE_PUNTUALE_K${Math.round(k * 100)}`;   // lo script di Blender la rilegge dal nome
     l.position.set(p.x, p.y, p.z);
     (p.g || root).add(l);
     lights++;

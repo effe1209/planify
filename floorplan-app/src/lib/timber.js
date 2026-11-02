@@ -44,21 +44,26 @@ function cornerPosts(THREE, group, mat, plan, y0, H) {
   }
 }
 
-/* Travi a vista: una ogni ~1,2 m lungo il lato maggiore del locale, sotto il soffitto. */
+/* Travi a vista: una ogni ~1,2 m lungo il lato maggiore del locale, appena sotto il soffitto, dentro i muri interni (non li attraversano).
+   Layer TRAVI: nella pianta 3D dall'alto si tolgono con il tetto. I locali sotto il soppalco restano senza (il suo solaio è già il soffitto). */
 function ceilingBeams(THREE, group, mat, plan, y0, H) {
   const mz = plan.mezzanine;
+  const half = (plan.wallThickness || 10) / (plan.scale || 50) / 2;   // metà spessore dei muri
+  const bh = 0.2;
   for (const r of plan.rooms) {
     if (r.kind === 'garden' || r.poly || !BEAM_ROOMS.has(r.kind) || r.w * r.h < 8) continue;
-    const under = mz && r.x + r.w / 2 > mz.x && r.x + r.w / 2 < mz.x + mz.w && r.y + r.h / 2 > mz.y && r.y + r.h / 2 < mz.y + mz.h;
-    const ceil = under ? mz.elev : H;
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    if (mz && cx > mz.x - 0.01 && cx < mz.x + mz.w + 0.01 && cy > mz.y - 0.01 && cy < mz.y + mz.h + 0.01) continue;
     const alongX = r.w >= r.h;                    // le travi attraversano il lato corto
     const long = alongX ? r.w : r.h;
+    const span = (alongX ? r.h : r.w) - 2 * half - 0.03;
     const n = Math.max(2, Math.round(long / 1.2) - 1);
-    const bh = 0.2;
     for (let i = 1; i <= n; i++) {
       const t = (long * i) / (n + 1);
-      if (alongX) add(THREE, group, mat, [0.16, bh, r.h - 0.04], [r.x + t, y0 + ceil - bh - (under ? 0.2 : 0), r.y + r.h / 2], 'STRUTTURA');
-      else add(THREE, group, mat, [r.w - 0.04, bh, 0.16], [r.x + r.w / 2, y0 + ceil - bh - (under ? 0.2 : 0), r.y + t], 'STRUTTURA');
+      const y = y0 + H - bh - 0.03;
+      if (alongX) add(THREE, group, mat, [0.16, bh, span], [r.x + t, y, cy], 'TRAVI');
+      else add(THREE, group, mat, [span, bh, 0.16], [cx, y, r.y + t], 'TRAVI');
     }
   }
 }
@@ -102,7 +107,7 @@ function porch(THREE, group, wood, roofColor, plan, y0) {
  * Tutta la struttura in legno: `floors` = [{ plan, y }] (y = quota del piano). Il portico va sul piano più basso con un portoncino
  * al livello della strada. Ritorna un gruppo (vuoto se non c'è niente da fare).
  */
-export function buildTimber(THREE, floors, { roofColor = '#a98558' } = {}) {
+export function buildTimber(THREE, floors, { roofColor = '#a98558', beams = true } = {}) {
   const g = new THREE.Group();
   g.name = 'STRUTTURA_LEGNO';
   const beam = woodMat(THREE, '#8a6540');
@@ -110,7 +115,7 @@ export function buildTimber(THREE, floors, { roofColor = '#a98558' } = {}) {
   for (const f of floors) {
     const H = f.plan.height || 2.7;
     cornerPosts(THREE, g, post, f.plan, f.y, H);
-    ceilingBeams(THREE, g, beam, f.plan, f.y, H);
+    if (beams) ceilingBeams(THREE, g, beam, f.plan, f.y, H);
   }
   const ground = [...floors].sort((a, b) => a.y - b.y).find((f) => f.plan.doors?.some((d) => d.entrance && !d.kind));
   if (ground) porch(THREE, g, post, roofColor, ground.plan, ground.y);
