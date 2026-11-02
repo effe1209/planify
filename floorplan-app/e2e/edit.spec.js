@@ -668,6 +668,10 @@ test('il soppalco si allarga dal pannello con l\'avviso oltre 1/3, e si mette un
   await num.fill('4.5');
   await expect(panel).toContainText('oltre 1/3');
   await expect(num).toHaveValue('4.5');
+  // il muro del bagno e della cucina sotto il soppalco segue il bordo: il bagno di sotto diventa più largo
+  await page.getByRole('radiogroup', { name: 'Livello del loft' }).getByRole('radio', { name: 'Sotto' }).click();
+  if (process.env.SHOTW) await page.locator('.pf-sheet svg').first().screenshot({ path: process.env.SHOTW });
+  await page.getByRole('radiogroup', { name: 'Livello del loft' }).getByRole('radio', { name: 'Sopra' }).click();
   await page.keyboard.press('Control+z');
   await expect(panel).toContainText('a norma');
   // tappeto da solo: nella stanza, senza tavolino
