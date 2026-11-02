@@ -241,12 +241,12 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   } catch (e) {
     notes.push(`filtro guidato non disponibile (${e.message})`);
   }
-  const draw = async (exp, filter) => {
+  const draw = async (exp, filter, opaque = false) => {
     renderer.toneMappingExposure = exp;
     renderer.setRenderTarget(null);
     renderer.autoClear = true;
     if (filter === 'guided' && guided) {
-      guided.draw(exp);
+      guided.draw(exp, opaque);
     } else if (filter) {
       const quad = new FullScreenQuad(new DenoiseMaterial({ map: pt.target.texture, sigma: 4, threshold: 0.05, kSigma: 1 }));
       quad.render(renderer);
@@ -258,37 +258,46 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
     let data = renderer.domElement.toDataURL('image/png');
     const img = new Image();
     await new Promise((ok, ko) => { img.onload = ok; img.onerror = ko; img.src = data; });
-    if (!bg.alpha) {
-      const c = document.createElement('canvas');
-      c.width = width;
-      c.height = height;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = bg.color;
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0);
-      data = c.toDataURL('image/png');
-      return { data, st: canvasStats(c, bgSrgb, false, 192) };
-    }
-    return { data, st: canvasStats(img, bgSrgb, true, 192) };
+    // si valuta sempre l'immagine composta su uno sfondo (il colore scelto, o grigio medio se è trasparente): vale per tutte le schede grafiche
+    const c = document.createElement('canvas');
+    c.width = width;
+    c.height = height;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = bg.alpha ? '#7f7f7f' : bg.color;
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0);
+    const st = canvasStats(c, bg.alpha ? [127, 127, 127] : bgSrgb, false, 192);
+    // trasparente: si salva il PNG con l'alfa; altrimenti quello composto
+    return { data: bg.alpha ? data : c.toDataURL('image/png'), st };
   };
   const target = lampsOn ? 0.3 : 0.5;
   const good = (st) => st.shown >= 0.03 && st.median > 0.03 && st.median < 0.93;
   let best = null;
   let filter = guided ? 'guided' : 'smart';
   let exp = exposure;
-  for (let attempt = 0; attempt < 14 && !best; attempt++) {
-    const r = await draw(exp, filter);
+  let opaque = false;
+  let reduced = 0;
+  const seen = new Set();
+  const measure = (r, f) => {
+    const k = `${f}|${opaque}`;
+    if (!seen.has(k)) { seen.add(k); notes.push(`misura (${f || 'senza filtro'}${opaque ? ', opaco' : ''}): mediana ${r.st.median.toFixed(2)}, visibile ${(r.st.shown * 100).toFixed(0)}%`); }
+  };
+  for (let attempt = 0; attempt < 16 && !best; attempt++) {
+    const r = await draw(exp, filter, opaque);
     if (good(r.st)) {
-      if (Math.abs(r.st.median - target) < 0.06 || attempt >= 9) { best = { ...r, exp, filter }; break; }
+      if (Math.abs(r.st.median - target) < 0.06 || attempt >= 11) { best = { ...r, exp, filter }; break; }
       exp = Math.min(60, Math.max(0.1, exp * Math.min(2, Math.max(0.5, (target / Math.max(0.02, r.st.median)) ** 0.8))));
       continue;
     }
+    measure(r, filter);
     // immagine bianca o vuota
-    if (r.st.shown < 0.03 || r.st.median >= 0.93) { exp = Math.max(0.05, exp * 0.35); notes.push(`esposizione ridotta (${exp.toFixed(2)})`); }
-    else { exp = Math.min(60, exp * 3); notes.push(`esposizione aumentata (${exp.toFixed(2)})`); }
+    if (r.st.shown < 0.03 || r.st.median >= 0.93) { exp = Math.max(0.05, exp * 0.35); reduced++; }
+    else { exp = Math.min(60, exp * 3); }
     if (attempt === 3 && filter === 'guided') { filter = 'smart'; exp = exposure; notes.push('filtro semplice del rumore'); }
     else if (attempt === 6 && filter) { filter = false; exp = exposure; notes.push('senza filtro del rumore'); }
+    else if (attempt === 9 && bg.alpha && !opaque) { opaque = true; filter = guided ? 'guided' : 'smart'; exp = exposure; notes.push('sfondo trasparente non riuscito su questa scheda grafica: salvato con il cielo'); }
   }
+  if (reduced) notes.push(`esposizione ridotta ${reduced} volte`);
   if (!best) best = { ...(await draw(exposure, false)), exp: exposure, filter: false };
   guided?.dispose();
   const ok = good(best.st);

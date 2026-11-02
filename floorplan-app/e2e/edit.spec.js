@@ -489,6 +489,7 @@ test('il render in qualità alta usa il path tracing e salva il PNG', async ({ p
   await panel.getByLabel('Inquadratura del render').selectOption({ label: process.env.RVIEW || 'Interno: Soggiorno' });
   await panel.getByLabel('Risoluzione del render').selectOption({ label: 'Anteprima 960 × 540' });
   if (process.env.RTIME) await panel.getByLabel('Ora del giorno').selectOption({ label: process.env.RTIME });
+  if (process.env.RBG) await panel.getByLabel('Sfondo del render').selectOption({ label: process.env.RBG });
   await panel.getByLabel('Qualità del render').selectOption({ label: 'Alta, path tracing (minuti)' });
   await panel.getByLabel('Campioni del path tracing').selectOption({ label: process.env.RSAMPLES || 'Anteprima (16 campioni)' });
   const [download] = await Promise.all([
@@ -500,6 +501,7 @@ test('il render in qualità alta usa il path tracing e salva il PNG', async ({ p
   const buf = readFileSync(file);
   expect(buf.toString('ascii', 1, 4)).toBe('PNG');
   expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([960, 540]);
+  if (process.env.RBG) console.log('NOTE', (await panel.innerText()).replace(/\s+/g, ' ').slice(-260));
   expect(download.suggestedFilename()).toMatch(/-pt\.png$/);
   copyFileSync(file, process.env.PTOUT || '/tmp/render-pt.png');
   expect(errors).toEqual([]);
