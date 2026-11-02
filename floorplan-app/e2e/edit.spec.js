@@ -940,3 +940,22 @@ test('una facciata ad arco si sceglie nel modulo e la pianta ha il muro curvo, i
   expect(stats.rotated).toBeGreaterThan(10);   // tratti di muro inclinati: l'arco
   expect(errors).toEqual([]);
 });
+
+test('gli angoli arrotondati si scelgono nel modulo e la pianta ha i contorni ad arco', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByLabel('Raggio degli angoli arrotondati').fill('1.2');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/angol[oi] arrotondat/).first()).toBeVisible();
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const rotated = await page.evaluate(() => {
+    let n = 0;
+    window.__planify3d.model.traverse((o) => { if (o.isMesh && o.userData.layer === 'MURI' && Math.abs(o.rotation.y) > 0.02 && Math.abs(Math.abs(o.rotation.y) - Math.PI / 2) > 0.02) n++; });
+    return n;
+  });
+  expect(rotated).toBeGreaterThan(4);
+  expect(errors).toEqual([]);
+});

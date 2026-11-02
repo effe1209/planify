@@ -102,7 +102,8 @@ async function readJson(res) {
 
 /* Facciata ad arco da chiedere al motore ({ curve }), o niente se la facciata è dritta. */
 function curveRequest(f, { allowed = true } = {}) {
-  return allowed && f.curveSide ? { curve: { side: f.curveSide, bulge: Number(f.curveBulge) || 1.2 } } : {};
+  if (!allowed || (!f.curveSide && !(Number(f.curveCorner) > 0))) return {};
+  return { curve: { ...(f.curveSide && { side: f.curveSide, bulge: Number(f.curveBulge) || 1.2 }), ...(Number(f.curveCorner) > 0 && { corner: Number(f.curveCorner) }) } };
 }
 
 /* Richiesta a /generate-plan dai parametri del modulo (o da quelli salvati con un piano). */
@@ -145,7 +146,7 @@ export default function App() {
     house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto', stairStyle: 'auto',
     houseGarage: false, garageMode: 'basement',
     floorProgram: 'full',
-    curveSide: '', curveBulge: 1.2,   // facciata ad arco: lato (N/S/E/W, vuoto = dritta) e freccia in metri
+    curveSide: '', curveBulge: 1.2, curveCorner: 0,   // facciata ad arco (lato N/S/E/W, vuoto = dritta; freccia in m) e raggio degli angoli arrotondati (0 = spigoli)
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [autoSeed, setAutoSeed] = useState(true);
@@ -1723,6 +1724,11 @@ export default function App() {
                         onChange={(e) => setF('curveBulge', Number(e.target.value))} />
                     </label>
                   )}
+                  <label className="pf-field-sm">
+                    <span>Angoli arrotondati: {Number(form.curveCorner) > 0 ? `raggio ${Number(form.curveCorner).toLocaleString('it-IT', { minimumFractionDigits: 1 })} m` : 'spigoli vivi'}</span>
+                    <input type="range" min="0" max="2" step="0.1" value={form.curveCorner} aria-label="Raggio degli angoli arrotondati"
+                      onChange={(e) => setF('curveCorner', Number(e.target.value))} />
+                  </label>
                 </div>
               )}
               <p className="pf-hint">

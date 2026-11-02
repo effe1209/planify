@@ -3757,11 +3757,15 @@ HOUSE_PROGRAMS = ("full", "day", "night", "garage")
 
 
 def apply_curve(plan: dict, curve: Optional[dict], flat: bool = False) -> dict:
-    """Facciata ad arco (curves.bow_facade) se richiesta, dove ha senso: non per giardini e garage."""
-    if not curve or not curve.get("side") or plan.get("house") or any(r.get("kind") == "garden" for r in plan.get("rooms", [])):
+    """Muri curvi (curves.py) se richiesti: facciata ad arco ({side, bulge}) e angoli arrotondati ({corner}); non per giardini e garage."""
+    if not curve or plan.get("curve") or plan.get("house") or any(r.get("kind") == "garden" for r in plan.get("rooms", [])):
         return plan
-    from curves import bow_facade
-    return bow_facade(plan, curve["side"], float(curve.get("bulge") or 0), flat=flat)
+    from curves import bow_facade, round_corners
+    if curve.get("side"):
+        bow_facade(plan, curve["side"], float(curve.get("bulge") or 0), flat=flat)
+    if curve.get("corner") and not flat:
+        round_corners(plan, float(curve["corner"]))
+    return plan
 
 
 def entrance_side(plan: dict) -> Optional[str]:

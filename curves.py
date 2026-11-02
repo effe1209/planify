@@ -200,3 +200,109 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
         f"Facciata {'nord' if side == 'N' else 'sud' if side == 'S' else 'est' if side == 'E' else 'ovest'} ad arco: "
         f"freccia di {b:.1f} m sulla corda di {span:.1f} m.".replace(".", ",")]
     return plan
+
+
+def round_corners(plan: dict, radius: float) -> dict:
+    """Angoli esterni arrotondati: ogni angolo dell'edificio (quelli del riquadro che sono davvero spigoli di una stanza) diventa
+    un quarto di cerchio di raggio `radius`. La stanza prende il contorno libero con l'arco, i due muri che vi arrivano si
+    accorciano e al loro posto c'è una polilinea ad arco. Si salta l'angolo se la stanza è troppo piccola, se un'apertura cade
+    nel tratto da accorciare o se c'è già la facciata ad arco su quel lato."""
+    dims = plan.get("dimensions") or {}
+    W, L = float(dims.get("width", 0)), float(dims.get("length", 0))
+    t = float(plan.get("wallThickness", 10)) / float(plan.get("scale", 50) or 50)
+    r = max(0.0, min(float(radius or 0), 2.5))
+    if r < 0.3 or W <= 0 or L <= 0:
+        return plan
+    bowed = (plan.get("curve") or {}).get("side")
+    done, skipped = 0, 0
+    lines = []
+    corners = {"NW": (0.0, 0.0), "NE": (W, 0.0), "SE": (W, L), "SW": (0.0, L)}
+
+    def room_corner(room, c):
+        pts = room.get("poly") or [[room["x"], room["y"]], [room["x"] + room["w"], room["y"]],
+                                   [room["x"] + room["w"], room["y"] + room["h"]], [room["x"], room["y"] + room["h"]]]
+        for i, p in enumerate(pts):
+            if abs(p[0] - c[0]) < EPS and abs(p[1] - c[1]) < EPS:
+                return pts, i
+        return None
+
+    for name, c in corners.items():
+        if bowed and ((bowed == "N" and name[0] == "N") or (bowed == "S" and name[0] == "S")
+                      or (bowed == "W" and name[1] == "W") or (bowed == "E" and name[1] == "E")):
+            continue
+        room = next((rm for rm in plan.get("rooms", []) if room_corner(rm, c)), None)
+        if not room or min(room["w"], room["h"]) < 2 * r + 0.6:
+            skipped += 1
+            continue
+        # aperture nel tratto da accorciare (lungo i due lati dell'angolo)
+        sx = 1 if c[0] < W / 2 else -1     # verso l'interno
+        sy = 1 if c[1] < L / 2 else -1
+
+        def clash(o):
+            rot = o.get("rot", 0)
+            if rot == 0:      # finestra o porta su un muro orizzontale
+                near_y = abs(o["y"] - c[1]) < t + 0.05 or abs(o["y"] + t - c[1]) < 0.05
+                a0, a1 = o["x"], o["x"] + o["w"]
+                lo, hi = (0, r + 0.1) if sx > 0 else (W - r - 0.1, W)
+                return near_y and a1 > lo and a0 < hi and abs((c[1] - o["y"]) if sy > 0 else (o["y"] + t - c[1])) < t + 0.06
+            if abs(rot - 90) < 0.01:
+                near_x = abs(o["x"] - t - c[0]) < 0.05 or abs(o["x"] - c[0]) < 0.05
+                a0, a1 = o["y"], o["y"] + o["w"]
+                lo, hi = (0, r + 0.1) if sy > 0 else (L - r - 0.1, L)
+                return near_x and a1 > lo and a0 < hi
+            return False
+        if any(clash(o) for o in plan.get("doors", []) + plan.get("windows", [])):
+            skipped += 1
+            continue
+        pts, i = room_corner(room, c)
+        pts = [list(p) for p in pts]
+        prev, nxt = pts[i - 1], pts[(i + 1) % len(pts)]
+        ux, uy = prev[0] - c[0], prev[1] - c[1]
+        vx, vy = nxt[0] - c[0], nxt[1] - c[1]
+        lu, lv = math.hypot(ux, uy), math.hypot(vx, vy)
+        if lu < r + 0.1 or lv < r + 0.1:
+            skipped += 1
+            continue
+        ux, uy, vx, vy = ux / lu, uy / lu, vx / lv, vy / lv
+        O = (c[0] + (ux + vx) * r, c[1] + (uy + vy) * r)
+        a_s = math.atan2(-vy * r, -vx * r)   # direzione dal centro al punto sul lato `prev`: è -v
+        a_e = math.atan2(-uy * r, -ux * r)   # e al punto sul lato `next`: è -u
+        da = (a_e - a_s + math.pi) % (2 * math.pi) - math.pi
+        n = max(4, int(math.ceil(abs(da) * r / STEP)) + 1)
+
+        def arc(rad):
+            return [[round(O[0] + rad * math.cos(a_s + da * k / (n - 1)), 3), round(O[1] + rad * math.sin(a_s + da * k / (n - 1)), 3)]
+                    for k in range(n)]
+        # ordine: dal lato `prev` verso il lato `next`
+        new_pts = pts[:i] + arc(r) + pts[i + 1:]
+        if not room.get("poly"):
+            room["label"] = [round(room["x"] + room["w"] / 2, 3), round(room["y"] + room["h"] / 2, 3)]
+        room["poly"] = new_pts
+        room["area"] = round(_area(new_pts), 2)
+        # muri che arrivano all'angolo: si accorciano di r
+        walls = []
+        for w in plan.get("walls", []):
+            x, y, ww, hh = w["x"], w["y"], w["w"], w["h"]
+            if ww >= hh and abs((y if c[1] < L / 2 else y + hh) - c[1]) < EPS:
+                if sx > 0 and x <= EPS:
+                    w = {**w, "x": round(x + r, 3), "w": round(ww - r, 3)}
+                elif sx < 0 and x + ww >= W - EPS:
+                    w = {**w, "w": round(ww - r, 3)}
+            elif hh > ww and abs((x if c[0] < W / 2 else x + ww) - c[0]) < EPS:
+                if sy > 0 and y <= EPS:
+                    w = {**w, "y": round(y + r, 3), "h": round(hh - r, 3)}
+                elif sy < 0 and y + hh >= L - EPS:
+                    w = {**w, "h": round(hh - r, 3)}
+            walls.append(w)
+        plan["walls"] = walls
+        lines.append({"pts": arc(max(0.05, r - t / 2)), "closed": False})
+        done += 1
+    if done:
+        plan["wallLines"] = list(plan.get("wallLines") or []) + lines
+        cur = dict(plan.get("curve") or {})
+        cur["corner"] = round(r, 2)
+        plan["curve"] = cur
+        plan["notes"] = list(plan.get("notes") or []) + [
+            f"{done} {'angolo arrotondato' if done == 1 else 'angoli arrotondati'} (raggio {r:.1f} m)".replace(".", ",")
+            + (f"; {skipped} {'saltato' if skipped == 1 else 'saltati'}: stanza piccola o apertura nell'angolo." if skipped else ".")]
+    return plan
