@@ -61,18 +61,22 @@ def _area(poly: List[List[float]]) -> float:
     return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1]))) / 2
 
 
-def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
+def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False, a0: Optional[float] = None, a1: Optional[float] = None) -> dict:
     """Facciata ad arco: vedi il modulo. `plan` si modifica sul posto e si ritorna. Senza effetto se la misura non è plausibile.
-    flat = solo lo scorrimento e il riquadro più grande, senza arco: per i piani sotto (garage) che devono restare allineati agli altri."""
+    flat = solo lo scorrimento e il riquadro più grande, senza arco: per i piani sotto (garage) che devono restare allineati agli altri.
+    a0, a1 = tratto della facciata che si incurva (coordinate lungo il lato, prima dello scorrimento); di serie tutta la facciata."""
     side = (side or "").upper()
     dims = plan.get("dimensions") or {}
     W, L = float(dims.get("width", 0)), float(dims.get("length", 0))
     t = float(plan.get("wallThickness", 10)) / float(plan.get("scale", 50) or 50)
     if side not in ("N", "S", "E", "W") or W <= 0 or L <= 0 or plan.get("curve"):
         return plan
-    span = W if side in "NS" else L
+    full = W if side in "NS" else L
+    a0 = 0.0 if a0 is None else max(0.0, float(a0))
+    a1 = full if a1 is None else min(full, float(a1))
+    span = a1 - a0
     b = max(0.0, min(float(bulge or 0), 0.4 * span, 3.0))
-    if b < 0.2 or span < 3.0:
+    if b < 0.2 or span < 2.0:
         return plan
     dir_ = 1 if side in "SE" else -1
     # il riquadro cresce di b; N e O: tutto scorre di b perché l'arco sporge a coordinate minori
@@ -94,17 +98,28 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
         return plan
     Fc = F - dir_ * t / 2                                # linea centrale del muro curvo, prima dell'arco
 
+    def hh_(s: float) -> float:
+        return arc_h(s - a0, span, b) if a0 - 1e-9 <= s <= a1 + 1e-9 else 0.0
+
     def point(s: float):
-        h = arc_h(s, span, b)
+        h = hh_(s)
         return [round(s, 3), round(F + dir_ * h, 3)] if side in "NS" else [round(F + dir_ * h, 3), round(s, 3)]
 
     def centre(s: float):
-        h = arc_h(s, span, b)
+        h = hh_(s)
         return (s, Fc + dir_ * h) if side in "NS" else (Fc + dir_ * h, s)
 
-    def arc_pts(a0: float, a1: float):
-        n = max(2, int(math.ceil((a1 - a0) / STEP)) + 1)
-        return [point(a0 + (a1 - a0) * i / (n - 1)) for i in range(n)]
+    def arc_pts(lo: float, hi: float):
+        # da lo a hi: i tratti dritti fuori dall'arco sono segmenti; si campiona fitto dentro [a0, a1] e ai suoi estremi
+        xs = {lo, hi}
+        for brk in (a0, a1):
+            if lo < brk < hi:
+                xs.add(brk)
+        inside = max(lo, a0), min(hi, a1)
+        if inside[1] > inside[0]:
+            n = max(2, int(math.ceil((inside[1] - inside[0]) / STEP)) + 1)
+            xs.update(inside[0] + (inside[1] - inside[0]) * i / (n - 1) for i in range(n))
+        return [point(v) for v in sorted(xs)]
 
     # stanze che toccano la facciata: contorno con l'arco
     for r in plan.get("rooms", []):
@@ -114,8 +129,10 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
         touch = {"S": abs(y + h - F) < EPS, "N": abs(y - F) < EPS, "E": abs(x + w - F) < EPS, "W": abs(x - F) < EPS}[side]
         if not touch:
             continue
-        a0, a1 = (x, x + w) if side in "NS" else (y, y + h)
-        arc = arc_pts(a0, a1)[::-1]
+        lo, hi = (x, x + w) if side in "NS" else (y, y + h)
+        if hi <= a0 + EPS or lo >= a1 - EPS:
+            continue   # la stanza sta fuori dal tratto che si incurva
+        arc = arc_pts(lo, hi)[::-1]
         base = {"S": [[x, y], [x + w, y]], "N": [[x, y + h], [x + w, y + h]],
                 "E": [[x, y], [x, y + h]], "W": [[x + w, y], [x + w, y + h]]}[side]
         poly = [[round(p[0], 3), round(p[1], 3)] for p in base] + arc
@@ -134,18 +151,29 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
         x, y, ww, hh = w["x"], w["y"], w["w"], w["h"]
         horiz = ww >= hh
         if side in "NS" and horiz and abs((y + hh if side == "S" else y) - F) < EPS:
+            # il muro dritto sparisce nel tratto ad arco; resta fuori da quello
+            if x < a0 - EPS:
+                walls.append({**w, "w": round(min(x + ww, a0) - x, 3)})
+            if x + ww > a1 + EPS:
+                nx = max(x, a1)
+                walls.append({**w, "x": round(nx, 3), "w": round(x + ww - nx, 3)})
             continue
         if side in "EW" and not horiz and abs((x + ww if side == "E" else x) - F) < EPS:
+            if y < a0 - EPS:
+                walls.append({**w, "h": round(min(y + hh, a0) - y, 3)})
+            if y + hh > a1 + EPS:
+                ny = max(y, a1)
+                walls.append({**w, "y": round(ny, 3), "h": round(y + hh - ny, 3)})
             continue
         if side == "S" and not horiz and abs(y + hh - F) < EPS:
-            w = {**w, "h": round(hh + arc_h(x + ww / 2, span, b), 3)}
+            w = {**w, "h": round(hh + hh_(x + ww / 2), 3)}
         elif side == "N" and not horiz and abs(y - F) < EPS:
-            ext = arc_h(x + ww / 2, span, b)
+            ext = hh_(x + ww / 2)
             w = {**w, "y": round(y - ext, 3), "h": round(hh + ext, 3)}
         elif side == "E" and horiz and abs(x + ww - F) < EPS:
-            w = {**w, "w": round(ww + arc_h(y + hh / 2, span, b), 3)}
+            w = {**w, "w": round(ww + hh_(y + hh / 2), 3)}
         elif side == "W" and horiz and abs(x - F) < EPS:
-            ext = arc_h(y + hh / 2, span, b)
+            ext = hh_(y + hh / 2)
             w = {**w, "x": round(x - ext, 3), "w": round(ww + ext, 3)}
         walls.append(w)
     plan["walls"] = walls
@@ -167,8 +195,10 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
                 continue
             wdt = float(o["w"])
             s_c = (o["x"] if side in "NS" else o["y"]) + wdt / 2
-            s_c = max(wdt / 2, min(span - wdt / 2, s_c))
-            m = arc_slope(s_c, span, b)
+            if not a0 + wdt / 2 - 0.05 <= s_c <= a1 - wdt / 2 + 0.05:
+                continue   # fuori dal tratto ad arco: resta sul muro dritto
+            s_c = max(a0 + wdt / 2, min(a1 - wdt / 2, s_c))
+            m = arc_slope(s_c - a0, span, b)
             tx, ty = {"S": (1.0, m), "N": (1.0, -m), "E": (m, 1.0), "W": (-m, 1.0)}[side]
             n_ = math.hypot(tx, ty)
             ux, uy = tx / n_, ty / n_
@@ -182,20 +212,20 @@ def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False) -> dict:
 
     # muro curvo: una polilinea per ogni tratto tra due aperture
     gaps.sort()
-    cuts, cur = [], 0.0
+    cuts, cur = [], a0
     for g0, g1 in gaps:
         if g0 > cur + 0.02:
             cuts.append((cur, g0))
         cur = max(cur, g1)
-    if span - cur > 0.02:
-        cuts.append((cur, span))
+    if a1 - cur > 0.02:
+        cuts.append((cur, a1))
     lines = []
-    for a0, a1 in cuts:
-        n = max(2, int(math.ceil((a1 - a0) / STEP)) + 1)
-        lines.append({"pts": [[round(centre(a0 + (a1 - a0) * i / (n - 1))[0], 3), round(centre(a0 + (a1 - a0) * i / (n - 1))[1], 3)]
-                              for i in range(n)], "closed": False})
+    for c0, c1 in cuts:
+        n = max(2, int(math.ceil((c1 - c0) / STEP)) + 1)
+        pts = [centre(c0 + (c1 - c0) * i / (n - 1)) for i in range(n)]
+        lines.append({"pts": [[round(px, 3), round(py, 3)] for px, py in pts], "closed": False})
     plan["wallLines"] = list(plan.get("wallLines") or []) + lines
-    plan["curve"] = {"type": "facade", "side": side, "bulge": round(b, 2)}
+    plan["curve"] = {"type": "facade", "side": side, "bulge": round(b, 2), **({"from": round(a0, 2), "to": round(a1, 2)} if (a0 > EPS or a1 < full - EPS) else {})}
     plan["notes"] = list(plan.get("notes") or []) + [
         f"Facciata {'nord' if side == 'N' else 'sud' if side == 'S' else 'est' if side == 'E' else 'ovest'} ad arco: "
         f"freccia di {b:.1f} m sulla corda di {span:.1f} m.".replace(".", ",")]

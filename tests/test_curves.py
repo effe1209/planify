@@ -94,6 +94,25 @@ def test_rounded_corners_cut_the_corner_and_leave_arc_walls():
     assert len(plan["wallLines"]) == before
 
 
+def test_bow_over_part_of_the_facade_only():
+    from curves import bow_facade
+    plan = _plan()
+    a0 = sum(r["w"] * r["h"] for r in plan["rooms"])
+    bow_facade(plan, "S", 1.0, a0=2.0, a1=7.0)
+    span = 5.0
+    r = (span ** 2 / 4 + 1.0) / 2.0
+    ang = 2 * math.asin(span / (2 * r))
+    seg = r * r / 2 * (ang - math.sin(ang))
+    assert abs(sum(rm["area"] for rm in plan["rooms"]) - a0 - seg) < 0.05
+    assert plan["curve"]["from"] == 2.0 and plan["curve"]["to"] == 7.0
+    # fuori dal tratto il muro resta dritto: ci sono pezzi di muro orizzontale sulla facciata a sinistra e a destra
+    L = plan["dimensions"]["length"] - 1.0
+    straight = [w for w in plan["walls"] if w["w"] > w["h"] and abs(w["y"] + w["h"] - L) < 0.01]
+    assert straight and all(w["x"] + w["w"] <= 2.0 + 0.01 or w["x"] >= 7.0 - 0.01 for w in straight)
+    xs = [p[0] for line in plan["wallLines"] for p in line["pts"]]
+    assert min(xs) >= 2.0 - 0.01 and max(xs) <= 7.0 + 0.01
+
+
 def test_house_floors_all_get_the_same_arc_and_the_garage_only_shifts():
     floors = [{"level": -1, "program": "garage"}, {"level": 0, "program": "day"}, {"level": 1, "program": "night"}]
     h = next(h for h in (planner.generate_house(10, 8, floors, seed=s) for s in range(1, 15)) if not any("non si allinea" in n for n in h["notes"]))   # una con la scala allineata
