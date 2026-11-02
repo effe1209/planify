@@ -89,7 +89,12 @@ def _plain(s: str) -> str:
 # ----------------------------------------------------------------------------
 # 1-2. lettura e ruoli
 # ----------------------------------------------------------------------------
-def _role(layer: str, block: str) -> str:
+ROLES = ("wall", "door", "window", "ignore", "other")
+
+
+def _role(layer: str, block: str, ov: Optional[Dict[str, str]] = None) -> str:
+    if ov and (layer or "") in ov and ov[layer] in ROLES:
+        return ov[layer]   # scelta dell'utente: vale più dei nomi
     # prima ciò che non è pianta (prospetti, sezioni, tetto…), poi porte e finestre, poi il resto da ignorare, poi i muri
     if HARD_IGNORE_RE.search(layer or ""):
         return "ignore"
@@ -123,7 +128,23 @@ def layer_report(text: str) -> str:
     return ", ".join(f"{name} {n}" for name, n in top)
 
 
-def _read(text: str, want_extra: bool = False):
+def layer_info(text: str) -> dict:
+    """Per la scelta dei layer: ogni layer con quanti elementi ha, il ruolo che l'importazione gli dà da sola e le sue linee
+    (al massimo 2500, per l'anteprima), più l'ingombro del disegno. {layers: [{name, n, role, segs}], bbox}."""
+    if ezdxf is None:
+        return {"layers": [], "bbox": None}
+    collect: dict = {}
+    data = _read(text, collect=collect)
+    if not data:
+        return {"layers": [], "bbox": None}
+    xs = [v for c in collect.values() for sg in c["segs"] for v in (sg[0], sg[2])]
+    ys = [v for c in collect.values() for sg in c["segs"] for v in (sg[1], sg[3])]
+    layers = [{"name": name, "n": c["n"], "role": c["role"], "segs": c["segs"]}
+              for name, c in sorted(collect.items(), key=lambda kv: -kv[1]["n"])]
+    return {"layers": layers, "bbox": [min(xs), min(ys), max(xs), max(ys)] if xs else None, "units": data[4]}
+
+
+def _read(text: str, want_extra: bool = False, ov: Optional[Dict[str, str]] = None, collect: Optional[dict] = None):
     """Elementi del disegno: segmenti, archi, testi (in unità del file), con il ruolo.
     want_extra: ritorna anche i riempimenti pieni (HATCH) e il documento ezdxf."""
     # lettura normale (veloce); quella di recupero solo per i file danneggiati
@@ -163,14 +184,35 @@ def _read(text: str, want_extra: bool = False):
             t = e.dxftype()
             lay = e.dxf.get("layer", "0")
             eff_layer = layer if (layer and lay == "0") else lay
-            role = _role(eff_layer, block)
+            role = _role(eff_layer, block, ov)
+            if collect is not None:
+                c = collect.setdefault(eff_layer, {"n": 0, "role": _role(eff_layer, block), "segs": []})
+                c["n"] += 1
+                if t == "LINE" and len(c["segs"]) < 2500:
+                    c["segs"].append((round(e.dxf.start.x, 3), round(e.dxf.start.y, 3), round(e.dxf.end.x, 3), round(e.dxf.end.y, 3)))
+                elif t in ("LWPOLYLINE", "POLYLINE") and len(c["segs"]) < 2500:
+                    try:
+                        pp = [(v[0], v[1]) for v in e.get_points("xy")] if t == "LWPOLYLINE" else [(v.dxf.location.x, v.dxf.location.y) for v in e.vertices]
+                        closed = bool(e.closed) if t == "LWPOLYLINE" else bool(e.is_closed)
+                        for i in range(len(pp) if closed else len(pp) - 1):
+                            a, b = pp[i], pp[(i + 1) % len(pp)]
+                            c["segs"].append((round(a[0], 3), round(a[1], 3), round(b[0], 3), round(b[1], 3)))
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif t == "ARC" and len(c["segs"]) < 2500:
+                    cc, r_ = e.dxf.center, e.dxf.radius
+                    for q in range(6):
+                        a0 = math.radians(e.dxf.start_angle + (((e.dxf.end_angle - e.dxf.start_angle) % 360) * q / 6))
+                        a1 = math.radians(e.dxf.start_angle + (((e.dxf.end_angle - e.dxf.start_angle) % 360) * (q + 1) / 6))
+                        c["segs"].append((round(cc.x + r_ * math.cos(a0), 3), round(cc.y + r_ * math.sin(a0), 3),
+                                          round(cc.x + r_ * math.cos(a1), 3), round(cc.y + r_ * math.sin(a1), 3)))
             try:
                 if t == "INSERT":
                     if depth > 4:
                         continue
                     name = e.dxf.name
                     sub = list(e.virtual_entities())
-                    r = _role(eff_layer, name)
+                    r = _role(eff_layer, name, ov)
                     if r in ("door", "window"):
                         xs, ys = [], []
                         for s in sub:
@@ -634,7 +676,7 @@ def _drawings(hp, vp, texts_m):
 # ----------------------------------------------------------------------------
 # riempimenti (HATCH) come muri, serramenti come chiusura della facciata, arredi per i nomi
 # ----------------------------------------------------------------------------
-def _fill_paths(doc):
+def _fill_paths(doc, ov=None):
     """Contorni dei riempimenti pieni (HATCH solid) del disegno: lista di (layer, [percorsi]) in unità del disegno."""
     out = []
     for e in doc.modelspace().query("HATCH"):
@@ -642,7 +684,7 @@ def _fill_paths(doc):
             if not e.dxf.get("solid_fill", 0):
                 continue
             layer = e.dxf.get("layer", "0")
-            if HARD_IGNORE_RE.search(layer or ""):
+            if HARD_IGNORE_RE.search(layer or "") or (ov or {}).get(layer) in ("ignore", "door", "window"):
                 continue
             paths = []
             for pa in e.paths:
@@ -668,15 +710,17 @@ def _fill_paths(doc):
     return out
 
 
-def _wide_pieces(doc, k):
+def _wide_pieces(doc, k, ov=None):
     """Muri disegnati come polilinee con spessore (la linea è l'asse del muro, il «width» è lo spessore): tratti di muro
     orizzontali e verticali (asse, inizio, fine, spessore) in metri, prolungati di mezzo spessore per riempire gli angoli."""
     hp, vp = [], []
     for e in doc.modelspace().query("LWPOLYLINE"):
         try:
             layer = e.dxf.get("layer", "0")
-            if HARD_IGNORE_RE.search(layer or "") or IGNORE_RE.search(layer or "") or DOOR_RE.search(layer or "") \
-                    or WINDOW_RE.search(layer or ""):
+            forced = (ov or {}).get(layer)
+            if forced in ("ignore", "door", "window", "other") or (forced != "wall" and (
+                    HARD_IGNORE_RE.search(layer or "") or IGNORE_RE.search(layer or "") or DOOR_RE.search(layer or "")
+                    or WINDOW_RE.search(layer or ""))):
                 continue
             pts = list(e.get_points("xyseb"))
             const = float(e.dxf.get("const_width", 0) or 0)
@@ -1158,14 +1202,14 @@ def _drop_balconies(rooms):
     return [r for r in rooms if r[4] not in drop] if drop and len(drop) < len(groups) else rooms
 
 
-def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
+def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_roles: Optional[Dict[str, str]] = None):
     """DXF di studio → planner.Layout con stanze, porte e finestre (non arredato), o None.
 
     scan = linee ricavate da una scansione (planimetria catastale): i simboli di porte e finestre si leggono male,
     quindi ogni varco nei muri fino a 1,4 m chiude il locale (è una porta o una finestra)."""
     if ezdxf is None:
         return None
-    data = _read(text, want_extra=True)
+    data = _read(text, want_extra=True, ov=layer_roles)
     if not data:
         return None
     segs, arcs, texts, boxes, units, doc = data
@@ -1196,8 +1240,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     hp, hh = _split_infill(_pair_walls(hs))
     vp, vh = _split_infill(_pair_walls(vs))
     # muri campiti (riempimento pieno): le campiture sottili sono i muri anche dove le linee non si abbinano o mancano
-    fill_h, fill_v = _fill_pieces(_fill_paths(doc), k)
-    wide_h, wide_v = _wide_pieces(doc, k)
+    fill_h, fill_v = _fill_pieces(_fill_paths(doc, layer_roles), k)
+    wide_h, wide_v = _wide_pieces(doc, k, layer_roles)
     fill_h, fill_v = fill_h + wide_h, fill_v + wide_v
     fill_h, fill_v = _uncovered(fill_h, hp), _uncovered(fill_v, vp)
     n_fill = len(fill_h) + len(fill_v)

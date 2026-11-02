@@ -38,7 +38,27 @@ def test_door_and_window_symbols_on_any_layer():
             _check(build("pairs", door, win, sym_layer=layer), f"simboli su {layer} {door} {win}")
 
 
+def test_layer_choice_overrides_the_names():
+    """La scelta dei layer vale più dei nomi: i layer con nome strano si elencano con le loro linee e si possono forzare."""
+    import dxf_import
+    text = build("pairs", "arc", "lines", sym_layer="XX-GENERIC")
+    info = dxf_import.layer_info(text)
+    names = {l["name"]: l for l in info["layers"]}
+    assert {"A-WALL", "XX-GENERIC"} <= set(names) and names["A-WALL"]["role"] == "wall" and names["XX-GENERIC"]["role"] == "other"
+    assert names["A-WALL"]["segs"] and info["bbox"][2] > 6
+    # tolti i muri il file non si riconosce più; rimessi, si importa come prima
+    try:
+        planner.import_dxf_data(text, furnished=False, layer_roles={"A-WALL": "ignore"})
+    except planner.DxfNotRecognised:
+        pass
+    else:
+        raise AssertionError("senza muri doveva rifiutare")
+    plan = planner.import_dxf_data(text, furnished=False, layer_roles={"A-WALL": "wall", "XX-GENERIC": "door"})
+    assert len(plan["rooms"]) >= 2 and len(plan["doors"]) == 2
+
+
 if __name__ == "__main__":
     test_same_plan_whatever_the_drawing_style()
     test_door_and_window_symbols_on_any_layer()
+    test_layer_choice_overrides_the_names()
     print("dxf_styles ok")

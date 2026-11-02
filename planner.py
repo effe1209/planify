@@ -4419,7 +4419,7 @@ class DxfNotRecognised(ValueError):
     """Il DXF non contiene muri né locali riconoscibili."""
 
 
-def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True) -> dict:
+def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True, layer_roles: Optional[dict] = None) -> dict:
     """Importa le stanze (polilinee chiuse) da un DXF e le arreda.
 
     Unità riconosciute: m, cm, mm. Se il file ha un layer delle stanze (AREE/ROOMS/STANZE) si usa
@@ -4433,7 +4433,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
         # disegno di studio (muri a doppia linea, porte, finestre, testi): pianta ricostruita dal disegno
         try:
             from dxf_import import import_real_dxf
-            lay = import_real_dxf(dxf_content, Layout, Opening, snap)
+            lay = import_real_dxf(dxf_content, Layout, Opening, snap, layer_roles=layer_roles)
         except Exception as e:  # noqa: BLE001 - si ripiega sull'importazione per polilinee
             lay = None
             print(f"import DXF reale non riuscito: {e}")

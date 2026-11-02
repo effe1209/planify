@@ -896,3 +896,21 @@ test('lo sfondo PDF si adatta alla vista, si ingrandisce e si sposta, e cambiand
   expect(Math.round(after.y - before.y)).toBe(30);
   expect(errors).toEqual([]);
 });
+
+test('i layer di un DXF si controllano e si correggono con la scelta del ruolo di ogni layer', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/stile_layer_generici.dxf'));
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: /Controlla i layer del DXF/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Layer del DXF' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Ruolo del layer A-WALL')).toHaveValue('wall');
+  await expect(dialog.getByRole('button', { name: /Reimporta/ })).toBeDisabled();   // niente da cambiare
+  await dialog.getByLabel('Ruolo del layer XX-GENERIC').selectOption('ignore');
+  await dialog.getByRole('button', { name: /Reimporta/ }).click();
+  await expect(dialog).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByText('Pianta reimportata con la scelta dei layer')).toBeVisible();
+  expect(errors).toEqual([]);
+});

@@ -787,3 +787,20 @@
   background: transparent; color: var(--text); cursor: pointer; }
 .pf-sketch-zoom button:hover { background: var(--fill, rgba(0,0,0,.06)); }
 .pf-sketch-zoom span { min-width: 42px; padding: 0 6px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+/* Scelta dei layer del DXF */
+.pf-modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.4); }
+.pf-modal-card { width: min(980px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 10px; padding: 16px; overflow: auto;
+  background: var(--bg-panel); color: var(--text); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-md); }
+.pf-modal-card > header { display: flex; align-items: center; justify-content: space-between; }
+.pf-modal-card > footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.pf-modal-card > footer .pf-hint { margin: 0 auto 0 0; }
+.pf-dxflayers-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 12px; min-height: 0; }
+.pf-dxflayers-preview { width: 100%; height: min(60vh, 520px); background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+.pf-dxflayers-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; max-height: min(60vh, 520px); overflow: auto; }
+.pf-dxflayers-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; }
+.pf-dxflayers-list li:hover { background: var(--fill, rgba(0,0,0,.05)); }
+.pf-dxflayers-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.pf-dxflayers-name em { font-style: normal; color: var(--text-muted); font-size: 11px; margin-left: 4px; }
+.pf-dxflayers-list select { font: inherit; font-size: 12px; max-width: 150px; }
+@media (max-width: 720px) { .pf-dxflayers-body { grid-template-columns: 1fr; } }
