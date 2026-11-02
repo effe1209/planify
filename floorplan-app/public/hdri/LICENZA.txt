@@ -1,0 +1,2 @@
+Cieli HDRI da Poly Haven (https://polyhaven.com/hdris), licenza CC0 1.0: uso libero, anche commerciale.
+day = kloppenheim_06_puresky (cielo sereno senza sole), dusk = qwantani_dusk_2_puresky (crepuscolo), night = dikhololo_night (notte). 1K, formato Radiance HDR.

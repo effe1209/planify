@@ -1,4 +1,4 @@
-/* ZIP senza compressione (store) per più file in un solo scaricamento: [{ name, data: Uint8Array | string }] → Uint8Array. */
+/* ZIP senza compressione (store) per più file in un solo scaricamento: [{ name, data: Uint8Array | string, mode?: 0o755 }] → Uint8Array. */
 const CRC = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -27,8 +27,8 @@ export function zipStore(files) {
     const crc = crc32(data);
     const local = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)]);
     parts.push(local, name, data);
-    central.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
+    central.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(f.mode ? 0x0314 : 20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(f.mode ? (f.mode << 16) >>> 0 : 0), ...u32(offset)]), name);
     offset += local.length + name.length + data.length;
   }
   const cdSize = central.reduce((a, p) => a + p.length, 0);

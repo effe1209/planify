@@ -65,6 +65,8 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   const facadeKit = facade && facade !== theme.id ? styleKit(facade) : kit;
   const KF = facadeKit === kit ? K : kitMaterials(THREE, mat, facadeKit);
   M.wall = K.wallIn;
+  M.wood.userData.pbr = 'plank';          // il legno degli arredi e del soppalco: nel render diventa legno vero con venature
+  M.wood.userData.pbrTint = theme.wood;
   // categoria di materiale: nel DXF 3D ogni pezzo di un arredo va sul layer del suo materiale
   const CATS = { wood: 'LEGNO', fabric: 'TESSUTO', duvet: 'TESSUTO', cabinet: 'LACCATO', counter: 'PIANO', dark: 'PLASTICA', ceramic: 'CERAMICA',
     lamp: 'LUCE', plant: 'VEGETAZIONE', car: 'CARROZZERIA', metal: 'METALLO', stone: 'PIETRA', glass: 'VETRO', accent: 'TESSUTO' };
@@ -596,6 +598,8 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   if (ceiling) {
     const top = floors[floors.length - 1];
     const ceilMat = new THREE.MeshStandardMaterial({ color: '#f4f2ee', roughness: 0.95 });
+    ceilMat.userData.pbr = 'stucco';
+    ceilMat.userData.pbrTint = '#f4f2ee';
     const yTop = quota(top.level) + (top.plan.height || WALL_H);
     for (const r of top.plan.rooms) {
       if (r.kind === 'garden') continue;

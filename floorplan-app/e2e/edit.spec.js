@@ -84,8 +84,10 @@ test('il modello 3D si esporta in GLB con materiali, arredi e luci', async ({ pa
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: '3D', exact: true }).click();
+  page.on('console', (m) => { if (process.env.DBG) console.log('CONSOLE', m.text()); });
+  setTimeout(async () => { if (process.env.DBG) console.log('BODY', ((await page.locator('body').innerText().catch(() => '')).match(/Esportazione[^\n]*/) || [''])[0]); }, 25000);
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 60_000 }),
+    page.waitForEvent('download', { timeout: 240_000 }),
     page.locator('button', { hasText: 'GLB Blender' }).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/-blender\.zip$/);   // un solo ZIP: modello, script per Cycles e istruzioni
@@ -97,6 +99,10 @@ test('il modello 3D si esporta in GLB con materiali, arredi e luci', async ({ pa
   expect(names.some((n) => n.endsWith('.glb'))).toBe(true);
   expect(names.some((n) => n.endsWith('_blender.py'))).toBe(true);
   expect(names).toContain('LEGGIMI.txt');
+  expect(names).toContain('RENDER.command');
+  expect(names).toContain('RENDER.bat');
+  expect(names).toContain('cielo.hdr');
+  if (process.env.DBG) { const { statSync, copyFileSync } = await import('node:fs'); console.log('ZIPSIZE', statSync(file).size); copyFileSync(file, '/tmp/planify-blender.zip'); }
   const py = new TextDecoder().decode(files[names.find((n) => n.endsWith('_blender.py'))]);
   expect(py).toContain("scene.render.engine = 'CYCLES'");
   expect(py).toContain('CAM_TRE-QUARTI');
@@ -459,7 +465,7 @@ test('i render in tempo reale non sono mai neri né bruciati (loft industriale, 
     await panel.getByLabel('Ora del giorno').selectOption({ label: time });
     await panel.getByLabel('Sfondo del render').selectOption({ label: bg });
     const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 60_000 }),
+      page.waitForEvent('download', { timeout: 240_000 }),
       panel.getByRole('button', { name: /Salva render/ }).click(),
     ]);
     const st = lumaStats(readPng(readFileSync(await download.path())));

@@ -34,6 +34,8 @@ export function materialCategory(key) {
   return 'PLASTICA';
 }
 
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+
 const YAW = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };
 const r2 = (v) => Math.round(v * 100) / 100;
 
@@ -76,7 +78,14 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
     return mesh;
   };
   /* scatola con la base a quota y */
-  const bx = (w, h, d, x, y, z, mt) => place(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mt), x, y + h / 2, z);
+  const SOFT = new Set([M.fabric, M.duvet]);
+  const bx = (w, h, d, x, y, z, mt) => {
+    // tessuti e imbottiti: spigoli smussati (cuscini, materassi, divani non sono mai spigolosi)
+    const soft = SOFT.has(mt) || mt?.userData?.cat === 'TESSUTO';
+    const r = soft ? Math.min(0.04, Math.min(w, h, d) * 0.4) : 0;
+    const geo = r > 0.006 ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d);
+    return place(new THREE.Mesh(geo, mt), x, y + h / 2, z);
+  };
   /* cilindro verticale con la base a quota y */
   const cy = (rt, rb, h, x, y, z, mt, seg = 24) => place(new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mt), x, y + h / 2, z);
   /* cilindro con l'asse lungo x (ruote) */

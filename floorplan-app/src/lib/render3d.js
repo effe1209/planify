@@ -97,8 +97,17 @@ export async function houseImage(project, {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
     const v = view || cameraViews(project, { aspect: width / height })[0];
-    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, view: v, time, background, roof, lowWalls });
+    const { RectAreaLightUniformsLib } = await import('three/examples/jsm/lights/RectAreaLightUniformsLib.js');
+    RectAreaLightUniformsLib.init();
+    const { loadHdri } = await import('./hdri');
+    const hdri = await loadHdri(THREE, time);
+    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls, windows: true });
     if (!built) return null;
+    try {
+      const { upgradeMaterials } = await import('./pbr');
+      const n = await upgradeMaterials(THREE, built.model, { aniso: renderer.capabilities.getMaxAnisotropy?.() || 8 });
+      info.pbr = n;
+    } catch (e) { info.notes.push(`materiali PBR non caricati (${e.message})`); }
     const { scene, bounds } = built;
     const { size } = bounds;
     built.sun.shadow.mapSize.set(width > 2500 ? 4096 : 2048, width > 2500 ? 4096 : 2048);

@@ -189,6 +189,7 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
 
   // lampade accese: una luce per ogni punto luce; di giorno, luci di riempimento per i rimbalzi
   built.built.realLights.forEach((l) => l.parent?.remove(l));
+  (built.windowLights || []).forEach((l) => l.parent?.remove(l));
   if (lampsOn) {
     for (const p of lamps.slice(0, 28)) {
       const l = new THREE.PointLight('#ffd9a0', 7, 0, 2);
