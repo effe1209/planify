@@ -832,6 +832,49 @@ FIXTURE_WORDS = [
 ]
 
 
+def _balcony_rect(segs, k, box, rooms):
+    """Balcone o veranda aperta: coppie di linee di vetro (parapetto, montanti) fuori dal perimetro dei muri, appoggiate a un
+    lato della casa. Ritorna [x0, y0, x1, y1] in metri (y verso l'alto), con il lato interno sul bordo dei locali, o None."""
+    X0, X1, Y0, Y1 = box
+    rx0, rx1 = min(r[0] for r in rooms), max(r[2] for r in rooms)
+    ry0, ry1 = min(r[1] for r in rooms), max(r[3] for r in rooms)
+    beyond = {"N": [], "S": [], "E": [], "W": []}
+    for role in ("window", "door"):
+        hs, vs, _ = _axis_segments(segs, k, {role})
+        pieces = [(lo, c - t / 2, hi, c + t / 2) for c, lo, hi, t in _pair_walls(_join_lines(hs)) if t <= 0.3 and hi - lo >= 0.3] + \
+                 [(c - t / 2, lo, c + t / 2, hi) for c, lo, hi, t in _pair_walls(_join_lines(vs)) if t <= 0.3 and hi - lo >= 0.3]
+        for x0, y0, x1, y1 in pieces:
+            if y0 >= Y1 - 0.3:
+                beyond["N"].append((x0, y0, x1, y1))
+            if y1 <= Y0 + 0.3:
+                beyond["S"].append((x0, y0, x1, y1))
+            if x0 >= X1 - 0.3:
+                beyond["E"].append((x0, y0, x1, y1))
+            if x1 <= X0 + 0.3:
+                beyond["W"].append((x0, y0, x1, y1))
+    best = None
+    for side, ps in beyond.items():
+        if len(ps) < 2:
+            continue
+        bx0, by0 = min(q[0] for q in ps), min(q[1] for q in ps)
+        bx1, by1 = max(q[2] for q in ps), max(q[3] for q in ps)
+        along = (bx1 - bx0) if side in "NS" else (by1 - by0)
+        depth = (by1 - by0) if side in "NS" else (bx1 - bx0)
+        edge_gap = {"N": by0 - Y1, "S": Y0 - by1, "E": bx0 - X1, "W": X0 - bx1}[side]
+        if not (1.5 <= along <= 12 and 0.6 <= depth <= 4.5 and -0.4 <= edge_gap <= 0.6):
+            continue
+        near = lambda v, a, b: a if abs(v - a) <= 0.25 else b if abs(v - b) <= 0.25 else v
+        if side in "NS":
+            x0, x1 = near(bx0, rx0, rx1), near(bx1, rx1, rx0)
+            r = [x0, ry1, x1, by1] if side == "N" else [x0, by0, x1, ry0]
+        else:
+            y0, y1 = near(by0, ry0, ry1), near(by1, ry1, ry0)
+            r = [rx1, y0, bx1, y1] if side == "E" else [bx0, y0, rx0, y1]
+        if r[2] - r[0] >= 1.0 and r[3] - r[1] >= 0.6 and (best is None or along * depth > best[0]):
+            best = (along * depth, r)
+    return best[1] if best else None
+
+
 def _corner_doors(arcs, k, hwalls, vwalls, known):
     """Porte il cui cardine sta sulla fine di un muro e la cui anta, aperta, arriva alla fine di un altro muro senza che ci
     sia un muro perpendicolare a chiudere il varco (porta d'angolo: l'estremo dell'arco cade dentro lo spessore di un muro che
@@ -1344,6 +1387,11 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     if scan:
         rooms = _drop_balconies(rooms)
 
+    # balcone / veranda aperta (vetro fuori dai muri): un locale esterno con il parapetto
+    balcony = None if scan else _balcony_rect(segs, k, (X0, X1, Y0, Y1), rooms)
+    if balcony:
+        rooms.append([*balcony, max(r[4] for r in rooms) + 1, ["\0balcone"], 0])
+
     # Layout del motore: origine in alto a sinistra, y verso il basso
     RX0 = min(r[0] for r in rooms)
     RY1 = max(r[3] for r in rooms)
@@ -1356,6 +1404,10 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     outside = guessed = 0
     for x0, y0, x1, y1, gid, inside, n in sorted(rooms, key=lambda r: (r[6], -(r[2] - r[0]) * (r[3] - r[1]))):
         area = (x1 - x0) * (y1 - y0)
+        if n == 0 and inside == ["\0balcone"]:
+            room = lay.add_room("Balcone", "balcony", x0 - RX0, RY1 - y1, x1 - RX0, RY1 - y0)
+            group_room[gid] = room.id
+            continue
         if n == 0:
             kind, name, named = _name_room(inside, area)
             guessed += not named
@@ -1419,7 +1471,7 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
         start = round(start, 3)
         inner_room = ra or rb
         if kind == "window":
-            if not exterior:
+            if not exterior and not any(q is not None and q.kind == "balcony" for q in (ra, rb)):
                 kind = "passage"
             else:
                 lay.windows.append(Opening(orient, line, start, w, inner_room.id, None))

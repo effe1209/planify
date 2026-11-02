@@ -2,6 +2,7 @@
  * Il foglio della planimetria in SVG: stanze (rettangoli o poligoni liberi), muri, porte,
  * finestre, arredi, quote e cartiglio. Usato per la vista principale, le miniature e l'export.
  */
+import { balconyRailings } from '../lib/balcony';
 import WallEditor from './WallEditor';
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
@@ -909,7 +910,7 @@ function HouseMark({ plan, s, house }) {
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
-  laundry: 'tile', garage: 'concrete', garden: 'lawn', stairs: 'wood',
+  laundry: 'tile', garage: 'concrete', garden: 'lawn', stairs: 'wood', balcony: 'tile',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
 };
 
@@ -1285,6 +1286,16 @@ export default function PlanSvg({
             <rect key={`w-${i}`} x={w.x * s} y={w.y * s} width={w.w * s} height={w.h * s} />
           ))}
         </g>
+        {balconyRailings(plan).length > 0 && (
+          <g fill="none" strokeLinecap="butt" pointerEvents="none">
+            {balconyRailings(plan).map((l, i) => (
+              <g key={`rail-${i}`}>
+                <line x1={l.x1 * s} y1={l.y1 * s} x2={l.x2 * s} y2={l.y2 * s} stroke={INK} strokeWidth="5" />
+                <line x1={l.x1 * s} y1={l.y1 * s} x2={l.x2 * s} y2={l.y2 * s} stroke="#bfe3f5" strokeWidth="2.6" />
+              </g>
+            ))}
+          </g>
+        )}
         {plan.wallLines?.length > 0 && (
           <g fill="none" stroke={INK} strokeWidth={wt} strokeLinejoin="miter" strokeMiterlimit="3">
             {plan.wallLines.map((l, i) => <path key={`wl-${i}`} d={linePath(l, s)} />)}

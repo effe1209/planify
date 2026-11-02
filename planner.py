@@ -72,12 +72,13 @@ PALETTES = {
 for _p in PALETTES.values():
     _p.setdefault("garage", "#eceef1")
     _p.setdefault("garden", "#e3efd9")
+    _p.setdefault("balcony", "#e6ecef")
 KIND_GROUP = {"living": "living", "living_kitchen": "living", "zone_day": "living", "kitchen": "kitchen",
               "bed": "bed", "zone_night": "bed", "bath": "bath", "wc": "bath", "corridor": "corridor",
               "office_open": "office", "meeting": "meeting", "director": "meeting", "study": "study",
               "hotel_room": "living", "closet": "bed", "storage": "corridor", "entry": "corridor",
               "dining": "living", "garage": "garage", "laundry": "bath", "garden": "garden",
-              "stairs": "corridor"}
+              "stairs": "corridor", "balcony": "balcony"}
 
 
 def snap(v: float, step: float = 0.05) -> float:
@@ -454,18 +455,20 @@ class Layout:
 def build_walls(lay: Layout) -> List[Tuple[float, float, float, float]]:
     xs = sorted({round(v, 3) for r in lay.rooms for v in (r.rect.x, r.rect.x2)})
     ys = sorted({round(v, 3) for r in lay.rooms for v in (r.rect.y, r.rect.y2)})
+    # il balcone è aperto sull'esterno (ha il parapetto, non i muri): il suo muro è solo quello verso la casa
+    bal = {r.group for r in lay.rooms if r.kind == "balcony"}
     hs, vs = [], []
     for y in ys:
         for i in range(len(xs) - 1):
             xm = (xs[i] + xs[i + 1]) / 2
             a, b = lay.group_at(xm, y - 0.01), lay.group_at(xm, y + 0.01)
-            if a != b:
+            if a != b and not ((a in bal and b is None) or (b in bal and a is None)):
                 hs.append((y, xs[i], xs[i + 1], a is None or b is None))
     for x in xs:
         for j in range(len(ys) - 1):
             ym = (ys[j] + ys[j + 1]) / 2
             a, b = lay.group_at(x - 0.01, ym), lay.group_at(x + 0.01, ym)
-            if a != b:
+            if a != b and not ((a in bal and b is None) or (b in bal and a is None)):
                 vs.append((x, ys[j], ys[j + 1], a is None or b is None))
 
     def merge(segs):

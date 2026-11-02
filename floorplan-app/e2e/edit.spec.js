@@ -850,6 +850,7 @@ test('un DXF con muri solo campiti si importa con i suoi locali; uno senza muri 
   await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/monolocale_campito.dxf'));
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('.pf-sheet svg')).toContainText('Bagno');
+  await expect(page.locator('.pf-sheet svg')).toContainText('Balcone');
   await expect(page.getByText(/Muri letti anche dalle campiture/)).toBeVisible();
   await page.locator('input[type="file"]').first().setInputFiles({
     name: 'senza-muri.dxf', mimeType: 'application/dxf',

@@ -14,7 +14,7 @@ const snap = (v) => Math.round(v / STEP) * STEP;
 
 /* Rettangolo dei locali che fanno parte dell'edificio (niente giardino, anche i locali di forma libera). */
 function footprint(plan) {
-  return plan.rooms.filter((r) => r.kind !== 'garden').map((r) => {
+  return plan.rooms.filter((r) => r.kind !== 'garden' && r.kind !== 'balcony').map((r) => {
     if (!r.poly) return { x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.h };
     const xs = r.poly.map((p) => p[0]);
     const ys = r.poly.map((p) => p[1]);

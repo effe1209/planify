@@ -91,6 +91,7 @@ export const ROOM_KINDS = [
   { id: 'laundry', label: 'Lavanderia', name: 'Lavanderia' },
   { id: 'garage', label: 'Garage', name: 'Garage' },
   { id: 'garden', label: 'Giardino / esterno', name: 'Giardino' },
+  { id: 'balcony', label: 'Balcone / terrazzo', name: 'Balcone' },
   { id: 'hotel_room', label: 'Camera hotel', name: 'Camera' },
 ];
 export const ROOM_KIND_NAME = Object.fromEntries(ROOM_KINDS.map((k) => [k.id, k.name]));
