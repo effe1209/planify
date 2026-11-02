@@ -181,21 +181,34 @@ export function guidedDenoiser(THREE, renderer, { scene, camera, width, height, 
 
   return {
     draw(exposure, opaque = false) {
-      // due passate a 11×11 (raggio effettivo ~10 px, senza buchi tra i campioni) → l'ultima fa mappa tonale e sRGB e scrive sul canvas
+      // ogni passata a fasce orizzontali, con un finish() tra l'una e l'altra: una passata a schermo intero con 121 letture per pixel può
+      // tenere occupata la scheda grafica troppo a lungo (reset del sistema); a fasce ogni disegno è breve
+      const gl = renderer.getContext();
+      const bands = Math.max(1, Math.ceil(height / 135));
+      const run = (target) => {
+        renderer.setRenderTarget(target);
+        renderer.autoClear = true;
+        renderer.setScissorTest(bands > 1);
+        for (let i = 0; i < bands; i++) {
+          if (bands > 1) renderer.setScissor(0, Math.floor((i * height) / bands), width, Math.ceil(height / bands) + 1);
+          renderer.autoClear = i === 0 && !target ? true : false;
+          renderer.render(quadScene, quadCam);
+          gl.finish();
+        }
+        renderer.setScissorTest(false);
+        renderer.autoClear = true;
+      };
       mesh.material = matA;
       matA.uniforms.colorMap.value = colorTexture;
       matA.uniforms.stride.value = 1;
-      renderer.setRenderTarget(tmp);
-      renderer.render(quadScene, quadCam);
+      run(tmp);
       mesh.material = matFinal;
       matFinal.uniforms.colorMap.value = tmp.texture;
       matFinal.uniforms.stride.value = 1;
       matFinal.uniforms.exposure.value = exposure;
       matFinal.uniforms.opaque.value = opaque ? 1 : 0;
-      renderer.setRenderTarget(null);
-      renderer.autoClear = true;
       renderer.toneMappingExposure = 1;   // l'esposizione la applica già lo shader (prima della mappa tonale)
-      renderer.render(quadScene, quadCam);
+      run(null);
     },
     dispose() {
       for (const t of [geo, alb, tmp]) t.dispose();

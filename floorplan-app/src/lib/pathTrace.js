@@ -210,7 +210,9 @@ export async function pathTraceImage(THREE, renderer, built, camera, { width, he
   pt.fadeDuration = 0;
   pt.rasterizeScene = false;
   pt.dynamicLowRes = false;
-  pt.tiles.set(width > 2500 ? 4 : 2, width > 2500 ? 4 : 2);
+  // tile piccoli (circa 320 × 200 px): ogni disegno dura poco. Su Windows la scheda grafica che resta occupata più di ~2 s per un solo
+  // disegno viene resettata dal sistema (TDR) e il browser, dopo qualche reset, disattiva WebGL fino al riavvio
+  pt.tiles.set(Math.min(14, Math.ceil(width / 320)), Math.min(14, Math.ceil(height / 200)));
   pt.setScene(scene, camera);
 
   const started = Date.now();

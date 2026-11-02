@@ -129,6 +129,9 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
           <option value="high">Alta, path tracing (minuti)</option>
         </select>
       </label>
+      {quality === 'high' && size === '4k' && (
+        <p className="pf-warn" role="note">Path tracing in 4K: molto pesante per la scheda grafica; se il browser perde WebGL, passa a Full HD.</p>
+      )}
       {quality === 'high' && (
         <label>
           <span>Campioni (meno grana, più tempo)</span>
