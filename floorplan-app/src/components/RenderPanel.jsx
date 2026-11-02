@@ -48,6 +48,8 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
     const v = find(id);
     // vista da fuori: il tetto si accende da solo, tranne nella pianta dall'alto (stile planimetria); la scelta resta modificabile con l'interruttore
     if (v?.kind === 'outside') onRoof?.(id !== 'plan3d');
+    // viste a quota d'occhi nel giardino: sullo sfondo bianco il bagliore velerebbe tutto, meglio il cielo dell'ora (si può rimettere a mano)
+    if (id === 'garden-view' && bg === 'white') setBg('sky');
     if (v && three.current?.setCamera) three.current.setCamera(shiftView(v, dy));
   };
   const save = async () => {

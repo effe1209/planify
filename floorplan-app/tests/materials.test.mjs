@@ -62,3 +62,20 @@ const th = themeFor(logs, logs.floors[0]);
 assert.equal(th.materials.facade, 'log');
 assert.equal(themeFor(project(), project().floors[0]), THEMES.modern);
 console.log('materials ok');
+
+// travi a vista: solo nei render (con soffitto), layer TRAVI, dentro i muri, mai nei locali sotto il soppalco
+{
+  const beams = (g) => { const out = []; g.traverse((o) => { if (o.isMesh && o.userData.layer === 'TRAVI') out.push(o); }); return out; };
+  const noCeil = buildHouse(THREE, wood, (f) => themeFor(wood, f));
+  assert.equal(beams(noCeil).length, 0, 'nella vista viva niente travi');
+  const withCeil = buildHouse(THREE, wood, (f) => themeFor(wood, f), { ceiling: true });
+  const bs = beams(withCeil);
+  assert.ok(bs.length >= 3);
+  for (const b of bs) { const { width, depth } = b.geometry.parameters; assert.ok(Math.max(width, depth) <= 8 - 0.2 + 1e-6, 'la trave sta dentro i muri'); }
+  const under = { ...plan, height: 5, mezzanine: { x: 5, y: 0, w: 5, h: 8, elev: 2.6, open: ['W'], stair: { x: 4, y: 6, w: 1, h: 1 } },
+    rooms: [{ id: 1, kind: 'living', name: 'S', x: 0, y: 0, w: 5, h: 8 }, { id: 2, kind: 'kitchen', name: 'C', x: 5, y: 0, w: 5, h: 8 }] };
+  const pj = { ...wood, floors: [{ id: 'a', level: 0, plan: under, meta: { style: 'modern' } }] };
+  const rooms = beams(buildHouse(THREE, pj, (f) => themeFor(pj, f), { ceiling: true })).map((b) => b.position.x);
+  assert.ok(rooms.length && rooms.every((x) => x < 5), 'nessuna trave sotto il soppalco');
+}
+console.log('materials travi ok');

@@ -8,6 +8,7 @@ import { aimDevice, reachAt, sensorModel } from './coverage';
 import { KINDS } from './electric';
 import { WALL_H } from './scene3d';
 import { styleKit } from './style3d';
+import { localSize } from './furniture3d';
 
 const deg = Math.PI / 180;
 const MAX_REAL_LIGHTS = 10;   // luci puntuali vere: le altre restano bagliori emissivi (iPad e telefono)
@@ -221,6 +222,26 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         const hit = snap(p.x, p.y, 0.2);
         if (hit && hit.nx * nx + hit.nz * nz > 0.5) { px = hit.x; pz = hit.z; }
       }
+      // applique del bagno: centrata sopra lo specchio del lavabo sullo stesso muro (non spostata di lato e storta rispetto alla barra luce)
+      let sconceH = null;
+      if (k === 'light_wall' && (nx || nz)) {
+        const rk0 = plan.rooms.find((r) => r.id === p.room)?.kind;
+        if (rk0 === 'bath' || rk0 === 'wc') {
+          const FV = { S: [0, 1], N: [0, -1], E: [1, 0], W: [-1, 0] };
+          const sink = (plan.furniture || []).find((it) => {
+            if (it.type !== 'sink' || it.room !== p.room) return false;
+            const f = FV[it.facing || 'S'];
+            if (!f || f[0] * nx + f[1] * nz < 0.5) return false;
+            const [lw, ld] = localSize(it);
+            return Math.abs((nx ? (nx > 0 ? it.x : it.x + lw) : (nz > 0 ? it.y : it.y + ld)) - (nx ? px : pz)) < 0.5;
+          });
+          if (sink) {
+            const [lw, ld] = localSize(sink);
+            if (nx) pz = sink.y + ld / 2; else px = sink.x + lw / 2;
+            sconceH = 2.05;   // sopra la barra luce dello specchio
+          }
+        }
+      }
       const wall = nx !== 0 || nz !== 0;
       const key = `IMP_${k.toUpperCase()}`;
       const layerOf = (kk) => (['light', 'light_wall', 'light_ext', 'light_garden', 'emergency', 'fan'].includes(kk) ? 'IMP_LUCI'
@@ -267,7 +288,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
           }
           const fl = p.ceil ?? WALL_H;   // sotto il soppalco il soffitto è il suo solaio
           at(g, p.x, fl, p.y, G('lights'));
-          lightsSeen.push({ x: p.x, y: y + fl - 0.15, z: p.y, g: G('lights') });
+          lightsSeen.push({ x: p.x, y: y + fl - 0.4, z: p.y, g: G('lights'), room: p.room, plan });
           continue;
         }
         g.name = 'LAMPADARIO';
@@ -313,12 +334,12 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         }
         const ceil = p.ceil ?? WALL_H;
         at(g, p.x, ceil, p.y, G('lights'));
-        lightsSeen.push({ x: p.x, y: y + ceil - 0.5, z: p.y, g: G('lights') });
+        lightsSeen.push({ x: p.x, y: y + ceil - 0.5, z: p.y, g: G('lights'), room: p.room, plan });
         continue;
       }
       const g = object(`IMP_${k.toUpperCase()}`, layerOf(k), key);
       const lampLike = k === 'light_wall' || k === 'light_ext' || k === 'light_garden' || k === 'emergency';
-      const baseH = (HEIGHT[k] ?? 1.2) + (p.elev || 0);
+      const baseH = (sconceH ?? HEIGHT[k] ?? 1.2) + (p.elev || 0);
       if (k === 'switch' || k === 'switch_2way' || k === 'switch_inter' || k === 'button' || k === 'bell') {
         box(g, 0.08, 0.08, 0.012, plate, 0, 0, 0.006);
         box(g, 0.025, 0.045, 0.008, k === 'bell' ? mat('bell', '#c9a14a', {}, 'METALLO') : white, 0, 0, 0.014);
@@ -378,7 +399,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
         } else {
           part(g, new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), gl, 0, 0, 0.012).rotation.x = Math.PI / 2;
         }
-        lightsSeen.push({ x: px + nx * 0.25, y: y + baseH, z: pz + nz * 0.25, g: G('lights') });
+        lightsSeen.push({ x: px + nx * 0.25, y: y + baseH, z: pz + nz * 0.25, g: G('lights'), room: p.room, plan });
       } else if (k === 'light_ext') {
         box(g, 0.16, 0.22, 0.1, mat('extlamp', '#2b3036', { metalness: 0.4 }, 'METALLO'), 0, 0, 0.05);
         const gl = mat('extglow', '#fff3d4', { emissive: '#ffcf80', emissiveIntensity: 0.15 }, 'LUCE');
@@ -403,6 +424,17 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
       }
     }
 
+    // potenza di ogni punto luce: la luce di un locale è proporzionale alla sua superficie (circa 110 lm/m²) e si divide tra i suoi punti,
+    // così un bagno piccolo non brucia e un soggiorno grande non resta spento. k = 1 è una lampada da 1500 lm.
+    const perRoom = new Map();
+    for (const l of lightsSeen) perRoom.set(`${l.plan?.scale}|${l.room}`, (perRoom.get(`${l.plan?.scale}|${l.room}`) || 0) + 1);
+    for (const l of lightsSeen) {
+      const r = l.plan?.rooms?.find((q) => q.id === l.room);
+      const area = r ? (r.area || r.w * r.h) : 12;
+      const lm = Math.max(700, Math.min(4500, area * 110)) / (perRoom.get(`${l.plan?.scale}|${l.room}`) || 1);
+      l.k = Math.max(0.3, Math.min(1.5, lm / 1500));
+      delete l.plan;
+    }
     out.lightPoints.push(...lightsSeen);
 
     // luci vere: le più distanti fra loro (al massimo MAX_REAL_LIGHTS per scena) illuminano davvero
@@ -410,6 +442,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
     lightsSeen.forEach((l, i) => {
       if (i % step || out.realLights.length >= MAX_REAL_LIGHTS) return;
       const pl = new THREE.PointLight('#ffd9a0', 0, 7, 1.6);
+      pl.userData.k = l.k ?? 1;
       pl.position.set(l.x, l.y, l.z);
       G('lights').add(pl);
       out.realLights.push(pl);

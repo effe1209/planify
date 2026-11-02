@@ -4,6 +4,7 @@
  * x e z come la pianta, y verso l'alto; un piano sta a level × FLOOR_H.
  */
 import { FLOOR_H } from './scene3d';
+import { frontOf } from './project';
 
 export const EYE = 1.6;   // altezza degli occhi nelle viste interne
 
@@ -78,6 +79,25 @@ function distFor(r, fov, aspect) {
  * dall'angolo opposto alle porte; nel loft anche una dal soppalco verso il soggiorno.
  * { id, label, kind: 'outside' | 'inside', floor?: id, level?, position: [x, y, z], target: [x, y, z], fov }
  */
+/*
+ * Il giardino davanti alla casa nelle coordinate della casa (come lo mette scene3d placeGarden): { toWorld(lx, ly), gw, gl, hx, fw, front }
+ * con (lx, ly) = punto nel piano del giardino (x lungo la facciata, y verso la strada), null se non c'è un giardino con la casa.
+ */
+export function gardenFrame(project) {
+  const garden = (project?.floors || []).find((f) => f.level === 'out' && f.plan?.rooms?.length);
+  const fr = garden && frontOf(project);
+  if (!fr) return null;
+  const { width: gw, length: gl } = garden.plan.dimensions;
+  const { W, L } = fr;
+  const fw = fr.facade.w;
+  const hx = garden.plan.house?.x ?? (gw - fw) / 2;
+  const front = fr.facade.front;
+  const toWorld = {
+    S: (x, y) => [x - hx, L + y], N: (x, y) => [W + hx - x, -y], E: (x, y) => [W + y, L + hx - x], W: (x, y) => [-y, -hx + x],
+  }[front];
+  return { toWorld, gw, gl, hx, fw, front };
+}
+
 export function cameraViews(project, { aspect = 16 / 9 } = {}) {
   const b = houseBounds(project);
   if (!b.W) return [];
@@ -102,6 +122,31 @@ export function cameraViews(project, { aspect = 16 / 9 } = {}) {
       target: [b.center[0], 0, b.center[2]], position: [b.center[0], dist, b.center[2] + off] });
   }
   outside('front', 'Fronte', [0, 0.22, 1]);
+  // il giardino, se c'è: una vista dall'alto che abbraccia casa e giardino, una a quota d'occhi dal cancello verso il portoncino
+  const gf = gardenFrame(project);
+  const fr0 = gf ? frontOf(project)?.facade?.door : null;
+  if (gf) {
+    const pts = [[0, 0], [gf.gw, 0], [0, gf.gl], [gf.gw, gf.gl]].map(([x, y]) => gf.toWorld(x, y)).concat([[0, 0], [b.W, 0], [0, b.L], [b.W, b.L]]);
+    const x0 = Math.min(...pts.map((q) => q[0])); const x1 = Math.max(...pts.map((q) => q[0]));
+    const z0 = Math.min(...pts.map((q) => q[1])); const z1 = Math.max(...pts.map((q) => q[1]));
+    const c = [(x0 + x1) / 2, 0.8, (z0 + z1) / 2];
+    const gr = Math.hypot(x1 - x0, z1 - z0, b.top) / 2;
+    const gd = distFor(gr, fov, aspect);
+    const mid = gf.toWorld(gf.gw / 2, gf.gl / 2);
+    const door = gf.toWorld(gf.hx + gf.fw / 2, 0);
+    const outDir = [mid[0] - door[0], mid[1] - door[1]];
+    const on = Math.hypot(...outDir) || 1;
+    const dir = [outDir[0] / on, outDir[1] / on];
+    out.push({ id: 'garden-aerial', label: 'Giardino dall\'alto', kind: 'outside', fov, target: c,
+      position: [c[0] + dir[0] * gd * 0.7, c[1] + gd * 0.6, c[2] + dir[1] * gd * 0.7] });
+    // dal fondo del giardino verso la casa, a quota d'occhi, dall'angolo del fondo, in diagonale: così il gazebo o il vialetto al centro non coprono il portoncino
+    const doorX = fr0 ? gf.hx + (fr0.x ?? gf.fw / 2) : gf.hx + gf.fw / 2;
+    const left = doorX > gf.gw / 2;                       // si sta dal lato opposto al portoncino
+    const eyeAt = gf.toWorld(left ? gf.gw * 0.1 : gf.gw * 0.9, gf.gl - 0.9);
+    const tgt = gf.toWorld(doorX, 0);
+    out.push({ id: 'garden-view', label: 'Giardino: verso la casa', kind: 'outside', fov: 62,
+      target: [tgt[0], 1.5, tgt[1]], position: [eyeAt[0], EYE + 0.1, eyeAt[1]] });
+  }
   const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).sort((a, c) => a.level - c.level);
   for (const f of floors) {
     const y0 = f.level * FLOOR_H;
