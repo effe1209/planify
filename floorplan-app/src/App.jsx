@@ -624,7 +624,10 @@ export default function App() {
   const [sheets, setSheets] = useState(null);   // null = pianta; { roof } = prospetti e sezioni
   panOn.current = !!plan && !sketch && !view3d && !sheets && !(globalView && current?.floors.length > 1);
   const three = useRef(null);                    // esportazioni della vista 3D aperta (Plan3D onReady)
-  const builtFloors = current?.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).length || 0;
+  // piani costruiti + il giardino attaccato alla casa: con anche un solo piano (loft, monolocale) il giardino fa «tutta la casa»
+  const hasHouse = !!current?.floors.some((f) => typeof f.level === 'number' && f.plan?.rooms?.length);
+  const builtFloors = current?.floors.filter((f) => (typeof f.level === 'number' || (f.level === 'out' && hasHouse)) && f.plan?.rooms?.length).length || 0;
+  const hasGarden = !!current?.floors.some((f) => f.level === 'out' && f.plan?.rooms?.length);
   const selectedItem = selection?.key === undoKey && plan?.furniture[selection.index] ? selection.index : null;
   const setSelectedItem = (index) => setSelection(index == null ? null : { key: undoKey, index });
   // dispositivo d'allarme selezionato (per id, sul piano aperto); esclude l'arredo selezionato e viceversa
@@ -1757,7 +1760,7 @@ export default function App() {
 
             <div className="pf-group" role="group" aria-label="Vista 3D">
               <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
-                onClick={() => { setSheets(null); setView3d(view3d ? null : { low: false, whole: globalView && builtFloors > 1, spread: false, roof: globalView && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null, sensors: !!devices?.length, electric: !!electricPlan, cables: false, cones: false, lightsOn: false }); }}
+                onClick={() => { setSheets(null); setView3d(view3d ? null : { low: false, whole: (globalView || hasGarden) && builtFloors > 1, spread: false, roof: (globalView || hasGarden) && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null, sensors: !!devices?.length, electric: !!electricPlan, cables: false, cones: false, lightsOn: false }); }}
                 title="Vista 3D navigabile"><Box size={15} /> 3D</button>
               <button type="button" className={`pf-tool ${sheets ? 'is-on' : ''}`} aria-pressed={!!sheets} disabled={!plan}
                 onClick={() => { setView3d(null); setSheets(sheets ? null : { roof: { ...ROOF_DEFAULTS } }); }}
