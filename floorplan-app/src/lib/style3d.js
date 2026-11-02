@@ -63,9 +63,10 @@ export const STYLE_KITS = {
 };
 
 import { kitWithPalette } from './palette';
+import { kitWithMaterials } from './materials';
 
-/* Il kit dello stile, con la palette dei colori principali della casa se c'è (lib/palette.js). */
-export const styleKit = (id, palette = null) => kitWithPalette(STYLE_KITS[id] || STYLE_KITS.modern, palette);
+/* Il kit dello stile, con i materiali scelti (lib/materials.js) e i colori principali della casa (lib/palette.js) se ci sono. */
+export const styleKit = (id, palette = null, materials = null) => kitWithPalette(kitWithMaterials(STYLE_KITS[id] || STYLE_KITS.modern, materials), palette);
 
 /* ── texture ───────────────────────────────────────────────────────────── */
 const cache = new Map();
@@ -256,6 +257,86 @@ function paint(kind, a, b, c) {
       }
       break;
     }
+    case 'woodlap': {   // doghe orizzontali sovrapposte (clapboard), 15 cm
+      const h = 38;
+      for (let i = 0; i * h < N; i++) {
+        g.fillStyle = css(mix(a, b, rnd() * 0.55));
+        g.fillRect(0, i * h, N, h);
+        const sh = g.createLinearGradient(0, i * h, 0, i * h + h);
+        sh.addColorStop(0, css(hex(b), 0.0));
+        sh.addColorStop(0.85, css(hex(b), 0.0));
+        sh.addColorStop(1, css(hex(b), 0.55));
+        g.fillStyle = sh;
+        g.fillRect(0, i * h, N, h);
+        for (let k = 0; k < 7; k++) { g.fillStyle = css(hex(b), 0.09); g.fillRect(rnd() * N, i * h + 3 + rnd() * (h - 8), 40 + rnd() * 90, 1); }
+        const joint = rnd() * N;
+        g.fillStyle = css(hex(b), 0.5);
+        g.fillRect(joint, i * h, 1.4, h);
+      }
+      break;
+    }
+    case 'logwall': {   // tronchi tondi squadrati: cilindri sovrapposti, 22 cm
+      const h = 56;
+      for (let i = 0; i * h < N + h; i++) {
+        const gr = g.createLinearGradient(0, i * h, 0, i * h + h);
+        gr.addColorStop(0, css(mix(a, b, 0.55 + rnd() * 0.15)));
+        gr.addColorStop(0.28, css(mix(a, '#ffffff', 0.1)));
+        gr.addColorStop(0.6, css(mix(a, b, 0.15)));
+        gr.addColorStop(1, css(mix(a, b, 0.85)));
+        g.fillStyle = gr;
+        g.fillRect(0, i * h, N, h);
+        g.fillStyle = css(hex(b), 0.6);
+        g.fillRect(0, i * h + h - 2, N, 2);
+        for (let k = 0; k < 9; k++) { g.fillStyle = css(hex(b), 0.12); g.fillRect(rnd() * N, i * h + 6 + rnd() * (h - 14), 30 + rnd() * 100, 1); }
+      }
+      break;
+    }
+    case 'stone': {   // pietra a corsi irregolari
+      g.fillStyle = css(hex(b));
+      g.fillRect(0, 0, N, N);
+      let y = 0;
+      while (y < N) {
+        const rh = 26 + rnd() * 22;
+        let x = -rnd() * 40;
+        while (x < N) {
+          const rw = 38 + rnd() * 52;
+          g.fillStyle = css(mix(a, rnd() < 0.5 ? '#ffffff' : '#000000', 0.04 + rnd() * 0.14));
+          g.beginPath();
+          g.roundRect(x + 1.5, y + 1.5, rw - 3, rh - 3, 4);
+          g.fill();
+          x += rw;
+        }
+        y += rh;
+      }
+      speckle(700, '#000000', '#ffffff', 1.4, 0.08);
+      break;
+    }
+    case 'shingleroof': {   // scandole di legno: file sfalsate arrotondate
+      const rh = 18;
+      for (let r = 0; r * rh < N + rh; r++) {
+        for (let q = -1; q * 24 < N; q++) {
+          const x = q * 24 + (r % 2 ? 12 : 0);
+          g.fillStyle = css(mix(a, b, rnd() * 0.8));
+          g.beginPath();
+          g.roundRect(x + 0.5, r * rh - 6, 23, rh + 6, [0, 0, 7, 7]);
+          g.fill();
+          g.fillStyle = css(hex(b), 0.35);
+          g.fillRect(x + 0.5, r * rh + rh - 2, 23, 2);
+        }
+      }
+      break;
+    }
+    case 'wallpaper': {   // carta da parati a righe sottili con piccolo motivo
+      for (let i = 0; i * 32 < N; i++) {
+        g.fillStyle = css(hex(b), 0.35);
+        g.fillRect(i * 32, 0, 14, N);
+        g.fillStyle = css(hex(b), 0.5);
+        g.fillRect(i * 32 + 14, 0, 1.2, N);
+        g.fillRect(i * 32 + 30, 0, 1.2, N);
+      }
+      speckle(500, b, '#ffffff', 1.3, 0.08);
+      break;
+    }
     default:
       break;
   }
@@ -305,7 +386,7 @@ export function kitMaterials(THREE, mat, kit) {
     m.userData.pbrTint = spec.color;
     return m;
   };
-  const roofTex = { slate: 'slateroof', tile: 'tileroof', metal: 'metalroof' }[kit.roof.kind];
+  const roofTex = { slate: 'slateroof', tile: 'tileroof', metal: 'metalroof', shingle: 'shingleroof' }[kit.roof.kind];
   const floorTex = (f) => {
     const map = texture(THREE, f.kind, f.a, f.b, f.joint);
     const m = mat(map ? '#ffffff' : f.a, { ...(map && { map }), roughness: f.kind === 'marble' ? 0.25 : f.kind === 'concrete' ? 0.95 : 0.7 });
