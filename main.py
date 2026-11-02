@@ -33,7 +33,7 @@ app = FastAPI(
 
 # Funzioni del motore: il frontend le legge da /health per capire se un'opzione verrà rispettata.
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
-FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export", "dxf_layers",
+FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export", "dxf_layers", "curved_facade",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
             "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "open_stairs", "loft_type"]
 
@@ -68,6 +68,7 @@ class PlanRequest(BaseModel):
     stair_type: Literal["auto", "u", "l", "straight"] = Field("auto", description="Scala a U, a L o a rampa unica")
     core: Optional["StairCore"] = Field(None, description="Scala di un altro piano (plan.stairs[i].core): va nello stesso punto")
     wet: Optional[List[Dict[str, float]]] = Field(None, description="Bagni del piano accanto ({x, y, w, h}): si cerca di sovrapporli")
+    curve: Optional[Dict[str, Any]] = Field(None, description="Facciata ad arco: {side: N|S|E|O…, bulge: freccia in metri}")
     house: Optional[Dict[str, Any]] = Field(None, description="Solo giardino: facciata della casa {w, door: {x, w}, garage: {x, w, side, ramp}}")
 
 
@@ -100,6 +101,7 @@ class HouseRequest(BaseModel):
     stair_type: Literal["auto", "u", "l", "straight"] = "auto"
     stair_style: Literal["auto", "closed", "open"] = "auto"   # scala chiusa nel vano o a vista
     floors: List[HouseFloor] = Field(..., min_length=1, max_length=5)
+    curve: Optional[Dict[str, Any]] = Field(None, description="Facciata ad arco su tutti i piani abitati: {side: N|S|E|W, bulge: m}")
 
 
 class Needs(BaseModel):
@@ -148,6 +150,7 @@ class Room(BaseModel):
     color: str
     size: str = ""          # camere: "double" (matrimoniale) | "single"
     poly: Optional[List[List[float]]] = None   # contorno libero (schizzi): se presente vale questo, non il rettangolo
+    label: Optional[List[float]] = None        # dove scrivere il nome, se non è il centro del riquadro
 
 
 class Wall(BaseModel):
@@ -217,6 +220,8 @@ class PlanResponse(BaseModel):
     house: Optional[Dict[str, Any]] = None     # giardino: dove sta la casa sul lato nord ({x, w} in metri)
     height: Optional[float] = None             # altezza interna del piano se diversa da quella standard (loft)
     mezzanine: Optional[Dict[str, Any]] = None  # soppalco del loft: ingombro, quota, parapetto, rampa
+    wallLines: List[Dict[str, Any]] = []        # muri curvi e obliqui: polilinee {pts, closed} (già interrotte dove c'è un'apertura)
+    curve: Optional[Dict[str, Any]] = None      # facciata ad arco: {type, side, bulge}
 
 
 class HouseFloorPlan(BaseModel):
@@ -241,7 +246,7 @@ def health():
 @app.post("/generate-plan", response_model=PlanResponse)
 def generate_floor_plan(request: PlanRequest):
     try:
-        return planner.generate(
+        plan = planner.generate(
             width=request.width,
             length=request.length,
             room_type=request.room_type,
@@ -262,6 +267,7 @@ def generate_floor_plan(request: PlanRequest):
             wet=request.wet,
             house=request.house,
         )
+        return planner.apply_curve(plan, request.curve)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")
 
@@ -270,7 +276,7 @@ def generate_floor_plan(request: PlanRequest):
 def generate_house(request: HouseRequest):
     """Casa su più piani generata insieme (zona giorno / zona notte) con la scala allineata."""
     try:
-        return planner.generate_house(
+        res = planner.generate_house(
             width=request.width,
             length=request.length,
             style=request.style or "modern",
@@ -279,6 +285,11 @@ def generate_house(request: HouseRequest):
             stair_style=request.stair_style,
             floors=[{**f.model_dump(), "needs": f.needs.model_dump() if f.needs else None} for f in request.floors],
         )
+        if request.curve:
+            # tutti i piani abitati con lo stesso arco; il garage scorre soltanto, così la scala resta allineata
+            for f in res["floors"]:
+                planner.apply_curve(f["plan"], request.curve, flat=f.get("program") == "garage")
+        return res
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella generazione: {e}")
 

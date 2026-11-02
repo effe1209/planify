@@ -3756,6 +3756,14 @@ def generate(width: float, length: float, room_type: str = "apartment",
 HOUSE_PROGRAMS = ("full", "day", "night", "garage")
 
 
+def apply_curve(plan: dict, curve: Optional[dict], flat: bool = False) -> dict:
+    """Facciata ad arco (curves.bow_facade) se richiesta, dove ha senso: non per giardini e garage."""
+    if not curve or not curve.get("side") or plan.get("house") or any(r.get("kind") == "garden" for r in plan.get("rooms", [])):
+        return plan
+    from curves import bow_facade
+    return bow_facade(plan, curve["side"], float(curve.get("bulge") or 0), flat=flat)
+
+
 def entrance_side(plan: dict) -> Optional[str]:
     """Facciata (N/E/S/W) del portoncino di una pianta finita: la prima porta d'ingresso senza basculante."""
     W, L = plan["dimensions"]["width"], plan["dimensions"]["length"]

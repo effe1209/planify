@@ -917,3 +917,26 @@ test('i layer di un DXF si controllano e si correggono con la scelta del ruolo d
   await expect(page.getByText('Pianta importata con la scelta dei layer')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('una facciata ad arco si sceglie nel modulo e la pianta ha il muro curvo, in 2D e in 3D', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('radiogroup', { name: 'Facciata ad arco' }).getByRole('radio', { name: 'Sud' }).click();
+  await page.getByLabel('Freccia dell\'arco').fill('1.6');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Facciata sud ad arco/)).toBeVisible();
+  // il muro curvo è una polilinea in più nella pianta; una finestra della facciata sta sull'arco (ruotata)
+  const rotated = await page.locator('.pf-sheet svg g[transform*="rotate("]').count();
+  expect(rotated).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const stats = await page.evaluate(() => {
+    let walls = 0; let rotated = 0;
+    window.__planify3d.model.traverse((o) => { if (o.isMesh && o.userData.layer === 'MURI') { walls++; if (Math.abs(o.rotation.y) > 0.02 && Math.abs(Math.abs(o.rotation.y) - Math.PI / 2) > 0.02) rotated++; } });
+    return { walls, rotated };
+  });
+  expect(stats.rotated).toBeGreaterThan(10);   // tratti di muro inclinati: l'arco
+  expect(errors).toEqual([]);
+});
