@@ -23,6 +23,7 @@ import CoverageLayer from './CoverageLayer';
 import { pointInPolygon, polyPath } from '../lib/geometry';
 import { HOUSE_BAND, isGardenPlan, sheetBox } from '../lib/sheet';
 import { THEMES } from '../lib/themes';
+import { themeWithPalette } from '../lib/palette';
 import { clamp, fmt, fmtM } from '../lib/utils';
 
 const INK = '#14181f';
@@ -1045,7 +1046,7 @@ function Devices({ devices, plan, s, selected, editable, toMeters, onSelect, onM
    ──────────────────────────────────────────────────────────────────────────── */
 export default function PlanSvg({
   plan: planProp, layers, hoverId = null, selectedId = null, onHover, onSelect,
-  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', devices = null, stairs = null, house = null,
+  thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', palette = null, devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
@@ -1069,7 +1070,7 @@ export default function PlanSvg({
     return { x: p.x / plan.scale, y: p.y / plan.scale };
   };
   const placed = (it, i) => (drag?.index === i ? { ...it, x: drag.x, y: drag.y } : it);
-  const theme = THEMES[style] || THEMES.modern;
+  const theme = themeWithPalette(THEMES[style] || THEMES.modern, palette);
   const s = plan.scale;
   const W = plan.svgWidth;
   const H = plan.svgHeight;

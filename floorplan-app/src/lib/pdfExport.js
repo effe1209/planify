@@ -663,11 +663,11 @@ export async function exportProjectPdf(project) {
   const techPages = new Set();
   for (const f of project.floors.filter((x) => x.plan)) {
     doc.addPage('a4', 'landscape');
-    await floorPage(doc, f, devices, { stairs: byFloor[f.id], house });
+    await floorPage(doc, f, devices, { stairs: byFloor[f.id], house, palette: project.palette });
     const fl = electric?.floors[f.id];
     if (fl?.points.length) {
       doc.addPage('a4', 'landscape');
-      await electricPage(doc, f, fl, electric.level, { stairs: byFloor[f.id], house, electricLinks: project.electric.links !== false });
+      await electricPage(doc, f, fl, electric.level, { stairs: byFloor[f.id], house, palette: project.palette, electricLinks: project.electric.links !== false });
     }
     if (schedule.codes[f.id] && f.plan.rooms.some((r) => r.kind !== 'garden')) {
       doc.addPage('a4', 'landscape');
@@ -677,7 +677,7 @@ export async function exportProjectPdf(project) {
     const pl = plumbing?.floors[f.id];
     if (pl?.points.length) {
       doc.addPage('a4', 'landscape');
-      await plumbingPage(doc, f, pl, plumbing, { stairs: byFloor[f.id], house, plumbingLines: project.plumbing.lines !== false });
+      await plumbingPage(doc, f, pl, plumbing, { stairs: byFloor[f.id], house, palette: project.palette, plumbingLines: project.plumbing.lines !== false });
     }
   }
   try {
