@@ -60,11 +60,20 @@ export async function houseImage(project, {
   const bg = backgroundFor(background, time);
   const t = timeById(time);
   let renderer;
+  let why = '';   // il motivo del rifiuto, dall'evento del browser: dice se è il limite di contesti, l'accelerazione spenta o la scheda in lista nera
+  const watch = (cv) => cv.addEventListener('webglcontextcreationerror', (ev) => { why = ev.statusMessage || why; });
   try {
+    watch(canvas);
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
   } catch {
     // il browser rifiuta il contesto completo: si riprova su un canvas nuovo, senza antialias (il canvas ha già provato un contesto)
-    renderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), antialias: false, alpha: true, preserveDrawingBuffer: true });
+    const cv = document.createElement('canvas');
+    watch(cv);
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false, alpha: true, preserveDrawingBuffer: true });
+    } catch (e) {
+      throw new Error(`${e.message}${why ? ` (${why.slice(0, 160)})` : ''}`);
+    }
   }
   canvas = renderer.domElement;   // quello che ha davvero il contesto
   try {

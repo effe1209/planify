@@ -710,7 +710,7 @@
 
 /* Scritta «Planify» dell'intestazione: due immagini, una per tema */
 .pf-wordmark { display: inline-flex; align-items: center; line-height: 0; }
-.pf-wordmark img { display: block; height: 36px; width: auto; }
+.pf-wordmark img { display: block; height: 34px; width: auto; transform: translateY(11%); }   /* le lettere stanno nei due terzi alti dell'immagine (sotto c'è la discendente della y): si abbassa per centrarle sul logo */
 .pf-wordmark-dark { display: none !important; }
 .pf-app[data-theme="dark"] .pf-wordmark-light { display: none !important; }
 .pf-app[data-theme="dark"] .pf-wordmark-dark { display: block !important; }
