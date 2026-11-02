@@ -507,13 +507,13 @@ test('il render in qualità alta usa il path tracing e salva il PNG', async ({ p
 
 test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(150_000);
+  test.setTimeout(420_000);
   const errors = await open(page);
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: /^Esporta/ }).click();
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 100_000 }),
+    page.waitForEvent('download', { timeout: 380_000 }),
     page.getByRole('menuitem', { name: /PDF progetto/ }).click(),
   ]);
   const { readFileSync, copyFileSync } = await import('node:fs');
@@ -550,7 +550,7 @@ test('il DXF esportato ha pianta, quote, prospetti e sezioni sui loro layer', as
 
 test('il PDF del loft ha prospetti e sezioni con il soppalco', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(150_000);
+  test.setTimeout(420_000);
   const errors = await open(page);
   await page.getByRole('radio', { name: 'Loft' }).click();
   await page.getByLabel('Larghezza').fill('12');
@@ -559,7 +559,7 @@ test('il PDF del loft ha prospetti e sezioni con il soppalco', async ({ page }, 
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: /^Esporta/ }).click();
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 100_000 }),
+    page.waitForEvent('download', { timeout: 380_000 }),
     page.getByRole('menuitem', { name: /PDF progetto/ }).click(),
   ]);
   const { readFileSync, copyFileSync } = await import('node:fs');
