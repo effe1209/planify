@@ -533,6 +533,24 @@ test('il tetto del render si accende da solo nelle viste da fuori e si spegne ne
   expect(errors).toEqual([]);
 });
 
+test('aprire e chiudere la vista 3D molte volte non esaurisce i contesti WebGL', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(240_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const three = page.getByRole('button', { name: '3D', exact: true });
+  for (let i = 0; i < 22; i++) {   // il browser concede ~16 contesti: senza liberarli il 17° fallisce
+    await three.click();
+    await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 20_000 });
+    await expect(page.getByText('Vista 3D non disponibile')).toHaveCount(0);
+    await three.click();
+    await expect(page.locator('.pf-sheet svg')).toBeVisible();
+    await page.evaluate(() => { delete window.__planify3d; });
+  }
+  expect(errors).toEqual([]);
+});
+
 test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(420_000);

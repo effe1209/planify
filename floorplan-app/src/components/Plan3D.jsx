@@ -9,6 +9,7 @@ import { THEMES } from '../lib/themes';
 export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);   // «Riprova» ricrea il contesto WebGL
   const sceneRef = useRef(null);   // { THREE, model, buildRoof, roofFloor }: il tetto si cambia senza ricostruire la scena
   const roofRef = useRef(roof);
   roofRef.current = roof;
@@ -63,7 +64,19 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         const { sceneToDxf } = await import('../lib/dxf3d');
         if (disposed || !host.current) return;
         const el = host.current;
-        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        // il contesto WebGL: prima completo; se il browser lo rifiuta (scheda grafica sotto stress, poca memoria) si riprova più leggero
+        let renderer;
+        try {
+          renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        } catch (e1) {
+          try {
+            renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, powerPreference: 'default' });
+          } catch (e2) {
+            throw new Error(`${e2.message}`);
+          }
+        }
+        // se la scheda grafica si resetta (render pesanti, 4K) il contesto va perso: lo si dice e «Riprova» lo ricrea
+        renderer.domElement.addEventListener('webglcontextlost', (ev) => { ev.preventDefault(); if (!disposed) setError('Il contesto grafico è stato perso (la scheda grafica si è resettata)'); });
         renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -202,6 +215,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             if (o.material) [].concat(o.material).forEach((m) => m.dispose());
           });
           renderer.dispose();
+          renderer.forceContextLoss();   // libera il contesto WebGL (il browser ne concede pochi: 16 circa)
           renderer.domElement.remove();
         };
       } catch (err) {
@@ -214,7 +228,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     };
     // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, project, style, lowWalls, spread, north]);
+  }, [plan, project, style, lowWalls, spread, north, attempt]);
 
   /*
    * Livelli del loft e sezione 3D, senza ricostruire la scena. «Sotto» nasconde il soppalco e tutto ciò che sta sopra;
@@ -295,7 +309,15 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
 
   return (
     <div className="pf-3d" ref={host}>
-      {error && <p className="pf-hint">Vista 3D non disponibile: {error}</p>}
+      {error && (
+        <div className="pf-hint pf-3d-error" role="alert">
+          <p>Vista 3D non disponibile: {error}</p>
+          {/WebGL/i.test(error) && (
+            <p>Il browser ha finito i contesti grafici (troppe schede o render aperti) o l&apos;accelerazione grafica è spenta. Chiudi le altre schede che usano il 3D e riprova.</p>
+          )}
+          <button type="button" className="pf-tool" onClick={() => { setError(null); setAttempt((n) => n + 1); }}>Riprova</button>
+        </div>
+      )}
       <span className="pf-3d-hint">Trascina per ruotare · rotellina per lo zoom · tasto destro per spostarti</span>
     </div>
   );

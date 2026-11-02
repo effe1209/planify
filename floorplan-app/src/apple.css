@@ -710,7 +710,7 @@
 
 /* Scritta «Planify» dell'intestazione: due immagini, una per tema */
 .pf-wordmark { display: inline-flex; align-items: center; line-height: 0; }
-.pf-wordmark img { display: block; height: 30px; width: auto; }
+.pf-wordmark img { display: block; height: 36px; width: auto; }
 .pf-wordmark-dark { display: none !important; }
 .pf-app[data-theme="dark"] .pf-wordmark-light { display: none !important; }
 .pf-app[data-theme="dark"] .pf-wordmark-dark { display: block !important; }
@@ -723,3 +723,11 @@
 .pf-render-check input { margin-top: 3px; accent-color: var(--accent); }
 .pf-render-check span { font-size: 12.5px !important; color: var(--text) !important; }
 .pf-render-check em { display: block; font-style: normal; font-size: 11px; color: var(--text-muted); }
+
+.pf-3d-error { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px; background: var(--card, #fff); color: var(--text); z-index: 2; }
+.pf-3d-error p { margin: 0; max-width: 420px; }
+
+/* Logo tondo: un anello sottile lo stacca dal fondo; nel tema scuro (nero su grigio scuro) l'anello è lime e c'è un alone leggero */
+.pf-logo { border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(23, 33, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.16); }
+.pf-app[data-theme="dark"] .pf-logo { box-shadow: 0 0 0 1.5px rgba(209, 244, 98, 0.6), 0 0 16px rgba(209, 244, 98, 0.2); }
+.pf-brand { gap: 12px; }
