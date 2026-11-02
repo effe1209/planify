@@ -162,7 +162,9 @@ export async function houseImage(project, {
 
     // l'occlusione ambientale dipende molto dalla scheda grafica: si prova in piccolo e, se rende l'immagine molto più scura
     // del render diretto (pareti nere), si lascia da parte
-    let aoOk = !bg.alpha && effects;
+    // a oltre 2500 px niente occlusione ambientale né target a mezzo float con 4 campioni: sono i passaggi che più caricano la scheda grafica
+    const big = width > 2500;
+    let aoOk = !bg.alpha && effects && !big;
     if (aoOk && directMedian != null && directMedian > 0.02) {
       try {
         const pw = 256;
@@ -190,7 +192,7 @@ export async function houseImage(project, {
 
     // tempo reale: più strade, dalla più bella alla più sicura; ognuna si controlla (immagine nera = si passa alla successiva)
     const attempts = [];
-    if (!bg.alpha && effects) attempts.push('post');        // render + occlusione ambientale + bagliore + mappa tonale (target a mezzo float, 4 campioni)
+    if (!bg.alpha && effects && !big) attempts.push('post');        // render + occlusione ambientale + bagliore + mappa tonale (target a mezzo float, 4 campioni)
     if (!bg.alpha && effects) attempts.push('post-light');  // come sopra, ma con target a 8 bit e senza antialias multicampione
     attempts.push('direct');                    // render diretto, senza effetti
     let data = null;

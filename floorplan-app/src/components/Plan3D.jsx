@@ -320,7 +320,10 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       {error && (
         <div className="pf-hint pf-3d-error" role="alert">
           <p>Vista 3D non disponibile: {error}</p>
-          {/WebGL/i.test(error) && (
+          {/Disabled|0xffff|blocklist/i.test(error) && (
+            <p>Il browser ha disattivato WebGL: di solito succede dopo che la scheda grafica si è resettata (render molto pesanti, come il 4K o il path tracing). <b>Chiudi tutte le finestre di Edge e riaprilo</b>: ricaricare la pagina non basta. Poi usa render più leggeri (Full HD, meno campioni).</p>
+          )}
+          {/WebGL/i.test(error) && !/Disabled|0xffff|blocklist/i.test(error) && (
             <p>Il browser ha finito i contesti grafici (troppe schede o render aperti) o l&apos;accelerazione grafica è spenta. Chiudi le altre schede che usano il 3D e riprova.</p>
           )}
           <button type="button" className="pf-tool" onClick={() => { setError(null); setAttempt((n) => n + 1); }}>Riprova</button>
