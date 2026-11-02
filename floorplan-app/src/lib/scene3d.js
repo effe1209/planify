@@ -114,10 +114,21 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   }
 
   // vani di porte e finestre come rettangoli in pianta (come li disegna PlanSvg)
-  const list = [
+  const allOpenings = [
     ...plan.doors.filter((d) => d.kind !== 'gate').map((d) => ({ ...d, door: true })),
     ...plan.windows.map((w) => ({ ...w, door: false })),
   ];
+  // sui muri dritti le aperture sono orizzontali o verticali; su muri curvi o obliqui (forme libere, facciata ad arco) hanno un angolo qualsiasi
+  const axisAligned = (o) => {
+    const r = (((o.rot || 0) % 180) + 180) % 180;
+    if (!(r < 0.01 || Math.abs(r - 90) < 0.01)) return false;
+    if (!plan.wallLines?.length) return true;
+    // orizzontale o verticale ma su un muro curvo (ai punti cardinali di un cerchio): non c'è un muro rettangolare da forare
+    const q = r < 0.01 ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t } : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w };
+    return plan.walls.some((w) => q.x1 > w.x - 0.02 && q.x0 < w.x + w.w + 0.02 && q.z1 > w.y - 0.02 && q.z0 < w.y + w.h + 0.02);
+  };
+  const list = allOpenings.filter(axisAligned);
+  const oblique = allOpenings.filter((o) => !axisAligned(o));
   const openings = list.map((o) => (o.rot === 0 || !o.rot
     ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door }
     : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door }));
@@ -211,6 +222,88 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       const p0 = Math.min(len - 0.05, Math.max(0, (len * i) / posts - 0.025));
       at(p0, p0 + 0.05, 0.0, 1.05, M.metal);
     }
+  }
+
+  // muri curvi e obliqui: polilinee (già interrotte dove c'è un'apertura), un parallelepipedo per tratto, con la faccia esterna dello stile
+  for (const wl of plan.wallLines || []) {
+    const pts = wl.pts;
+    const n = wl.closed ? pts.length : pts.length - 1;
+    for (let i = 0; i < n; i++) {
+      const [x0, z0] = pts[i];
+      const [x1, z1] = pts[(i + 1) % pts.length];
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      if (len < 0.004) continue;
+      const a = Math.atan2(z1 - z0, x1 - x0);
+      const nx = -Math.sin(a);
+      const nz = Math.cos(a);
+      const mx = (x0 + x1) / 2;
+      const mz = (z0 + z1) / 2;
+      const off = t / 2 + 0.12;
+      const left = inside(mx + nx * off, mz + nz * off);
+      const right = inside(mx - nx * off, mz - nz * off);
+      const out = right && !left ? 1 : left && !right ? -1 : 0;   // +1: l'esterno è dalla parte della normale sinistra
+      const mats = [K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn];
+      if (out) mats[out > 0 ? 4 : 5] = KF.facade;
+      const L = len + Math.min(0.06, t * 0.35);   // un po' più lungo: sulle curve i tratti si sovrappongono senza lasciare fessure
+      const g = new THREE.Mesh(new THREE.BoxGeometry(L, wallH, t), mats);
+      uvMeters(g.geometry, L, wallH, t);
+      g.position.set(mx, wallH / 2, mz);
+      g.rotation.y = -a;
+      g.castShadow = true;
+      g.receiveShadow = true;
+      g.userData.layer = 'MURI';
+      root.add(g);
+    }
+  }
+  // aperture oblique: sopra e sotto il vano il muro continua; finestra con vetro e telaio, porta con stipiti, architrave e anta
+  for (const o of oblique) {
+    const a = ((o.rot || 0) * Math.PI) / 180;
+    const ux = Math.cos(a), uz = Math.sin(a);
+    const nx = -uz, nz = ux;
+    const piece = (a0, a1, c0, c1, y0, h, m) => {
+      if (a1 - a0 < 0.002 || c1 - c0 < 0.002 || h < 0.002) return null;
+      const g = new THREE.Mesh(new THREE.BoxGeometry(a1 - a0, h, c1 - c0), m);
+      if (m === M.glass) g.userData.layer = 'VETRI';
+      else if (Array.isArray(m) || m.map) uvMeters(g.geometry, a1 - a0, h, c1 - c0);
+      const am = (a0 + a1) / 2, cm = (c0 + c1) / 2;
+      g.position.set(o.x + ux * am + nx * cm, y0 + h / 2, o.y + uz * am + nz * cm);
+      g.rotation.y = -a;
+      g.castShadow = true;
+      g.receiveShadow = true;
+      root.add(g);
+      return g;
+    };
+    const lintel = (y0) => { const m = piece(0, o.w, 0, t, y0, wallH - y0, K.wallIn); if (m) m.userData.layer = 'MURI'; };
+    const fr = 0.045;
+    if (!o.door) {
+      const top = Math.min(DOOR_H, wallH);
+      if (wallH <= SILL) continue;
+      const sill = piece(0, o.w, 0, t, 0, SILL, K.wallIn);
+      if (sill) sill.userData.layer = 'MURI';
+      if (wallH > top) lintel(top);
+      piece(fr, o.w - fr, t / 2 - 0.01, t / 2 + 0.01, SILL, top - SILL, M.glass);
+      for (const [p0, p1, y0, h] of [[0, fr, SILL, top - SILL], [o.w - fr, o.w, SILL, top - SILL], [0, o.w, SILL, fr], [0, o.w, top - fr, fr]]) {
+        piece(p0, p1, -0.01, t + 0.01, y0, h, K.frame);
+      }
+      const panes = o.w > 2.2 ? 3 : o.w > 1.2 ? 2 : 1;
+      for (let k = 1; k < panes; k++) piece((o.w * k) / panes - fr / 2, (o.w * k) / panes + fr / 2, -0.01, t + 0.01, SILL, top - SILL, K.frame);
+      continue;
+    }
+    if (wallH <= DOOR_H) continue;
+    lintel(DOOR_H);
+    piece(0, fr, -0.01, t + 0.01, 0, DOOR_H, K.frame);
+    piece(o.w - fr, o.w, -0.01, t + 0.01, 0, DOOR_H, K.frame);
+    piece(0, o.w, -0.01, t + 0.01, DOOR_H - fr, fr, K.frame);
+    const leaf = new THREE.Group();
+    const lw = o.w - 2 * fr;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? K.frame : K.door);
+    slab.position.set(lw / 2, (DOOR_H - fr - 0.01) / 2 + 0.005, 0);
+    slab.castShadow = true;
+    leaf.add(slab);
+    leaf.position.set(o.x + ux * fr + nx * (t / 2), 0, o.y + uz * fr + nz * (t / 2));
+    leaf.rotation.y = -a - (o.openDir || 1) * ((65 * Math.PI) / 180);
+    leaf.traverse((c) => { if (c.isMesh) { c.userData.layer = 'PORTE'; c.receiveShadow = true; } });
+    root.add(leaf);
   }
 
   // infissi e porte nei colori dello stile: telaio e traversa centrale, davanzale, anta socchiusa con maniglia
