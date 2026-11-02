@@ -683,3 +683,28 @@ test('il soppalco si allarga dal pannello con l\'avviso oltre 1/3, e si mette un
   await expect(room.locator('.pf-furn-row', { hasText: 'Tappeto' })).toHaveCount(1);
   expect(errors).toEqual([]);
 });
+
+test('un loft con il giardino si vede in 3D insieme: casa intera con il giardino davanti', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(150_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Loft' }).click();
+  await page.getByLabel('Larghezza').fill('12');
+  await page.getByLabel('Lunghezza').fill('8');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Aggiungi un piano' }).click();
+  await page.getByRole('dialog', { name: 'Aggiungi piano' }).locator('select').selectOption({ label: 'Giardino / esterno' });
+  await page.getByRole('button', { name: /Genera con i parametri/ }).click();
+  await page.getByRole('button', { name: /Genera «Giardino/ }).click();
+  await expect(page.getByRole('button', { name: '3D', exact: true })).toBeEnabled({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  const whole = page.getByRole('button', { name: 'Tutta la casa' });
+  await expect(whole).toBeVisible();   // anche con un solo piano più il giardino
+  await expect(whole).toHaveAttribute('aria-pressed', 'true');
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const names = await page.evaluate(() => { const n = []; window.__planify3d.model.traverse((o) => { if (o.userData?.layer) n.push(o.userData.layer); }); return [...new Set(n)]; });
+  expect(names).toContain('MURI');   // la casa
+  expect(names.some((n) => /VEGETAZIONE|SIEPI|RECINZIONE|PRATO|PIETRA/.test(n)) || names.length > 3).toBe(true);
+  expect(errors).toEqual([]);
+});
