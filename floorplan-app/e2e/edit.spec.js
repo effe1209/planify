@@ -842,3 +842,20 @@ test('il menu «Aggiungi piano» resta dentro lo schermo', async ({ page }, info
   expect(box.y + box.height).toBeLessThanOrEqual(vp.height);
   expect(errors).toEqual([]);
 });
+
+test('un DXF con muri solo campiti si importa con i suoi locali; uno senza muri è rifiutato con un messaggio', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/monolocale_campito.dxf'));
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('.pf-sheet svg')).toContainText('Bagno');
+  await expect(page.getByText(/Muri letti anche dalle campiture/)).toBeVisible();
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: 'senza-muri.dxf', mimeType: 'application/dxf',
+    buffer: Buffer.from('0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nQuote\n10\n0\n20\n0\n11\n5\n21\n0\n0\nENDSEC\n0\nEOF\n'),
+  });
+  await expect(page.getByRole('alert')).toContainText('non importo nulla', { timeout: 30_000 });
+  await expect(page.getByRole('alert')).toContainText('Quote');
+  expect(errors).toEqual([]);
+});

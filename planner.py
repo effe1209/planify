@@ -2684,9 +2684,25 @@ def _garden_plan(W: float, L: float, house: Optional[dict], notes: List[str]) ->
             if dside in ("left", "right"):
                 cx = hx if dside == "left" else hx + hw
             notes.append(f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il cancello pedonale e il camminamento "
-                         "arrivano all'angolo, davanti alla basculante c'è il vialetto con la rampa." if out.get("ramp") else
-                         f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il camminamento arriva all'angolo.")
-        gx = snap(clamp(cx - gate_w / 2, EDGE, W - EDGE - gate_w))
+                         "corrono lungo quel fianco fino alla porta, davanti alla basculante c'è il vialetto con la rampa." if out.get("ramp") else
+                         f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il camminamento corre lungo il fianco fino alla porta.")
+        if dside in ("left", "right"):
+            # il camminamento corre lungo il fianco della casa fino al portoncino: il cancello pedonale sta in quella fascia
+            gx = snap(clamp((hx - 1.2) if dside == "left" else (hx + hw + 0.2), EDGE, W - EDGE - gate_w))
+        else:
+            gx = snap(clamp(cx - gate_w / 2, EDGE, W - EDGE - gate_w))
+        if out["drive"] and dside in ("left", "right") and out.get("garage_side") == "front":
+            dx, dw = out["drive"]
+            if gx < dx + dw + 0.3 and gx + gate_w > dx - 0.3:
+                # il vialetto carrabile non deve occupare il lato del portoncino: lo si sposta dall'altra parte, finché
+                # resta davanti alla basculante
+                gcx = hx + float(g.get("x") or 0)
+                new_dx = snap(gx - 0.3 - dw) if dside == "right" else snap(gx + gate_w + 0.3)
+                if EDGE <= new_dx <= W - EDGE - dw and abs(new_dx + dw / 2 - gcx) <= max(0.0, (dw - float(g.get("w") or 0)) / 2) + 0.8:
+                    out["drive"] = (new_dx, dw)
+                else:
+                    notes.append("Il vialetto carrabile occupa il lato del portoncino: il camminamento pedonale passa dall'altra "
+                                 "parte del vialetto; allargare il lotto lo porterebbe al fianco.")
         if out["drive"]:
             dx, dw = out["drive"]
             if gx < dx + dw + 0.3 and gx + gate_w > dx - 0.3:

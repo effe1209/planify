@@ -1287,6 +1287,7 @@ export default function App() {
         say(engineHas('furnish_plan') ? 'Planimetria DXF importata: scegli lo stile e arreda' : 'Planimetria DXF importata e arredata');
       } catch (err) {
         setError(`Errore durante l'importazione del file DXF: ${err.message}`);
+        if (narrow()) setPanels({ left: true, right: false });   // l'errore sta nel cassetto dei comandi: sugli schermi stretti lo si apre
       }
     } finally {
       setImporting(null);

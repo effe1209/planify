@@ -82,7 +82,8 @@ test('importa un DXF trascinandolo', async ({ page }) => {
     '0', 'ENDSEC', '0', 'EOF',
   ].join('\n');
   await page.locator('input[type="file"]').first().setInputFiles({ name: 'prova.dxf', mimeType: 'application/dxf', buffer: Buffer.from(dxf) });
-  await expect(page.locator('.pf-sheet svg, .pf-error')).toBeVisible({ timeout: 20_000 });
+  // quattro linee senza spessore non sono muri: o si ricostruisce una pianta, o si dice perché non si importa nulla
+  await expect(page.locator('.pf-sheet svg, .pf-error, [role="alert"]').first()).toBeVisible({ timeout: 20_000 });
 });
 
 test('il tetto in 3D si accende e si spegne', async ({ page }) => {
