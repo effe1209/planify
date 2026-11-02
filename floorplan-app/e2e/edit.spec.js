@@ -718,10 +718,17 @@ test('i colori principali della casa ricolorano pianta e 3D, e si possono ripris
   const panel = page.locator('section.pf-palette');
   await expect(panel).toBeVisible();
   const before = await page.locator('.pf-sheet svg').first().innerHTML();
-  await panel.getByLabel('Pareti interne').fill('#ff0000');
-  await panel.getByLabel('Facciata').fill('#00ff00');
-  await panel.getByLabel('Tessuti e divani').fill('#0000ff');
-  await expect(panel).toContainText('#FF0000');
+  await panel.getByLabel('Pareti interne', { exact: true }).fill('#ff0000');
+  await panel.getByLabel('Facciata', { exact: true }).fill('#00ff00');
+  await panel.getByLabel('Tessuti e divani', { exact: true }).fill('#0000ff');
+  await expect(panel.getByLabel('Pareti interne: codice esadecimale')).toHaveValue('#FF0000');
+  await expect(panel.getByLabel('Pareti interne: G')).toHaveValue('0');
+  // codice scritto a mano e canali RGB
+  await panel.getByLabel('Pavimenti: codice esadecimale').fill('#b7773f');
+  await expect(panel.getByLabel('Pavimenti: R')).toHaveValue('183');
+  await expect(panel.getByLabel('Pavimenti: G')).toHaveValue('119');
+  await panel.getByLabel('Pavimenti: B').fill('64');
+  await expect(panel.getByLabel('Pavimenti: codice esadecimale')).toHaveValue('#B77740');
   await expect(panel.getByRole('button', { name: /Torna ai colori dello stile/ })).toBeEnabled();
   expect(await page.locator('.pf-sheet svg').first().innerHTML()).not.toBe(before);   // i tessuti cambiano in pianta
   await page.getByRole('button', { name: '3D', exact: true }).click();
@@ -749,6 +756,6 @@ test('i colori principali della casa ricolorano pianta e 3D, e si possono ripris
   await panel.getByRole('button', { name: /Torna ai colori dello stile/ }).click();
   await expect(panel.getByRole('button', { name: /Torna ai colori dello stile/ })).toBeDisabled();
   await panel.getByRole('button', { name: 'Sabbia e salvia' }).click();
-  await expect(panel).toContainText('#A8B59A');
+  await expect(panel.getByLabel('Tessuti e divani: codice esadecimale')).toHaveValue('#A8B59A');
   expect(errors).toEqual([]);
 });

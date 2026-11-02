@@ -746,3 +746,13 @@
 .pf-pal-dots i { width: 9px; height: 14px; display: block; }
 .pf-pal-dots i:first-child { border-radius: 4px 0 0 4px; }
 .pf-pal-dots i:last-child { border-radius: 0 4px 4px 0; }
+.pf-pal-list li { display: grid; gap: 5px; margin-bottom: 4px; }
+.pf-pal-head { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.pf-pal-head em { font-style: normal; font-size: 11px; color: var(--text-muted); }
+.pf-pal-codes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.pf-pal-hex { width: 80px; box-sizing: border-box; font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; padding: 5px 7px; border: 1px solid var(--line, rgba(0,0,0,.15)); border-radius: 7px; background: var(--card, #fff); color: var(--text); }
+.pf-pal-ch { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); }
+.pf-pal-ch input { width: 44px; box-sizing: border-box; font-size: 12px; padding: 5px 4px; border: 1px solid var(--line, rgba(0,0,0,.15)); border-radius: 7px; background: var(--card, #fff); color: var(--text); font-variant-numeric: tabular-nums; }
+.pf-pal-ch input { width: 46px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+.pf-pal-ch input::-webkit-outer-spin-button, .pf-pal-ch input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pf-pal-codes { gap: 6px; }
