@@ -108,10 +108,11 @@ for o in bpy.data.objects:
         # potenza relativa dal nome (LUCE_PUNTUALE_K085 = 0,85): la luce segue la superficie del locale, né bruciata né spenta
         m = re.search(r'_K(\\d+)', o.name)
         k = int(m.group(1)) / 100 if m else 1.0
-        o.data.energy = POTENZA_LAMPADA_W * 4 * k if LAMPADE_ACCESE else 0
+        # di giorno restano accese a bassa potenza: una luce di riempimento (bagni e locali senza finestre grandi non restano al buio)
+        o.data.energy = POTENZA_LAMPADA_W * 4 * k * (1.0 if LAMPADE_ACCESE else 0.3)
         o.data.color = (1.0, 0.85, 0.63)
-        o.data.shadow_soft_size = 0.15
-        o.hide_render = not LAMPADE_ACCESE
+        o.data.shadow_soft_size = 0.3
+        o.hide_render = False
 
 # vetri: vetro vero (rifrazione), non un riquadro semitrasparente
 vetro = bpy.data.materials.new('Vetro')

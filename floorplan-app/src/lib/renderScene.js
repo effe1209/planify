@@ -51,7 +51,8 @@ export function refineMaterials(THREE, model, maxAniso = 8) {
       if (m.userData?.cat === 'VETRO') { m.roughness = 0.04; m.opacity = Math.min(m.opacity, 0.28); m.depthWrite = false; }
       else if (m.userData?.cat === 'METALLO') { m.roughness = Math.min(m.roughness, 0.35); m.metalness = Math.max(m.metalness, 0.7); }
       else if (m.userData?.cat === 'CERAMICA') m.roughness = Math.min(m.roughness, 0.25);
-      else if (m.roughness > 0.8 && !m.userData?.cat) m.roughness = 0.78;
+      // muri e intonaci restano opachi (prima si portavano a 0,78 e prendevano un velo lucido «di plastica»)
+      else if (!m.userData?.cat) m.roughness = Math.max(m.roughness, 0.88);
     }
   });
 }

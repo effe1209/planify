@@ -15,6 +15,10 @@ const SETS = {
   marble: { dir: 'marble', rep: 0.55, tint: 0.15, gain: 1.05 },
   travertine: { dir: 'travertine', rep: 0.55, tint: 0.2, gain: 1.05 },
   tileroof: { dir: 'roof', rep: 0.6, tint: 0.3, gain: 1.0 },
+  woodlap: { dir: 'boards', rep: 0.5, tint: 0.5, gain: 2.1 },    // doghe e tronchi: assi vere di legno, schiarite e tinte dal colore scelto
+  logwall: { dir: 'boards', rep: 0.5, tint: 0.5, gain: 2.1 },
+  cladding: { dir: 'boards', rep: 0.5, tint: 0.5, gain: 2.1 },
+  fabric: { dir: 'fabric', rep: 2.6, tint: 0.85, gain: 1.15 },   // divani, tende, cuscini, tappeti: trama vera di tessuto
 };
 
 const cache = new Map();   // dir → Promise<{ color, normal, rough }>

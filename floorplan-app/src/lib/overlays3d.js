@@ -281,7 +281,7 @@ export function buildOverlays(THREE, { floors, devices = [], electric = null, th
           }
           const fl = p.ceil ?? WALL_H;   // sotto il soppalco il soffitto è il suo solaio
           at(g, p.x, fl, p.y, G('lights'));
-          lightsSeen.push({ x: p.x, y: y + fl - 0.4, z: p.y, g: G('lights'), room: p.room, plan });
+          lightsSeen.push({ x: p.x, y: y + fl - 0.55, z: p.y, g: G('lights'), room: p.room, plan });
           continue;
         }
         g.name = 'LAMPADARIO';

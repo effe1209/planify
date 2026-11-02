@@ -68,6 +68,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   M.wall = K.wallIn;
   M.wood.userData.pbr = 'plank';          // il legno degli arredi e del soppalco: nel render diventa legno vero con venature
   M.wood.userData.pbrTint = theme.wood;
+  for (const k of ['fabric', 'duvet', 'accent']) { M[k].userData.pbr = 'fabric'; M[k].userData.pbrTint = k === 'duvet' ? theme.duvet : k === 'accent' ? (theme.accent || '#4f6d8f') : theme.fabric; }
   // categoria di materiale: nel DXF 3D ogni pezzo di un arredo va sul layer del suo materiale
   const CATS = { wood: 'LEGNO', fabric: 'TESSUTO', duvet: 'TESSUTO', cabinet: 'LACCATO', counter: 'PIANO', dark: 'PLASTICA', ceramic: 'CERAMICA',
     lamp: 'LUCE', plant: 'VEGETAZIONE', car: 'CARROZZERIA', metal: 'METALLO', stone: 'PIETRA', glass: 'VETRO', accent: 'TESSUTO' };
@@ -287,6 +288,8 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
 
   // tende alle finestre (sempre aperte, raccolte ai lati) e specchi con la luce sopra il lavabo
   const curtainMat = mat(theme.curtain || '#ebe4d6', { roughness: 1 });
+  curtainMat.userData.pbr = 'fabric'; curtainMat.userData.pbrTint = theme.curtain || '#ebe4d6';
+  rugMat.userData.pbr = 'fabric'; rugMat.userData.pbrTint = theme.rug || '#e6ebf2';
   const mirrorMat = mat('#dbe8f1', { roughness: 0.04, metalness: 0.85 });
   const frameMat = mat('#2b3038', { roughness: 0.6 });
   const mz0 = plan.mezzanine;
