@@ -2684,9 +2684,25 @@ def _garden_plan(W: float, L: float, house: Optional[dict], notes: List[str]) ->
             if dside in ("left", "right"):
                 cx = hx if dside == "left" else hx + hw
             notes.append(f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il cancello pedonale e il camminamento "
-                         "arrivano all'angolo, davanti alla basculante c'è il vialetto con la rampa." if out.get("ramp") else
-                         f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il camminamento arriva all'angolo.")
-        gx = snap(clamp(cx - gate_w / 2, EDGE, W - EDGE - gate_w))
+                         "corrono lungo quel fianco fino alla porta, davanti alla basculante c'è il vialetto con la rampa." if out.get("ramp") else
+                         f"Il portoncino è sul fianco {names.get(dside, dside)} della casa: il camminamento corre lungo il fianco fino alla porta.")
+        if dside in ("left", "right"):
+            # il camminamento corre lungo il fianco della casa fino al portoncino: il cancello pedonale sta in quella fascia
+            gx = snap(clamp((hx - 1.2) if dside == "left" else (hx + hw + 0.2), EDGE, W - EDGE - gate_w))
+        else:
+            gx = snap(clamp(cx - gate_w / 2, EDGE, W - EDGE - gate_w))
+        if out["drive"] and dside in ("left", "right") and out.get("garage_side") == "front":
+            dx, dw = out["drive"]
+            if gx < dx + dw + 0.3 and gx + gate_w > dx - 0.3:
+                # il vialetto carrabile non deve occupare il lato del portoncino: lo si sposta dall'altra parte, finché
+                # resta davanti alla basculante
+                gcx = hx + float(g.get("x") or 0)
+                new_dx = snap(gx - 0.3 - dw) if dside == "right" else snap(gx + gate_w + 0.3)
+                if EDGE <= new_dx <= W - EDGE - dw and abs(new_dx + dw / 2 - gcx) <= max(0.0, (dw - float(g.get("w") or 0)) / 2) + 0.8:
+                    out["drive"] = (new_dx, dw)
+                else:
+                    notes.append("Il vialetto carrabile occupa il lato del portoncino: il camminamento pedonale passa dall'altra "
+                                 "parte del vialetto; allargare il lotto lo porterebbe al fianco.")
         if out["drive"]:
             dx, dw = out["drive"]
             if gx < dx + dw + 0.3 and gx + gate_w > dx - 0.3:
@@ -3532,7 +3548,7 @@ def generate(width: float, length: float, room_type: str = "apartment",
              bathrooms: Optional[int] = None, kitchen: str = "auto", peninsula: bool = False,
              needs: Optional[dict] = None, program: str = "full", access: str = "street",
              stair_type: str = "auto", core: Optional[dict] = None,
-             wet: Optional[List[dict]] = None, house: Optional[dict] = None) -> dict:
+             wet: Optional[List[dict]] = None, house: Optional[dict] = None, front: Optional[str] = None) -> dict:
     """Genera la pianta. Per gli appartamenti double/single_bedrooms e bathrooms, se indicati,
     hanno la precedenza su num_rooms; kitchen = auto | open | closed; peninsula = penisola in cucina;
     needs = {entry: True/False/"auto", suite, study, storage}.
@@ -3542,6 +3558,9 @@ def generate(width: float, length: float, room_type: str = "apartment",
     altro piano dello stesso progetto ({x, y, w, h, type, entry, hand}, come in plan["stairs"][i]["core"]):
     la scala di questo piano va nello stesso punto. wet = bagni e lavanderie del piano accanto ({x, y, w, h},
     vedi wet_areas): tra le varianti si preferiscono quelle con i bagni sopra/sotto (scarichi allineati).
+
+    front = N | S | E | W (solo garage): la facciata della basculante, per metterla sullo stesso lato del portoncino
+    della casa; di serie è il lato sud.
 
     Si generano più varianti (schemi e proporzioni diverse) e si sceglie quella con il punteggio
     progettuale più alto (vedi design_review); stesso seed = stessa pianta."""
@@ -3567,8 +3586,19 @@ def generate(width: float, length: float, room_type: str = "apartment",
     if rt == "apartment" and W0 * L0 < 30:
         rt = "open-space"
         early_notes.append("Superficie troppo piccola per una camera separata: generato un monolocale.")
-    # garage e giardino hanno il fronte strada a sud: non si ruotano
-    transposed = W0 < L0 and rt not in ("hotel-room", "garage", "garden")
+    # garage e giardino hanno il fronte strada a sud: non si ruotano, salvo che il garage debba avere la basculante su un'altra
+    # facciata (quella del portoncino): si genera con la basculante a sud e poi si ruota / specchia la pianta finita
+    g_flip = (False, False)
+    g_front_t = False
+    if rt == "garage" and front in ("N", "E", "W"):
+        for t_, fx_, fy_ in ((False, False, True), (True, False, False), (True, True, False), (False, False, False)):
+            side_ = TRANSPOSE_SIDE["S"] if t_ else "S"
+            side_ = FLIP_X.get(side_, side_) if fx_ else side_
+            side_ = FLIP_Y.get(side_, side_) if fy_ else side_
+            if side_ == front:
+                g_front_t, g_flip = t_, (fx_, fy_)
+                break
+    transposed = (W0 < L0 and rt not in ("hotel-room", "garage", "garden")) or g_front_t
     Wn, Ln = (L0, W0) if transposed else (W0, L0)
     n = int(clamp(num_rooms, 1, 8))
     base_palette = PALETTES.get((style or "modern").lower(), PALETTES["modern"])
@@ -3638,7 +3668,7 @@ def generate(width: float, length: float, room_type: str = "apartment",
         # con la scala già fissata si provano le quattro specchiature: in alcune la scala cade nelle file
         # del disimpegno, in altre nella zona giorno (e quella variante si scarta)
         mirror = (bool(k & 1), bool(k & 2)) if (core or wet) and rt == "apartment" else \
-            (False, False) if core else None
+            g_flip if rt == "garage" and core else (False, False) if core else None
         opts["stair"] = stair_for(*(mirror or (False, False)))
         lay = _build_layout(Wn, Ln, rt, n, palette, shape, rng, opts)
         if lay is None:
@@ -3707,7 +3737,9 @@ def generate(width: float, length: float, room_type: str = "apartment",
                                review["strengths"])[:6]
     if transposed:
         lay.transpose()
-    if rt in ("hotel-room", "garage", "garden"):
+    if rt == "garage":
+        lay.flip(*g_flip)
+    elif rt in ("hotel-room", "garden"):
         lay.flip(rt == "hotel-room" and rng.random() < 0.5, False)
     elif lay.mirror is not None:
         lay.flip(*lay.mirror)                                  # la specchiatura che allinea la scala
@@ -3719,6 +3751,17 @@ def generate(width: float, length: float, room_type: str = "apartment",
 
 
 HOUSE_PROGRAMS = ("full", "day", "night", "garage")
+
+
+def entrance_side(plan: dict) -> Optional[str]:
+    """Facciata (N/E/S/W) del portoncino di una pianta finita: la prima porta d'ingresso senza basculante."""
+    W, L = plan["dimensions"]["width"], plan["dimensions"]["length"]
+    d = next((x for x in plan["doors"] if x.get("entrance") and not x.get("kind")), None)
+    if d is None:
+        return None
+    if d.get("rot") == 90:
+        return "W" if d["x"] < W / 2 else "E"
+    return "N" if d["y"] < L / 2 else "S"
 
 
 def generate_house(width: float, length: float, floors: List[dict], style: str = "modern",
@@ -3758,7 +3801,9 @@ def generate_house(width: float, length: float, floors: List[dict], style: str =
         prog = f.get("program") if f.get("program") in HOUSE_PROGRAMS else "full"
         if prog == "garage":
             needs = {**(f.get("needs") or {}), "street": f.get("level", 0) == 0}
-            return generate(width, length, "garage", style=style, seed=s, needs=needs, core=core)
+            # garage interrato: la basculante sulla stessa facciata del portoncino, così il giardino le sta davanti
+            side = entrance_side(plans[lead]) if (not street_garage and lead in plans and f.get("level", 0) < 0) else None
+            return generate(width, length, "garage", style=style, seed=s, needs=needs, core=core, front=side)
         return generate(width, length, "apartment", style=style, shape="rect", seed=s,
                         double_bedrooms=f.get("double_bedrooms"), single_bedrooms=f.get("single_bedrooms"),
                         bathrooms=f.get("bathrooms"), kitchen=f.get("kitchen") or "auto",
@@ -4367,6 +4412,10 @@ def furnish_plan(plan: dict, style: str = "modern", room_ids: Optional[List[int]
     }
 
 
+class DxfNotRecognised(ValueError):
+    """Il DXF non contiene muri né locali riconoscibili."""
+
+
 def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = True) -> dict:
     """Importa le stanze (polilinee chiuse) da un DXF e le arreda.
 
@@ -4398,9 +4447,17 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
     polys = tagged or [p for l, p in polys if not l.strip().lower().startswith(_OTHER_LAYERS)]
     pts = [p for poly in polys for p in poly]
     if not pts:
-        plan = generate(10.0, 8.0, "apartment", 3, style)
-        plan["notes"] = ["Nessuna polilinea chiusa nel DXF: generata una pianta di esempio."] + plan["notes"]
-        return plan
+        # mai una pianta inventata: chi importa un disegno vuole il suo, non uno di esempio
+        try:
+            from dxf_import import layer_report
+            found = layer_report(dxf_content)
+        except Exception:  # noqa: BLE001
+            found = ""
+        raise DxfNotRecognised(
+            "Nel DXF non ho riconosciuto né i muri né i contorni dei locali, quindi non importo nulla"
+            + (f". Layer trovati: {found}" if found else "")
+            + ". Servono i muri su un layer chiamato come «Muri» (a doppia linea o con il riempimento), oppure i locali come "
+              "polilinee chiuse; in alternativa carica il PDF della pianta o usa «Disegna schizzo».")
 
     min_x, max_x = min(p[0] for p in pts), max(p[0] for p in pts)
     min_y, max_y = min(p[1] for p in pts), max(p[1] for p in pts)

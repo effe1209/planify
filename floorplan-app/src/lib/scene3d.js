@@ -676,6 +676,17 @@ function placeGarden(THREE, floor, { facade, W, L }, theme, drop) {
       g.add(wall);
     }
   }
+  // portoncino su un fianco della casa: il camminamento prosegue lungo il fianco fino alla porta
+  const fd = facade.door;
+  if (fd && (fd.side === 'left' || fd.side === 'right')) {
+    const len = fd.d + 0.7;
+    const x0 = fd.side === 'left' ? hx - 1.3 : hx + facade.w + 0.1;
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, len), new THREE.MeshStandardMaterial({ color: '#c9c4b8', roughness: 0.9 }));
+    strip.position.set(x0 + 0.6, 0.02, -len / 2);
+    strip.receiveShadow = true;
+    strip.userData.layer = 'PAVIMENTI';
+    g.add(strip);
+  }
   const place = {
     S: [0, -hx, L], N: [Math.PI, W + hx, 0], E: [Math.PI / 2, W, L + hx], W: [-Math.PI / 2, 0, -hx],
   }[facade.front];

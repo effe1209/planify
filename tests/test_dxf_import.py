@@ -108,6 +108,34 @@ def test_own_dxf_export_still_uses_room_layer():
     assert plan["notes"][0].startswith("Importate 2 stanze")
 
 
+
+def test_walls_only_as_fill_glazed_facade_and_corner_door():
+    """monolocale_campito.dxf (in metri): muri solo come riempimento pieno e linee a pezzi, la facciata nord fatta di soli
+    serramenti e porte, le porte come archi sul layer degli arredi, la porta del bagno all'angolo, nessun testo."""
+    plan = _load("monolocale_campito.dxf")
+    assert abs(plan["dimensions"]["width"] - 4.2) <= 0.06 and abs(plan["dimensions"]["length"] - 5.05) <= 0.1
+    rooms = {r["name"]: r for r in plan["rooms"] if r["name"]}
+    assert set(rooms) == {"Camera", "Bagno"} or set(rooms) == {"Camera Matrimoniale", "Bagno"}
+    bath = rooms["Bagno"]
+    assert 1.9 <= bath["w"] <= 2.3 and 2.2 <= bath["h"] <= 2.6          # il bagno del disegno, 2,1 × 2,3 m a muri finiti
+    assert any("campiture" in n for n in plan["notes"])
+    entrances = [d for d in plan["doors"] if d["entrance"]]
+    assert len(entrances) == 2                                           # ingresso a sud e porta a nord
+    assert len([d for d in plan["doors"] if not d["entrance"]]) == 1     # porta del bagno, tra due locali
+    assert len(plan["windows"]) == 1                                     # la finestra a nord
+    assert any("nome dedotto dagli arredi" in n for n in plan["notes"])  # wc e bidet dicono che è il bagno
+
+
+def test_drawing_without_walls_is_refused_not_invented():
+    """Mai una pianta di esempio: un DXF senza muri né locali dà un errore chiaro con i layer trovati."""
+    dxf = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nQuote\n10\n0\n20\n0\n11\n5\n21\n0\n0\nENDSEC\n0\nEOF\n"
+    try:
+        planner.import_dxf_data(dxf)
+    except planner.DxfNotRecognised as e:
+        assert "non importo nulla" in str(e) and "Quote" in str(e)
+    else:
+        raise AssertionError("doveva rifiutare il file")
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

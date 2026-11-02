@@ -366,6 +366,8 @@ def import_dxf_endpoint(req: DxfImportRequest):
     """Riceve il testo di un file DXF e genera una planimetria arredata completa."""
     try:
         return planner.import_dxf_data(req.dxf_content, style=req.style or "modern", furnished=req.furnish)
+    except planner.DxfNotRecognised as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nell'importazione DXF: {e}")
 

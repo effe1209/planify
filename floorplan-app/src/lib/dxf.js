@@ -77,7 +77,7 @@ export function parseDxfClientSide(text, style = 'modern') {
   let polys = (tagged.length ? tagged : read.filter((p) => !OTHER_LAYERS.test(p.layer))).map((p) => p.pts);
   const all = polys.flat();
   if (!all.length) {
-    return defaultPlan(style);
+    return notRecognised();
   }
   const b = G.bounds(all);
   // unità: metri, centimetri o millimetri, scegliendo la prima che dà misure plausibili (≤ 60 m)
@@ -90,7 +90,7 @@ export function parseDxfClientSide(text, style = 'modern') {
     .filter((p) => p.length >= 3 && G.polygonArea(p) >= 1.5)
     .filter((p, _, arr) => arr.length < 2 || G.polygonArea(p) < bbArea * 0.9)
     .sort((p, q) => G.polygonArea(q) - G.polygonArea(p));
-  if (!rooms.length) return defaultPlan(style);
+  if (!rooms.length) return notRecognised();
 
   // nel CAD tra due stanze c'è lo spessore del muro: si agganciano i contorni perché risultino confinanti
   const shapes = [];
@@ -104,15 +104,10 @@ export function parseDxfClientSide(text, style = 'modern') {
   return plan;
 }
 
-function defaultPlan(style) {
-  const plan = sketchToPlan([
-    { kind: 'living_kitchen', name: ROOM_KIND_NAME.living_kitchen, poly: G.rectPoly(0, 0, 5.5, 8) },
-    { kind: 'bed', name: ROOM_KIND_NAME.bed, poly: G.rectPoly(5.5, 0, 4.5, 5) },
-    { kind: 'bath', name: ROOM_KIND_NAME.bath, poly: G.rectPoly(5.5, 5, 4.5, 3) },
-  ], { style });
-  plan.notes.unshift('Nel file DXF non ci sono contorni dei locali (layer AREE o polilinee chiuse): ho creato una pianta di esempio. '
+/* Niente pianta di esempio: chi carica un disegno vuole il suo. */
+function notRecognised() {
+  throw new Error('Nel file DXF non ci sono contorni dei locali (layer AREE o polilinee chiuse), quindi non importo nulla. '
     + 'I disegni di studio, con muri a doppia linea, porte e finestre, si ricostruiscono con il motore collegato.');
-  return plan;
 }
 
 /* ── Scrittura: DXF R12 (AC1009), il formato che leggono tutti i CAD ── */

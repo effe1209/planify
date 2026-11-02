@@ -80,6 +80,24 @@ def test_door_on_a_side_facade_with_garage_ramp_in_front():
         _no_overlaps(plan)
 
 
+def test_driveway_moves_away_from_the_side_door_or_says_so():
+    """Portoncino sul fianco: il vialetto carrabile non occupa il suo lato se può spostarsi davanti alla basculante; se non può,
+    il cancello pedonale passa dall'altra parte e la nota lo dice."""
+    house = {"w": 10, "door": {"x": 10, "w": 1, "side": "right", "d": 3},
+             "garage": {"x": 9.5, "w": 2.5, "side": "front", "ramp": True}}
+    plan = planner.generate(14, 10, "garden", seed=1, house=house)
+    gate, drive = _items(plan, "gate_pedestrian")[0], _items(plan, "gate_driveway")[0]
+    assert gate["x"] + gate["w"] <= drive["x"] - 0.3 or gate["x"] >= drive["x"] + drive["w"] + 0.3      # mai sovrapposti
+    assert _items(plan, "ramp")
+    assert any("occupa il lato del portoncino" in n for n in plan["notes"])
+    house["garage"]["x"] = 8
+    plan = planner.generate(14, 10, "garden", seed=1, house=house)
+    gate, drive = _items(plan, "gate_pedestrian")[0], _items(plan, "gate_driveway")[0]
+    assert gate["x"] >= 11.5 and drive["x"] + drive["w"] <= gate["x"] - 0.3    # gate sul fianco destro, vialetto davanti alla basculante
+    assert not any("occupa il lato del portoncino" in n for n in plan["notes"])
+    _no_overlaps(plan)
+
+
 def test_side_garage_with_ramp_explains_itself():
     house = {"w": 10, "door": {"x": 5, "w": 1}, "garage": {"x": 0, "w": 2.5, "side": "left", "ramp": True}}
     plan = planner.generate(14, 10, "garden", seed=1, house=house)

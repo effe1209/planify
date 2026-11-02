@@ -877,6 +877,11 @@ function HouseMark({ plan, s, house }) {
         ))}
       </g>
       {cut && <path d={`M ${zig.join(' L ')}`} fill="none" stroke={INK} strokeWidth="1.2" />}
+      {house.door && (house.door.side === 'left' || house.door.side === 'right') && (
+        <rect x={house.door.side === 'left' ? hx - 1.3 * s : hx + house.w * s + 0.1 * s}
+          y={-Math.min(D, (house.door.d + 0.7) * s)} width={1.2 * s} height={Math.min(D, (house.door.d + 0.7) * s)}
+          fill="#e7e2d6" stroke="#b9b09c" strokeWidth="0.8" strokeDasharray="4 3" />
+      )}
       {label(clamp(hx + (house.w * s) / 2, 50, W - 50), -D / 2 - 6,
         `${house.name ? `${house.name} · ` : ''}facciata d'ingresso`)}
       {house.door && (!house.door.side || house.door.side === 'front') && mark(hx + (house.door.x - house.door.w / 2) * s, house.door.w * s, house.door.d, '#d92d20', 'ingresso')}
