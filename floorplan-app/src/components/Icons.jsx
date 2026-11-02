@@ -11,9 +11,15 @@ export function ShapeGlyph({ d }) {
   );
 }
 
-/* Il logo Planify tondo, senza scritta: disco nero con la P e il quadratino lime (a 2× per gli schermi nitidi). Un anello lo stacca dallo sfondo (nel tema scuro il nero sparirebbe). */
-export function Logo({ size = 40 }) {
-  return <img className="pf-logo" src="/planify-logo-96.png" srcSet="/planify-logo-96.png 1x, /planify-logo-128.png 1.5x, /planify-logo.png 3x" alt="" aria-hidden="true" width={size} height={size} />;
+/* Il marchio Planify senza tondo: solo la P con il quadratino lime, scura sul tema chiaro e bianca sul tema scuro (le due immagini si alternano con il tema). */
+export function Logo({ size = 46 }) {
+  const set = (t) => `/planify-mark-${t}-96.png 1x, /planify-mark-${t}-128.png 1.5x, /planify-mark-${t}-512.png 3x`;
+  return (
+    <span className="pf-logo" aria-hidden="true" style={{ width: size, height: size }}>
+      <img className="pf-logo-light" src="/planify-mark-light-96.png" srcSet={set('light')} alt="" width={size} height={size} />
+      <img className="pf-logo-dark" src="/planify-mark-dark-96.png" srcSet={set('dark')} alt="" width={size} height={size} />
+    </span>
+  );
 }
 
 /* La scritta «Planify» da sola, senza sfondo, a 1×, 2× e 3×: lettere scure sul tema chiaro, bianche con ombra lime sul tema scuro (le due immagini si alternano con il tema). */

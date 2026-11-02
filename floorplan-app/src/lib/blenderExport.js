@@ -16,6 +16,9 @@ const py = (s) => JSON.stringify(String(s));   // una stringa JSON è una string
 export function blenderScript({ glbName, time, north = 0, views, size = [1920, 1080], samples = 256, hdriName = '' }) {
   const t = timeById(time);
   const az = (t.az + north) % 360;
+  const camName = (v) => `CAM_${slug(v.label).toUpperCase()}`;
+  const piante = views.filter((v) => v.ortho);   // la pianta 3D dall'alto: senza tetto e ortografica, come nel pannello Render
+  const orto = piante.map((v) => `    ${py(camName(v))}: ${(v.ortho.height * (size[0] / size[1])).toFixed(3)},`).join('\n');
   const cams = views.map((v) => `    ${py(`CAM_${slug(v.label).toUpperCase()}`)},`).join('\n');
   return `# Planify: scena pronta per Cycles (Blender 3.6 o successivo).
 #
@@ -46,6 +49,9 @@ HDRI = ${py(hdriName)}       # cielo vero (se il file è accanto allo script)
 CAMERE = [
 ${cams}
 ]
+ORTOGRAFICHE = {   # camere dall'alto: nome → larghezza visibile in metri; si rendono senza il tetto
+${orto}
+}
 
 def cartelle():
     out = []
@@ -154,9 +160,39 @@ camere.sort(key=lambda c: (CAMERE.index(c.name) if c.name in CAMERE else 999, c.
 if camere:
     scene.camera = camere[0]
 
+def tetto():
+    radici = [o for o in bpy.data.objects if o.name.upper().startswith(('TETTO', 'SOFFITT'))]
+    tutti = set(radici)
+    for o in bpy.data.objects:
+        p = o.parent
+        while p is not None:
+            if p in tutti:
+                tutti.add(o)
+                break
+            p = p.parent
+    return tutti
+
+ROOF = tetto()
+
+def prepara(c):
+    # dall'alto tetto e soffitti coprirebbero tutta la casa: si tolgono e la camera diventa ortografica (nessuna prospettiva)
+    dall_alto = c.name in ORTOGRAFICHE
+    for o in ROOF:
+        o.hide_render = dall_alto
+        o.hide_viewport = dall_alto
+    if dall_alto:
+        c.data.type = 'ORTHO'
+        c.data.ortho_scale = ORTOGRAFICHE[c.name]
+        c.data.sensor_fit = 'HORIZONTAL'
+        c.data.clip_end = max(c.data.clip_end, 1000)
+
+if scene.camera:
+    prepara(scene.camera)
+
 if RENDER_TUTTE:
     for c in camere:
         scene.camera = c
+        prepara(c)
         scene.render.filepath = os.path.join(base, c.name + '.png')
         bpy.ops.render.render(write_still=True)
 else:

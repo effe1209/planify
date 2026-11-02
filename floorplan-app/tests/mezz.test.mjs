@@ -68,3 +68,18 @@ assert.ok(chairSeats.length >= 6, `sedute ${chairSeats.length}`);
 const bathWalls = g.children.filter((c) => c.userData.layer === 'MURI' && Math.abs(c.geometry.parameters.height - 2.2) < 1e-6);
 assert.equal(bathWalls.length, 2);
 console.log('mezz ok');
+
+// il muro sotto il soppalco (bagno e cucina) segue il bordo aperto, anche se soggiorno e cucina sono una zona aperta
+{
+  const zoned = { ...plan, rooms: [{ ...plan.rooms[0], zone: 1 }, { ...plan.rooms[1], zone: 3 }, { ...plan.rooms[2], zone: 1 }] };
+  const w = resizeMezz(zoned, 4.5);
+  assert.ok(!w.error, w.error);
+  const [liv, bath, kit] = w.plan.rooms;
+  assert.equal(bath.x, 7.5); assert.equal(kit.x, 7.5);
+  assert.equal(liv.w, 7.5);
+  assert.equal(bath.x, w.plan.mezzanine.x);
+  assert.equal(liv.zone, 1); assert.equal(bath.zone, 3);
+  const back = resizeMezz(w.plan, 3.6);
+  assert.equal(back.plan.rooms[1].x, 8.4);
+  console.log('mezz muro sotto ok');
+}

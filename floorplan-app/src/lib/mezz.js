@@ -4,6 +4,7 @@
  * Limiti: almeno 2,3 m (3 m con il bagnetto), la rampa dentro la pianta e al massimo metà del loft (oltre è un errore di norma).
  */
 import { snapItem } from './furnitureEdit';
+import { movePartition, partition } from './walls';
 
 const GRID = 0.05;
 const round3 = (v) => Math.round(v * 1000) / 1000;
@@ -41,6 +42,42 @@ export const mezzRatio = (plan, size) => {
   return ((vertical ? size * mz.h : mz.w * size)) / (plan.dimensions.width * plan.dimensions.length);
 };
 
+/*
+ * Il muro sotto il soppalco (quello del bagno e della cucina che stanno sotto) segue il bordo aperto: sposta la partizione sulla
+ * linea del bordo di `delta` metri. Non conta la «zona aperta» di soggiorno e cucina (senza muro in mezzo): qui le stanze sono
+ * trattate separate per calcolare lo spostamento. Ritorna { plan } oppure { error }; plan invariato se sotto non c'è un muro.
+ */
+function followWall(plan, side, delta) {
+  const mz = plan.mezzanine;
+  const vertical = side === 'W' || side === 'E';
+  const line = round3(side === 'W' ? mz.x : side === 'E' ? mz.x + mz.w : side === 'N' ? mz.y : mz.y + mz.h);
+  const tol = 0.06;
+  const rooms = plan.rooms.filter((r) => r.kind !== 'garden');
+  const cx = (r) => r.x + r.w / 2;
+  const cy = (r) => r.y + r.h / 2;
+  const under = (r) => cx(r) > mz.x && cx(r) < mz.x + mz.w && cy(r) > mz.y && cy(r) < mz.y + mz.h;
+  const edge = (r, far) => (vertical ? (far ? r.x + r.w : r.x) : (far ? r.y + r.h : r.y));
+  // sotto: i locali che toccano la linea dal lato del soppalco; fuori: quelli dall'altra parte
+  const inside = side === 'W' || side === 'N' ? (r) => Math.abs(edge(r, false) - line) < tol && under(r) : (r) => Math.abs(edge(r, true) - line) < tol && under(r);
+  const outside = side === 'W' || side === 'N' ? (r) => Math.abs(edge(r, true) - line) < tol && !under(r) : (r) => Math.abs(edge(r, false) - line) < tol && !under(r);
+  const a = rooms.find(outside);
+  const b = rooms.find(inside);
+  if (!a || !b) return { plan };
+  const loose = { ...plan, rooms: plan.rooms.map((r) => { const { zone, ...rest } = r; return rest; }) };
+  const orient = vertical ? 'v' : 'h';
+  const lo = Math.min(...rooms.filter(inside).map((r) => (vertical ? r.y : r.x)));
+  const hi = Math.max(...rooms.filter(inside).map((r) => (vertical ? r.y + r.h : r.x + r.w)));
+  const part = partition(loose, orient, line, a.id, b.id, [lo, hi]);
+  if (part.error) return { error: `Il muro sotto il soppalco non si può spostare: ${part.error}` };
+  const d = side === 'W' || side === 'N' ? -delta : delta;
+  if (d < part.min - 1e-6 || d > part.max + 1e-6) return { error: 'Il muro sotto il soppalco non può spostarsi di così tanto: i locali sotto diventerebbero troppo piccoli' };
+  const res = movePartition(loose, part, d);
+  if (res.error) return res;
+  // si rimettono le zone dei locali originali (id invariati; in caso di tratti isolati, quelli nuovi restano senza zona)
+  const zones = new Map(plan.rooms.map((r) => [r.id, r.zone]));
+  return { plan: { ...res.plan, rooms: res.plan.rooms.map((r) => (zones.get(r.id) !== undefined ? { ...r, zone: zones.get(r.id) } : r)) }, notes: res.dropped || [] };
+}
+
 const overlaps = (a, b, pad = 0) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > pad && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > pad;
 
 /* Soppalco portato a `size` metri: { plan, dropped } oppure { error }. */
@@ -59,12 +96,16 @@ export function resizeMezz(plan, size) {
   else if (side === 'N') { rect.y = round3(mz.y - delta); rect.h = round3(mz.h + delta); }
   else rect.h = round3(mz.h + delta);
   const stair = { ...mz.stair, x: round3(mz.stair.x + sx), y: round3(mz.stair.y + sy) };
+  // il muro sotto il soppalco (bagno e cucina) si sposta insieme al bordo aperto
+  const wall = followWall(plan, side, delta);
+  if (wall.error) return { error: wall.error };
+  const base = wall.plan;
   // la rampa non può finire contro una porta
-  for (const d of plan.doors || []) {
+  for (const d of base.doors || []) {
     const box = d.rot === 90 || d.rot === 270 ? { x: d.x - 0.1, y: d.y, w: 0.2, h: d.w } : { x: d.x, y: d.y - 0.1, w: d.w, h: 0.2 };
     if (overlaps(stair, box, 0.02)) return { error: 'La scala del soppalco finirebbe contro una porta: riduci la dimensione' };
   }
-  const next = { ...plan, mezzanine: { ...rect, stair } };
+  const next = { ...base, mezzanine: { ...base.mezzanine, ...rect, stair } };
   // arredi a terra che la rampa nuova coprirebbe: si tolgono (si possono rimettere altrove)
   const dropped = [];
   const keep = (next.furniture || []).filter((f) => {
@@ -78,7 +119,7 @@ export function resizeMezz(plan, size) {
     const p = snapItem(next, f, f.x, f.y);
     return { ...f, x: p.x, y: p.y };
   });
-  return { plan: next, dropped, size: target };
+  return { plan: next, dropped, size: target, notes: wall.notes || [] };
 }
 
 /*

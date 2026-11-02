@@ -2,11 +2,13 @@
 import assert from 'node:assert/strict';
 import { blenderScript, readme, launcherMac, launcherWin } from '../src/lib/blenderExport.js';
 
-const views = [{ label: 'Tre quarti' }, { label: 'Interno: Soggiorno' }];
+const views = [{ label: 'Tre quarti' }, { label: 'Pianta 3D dall\'alto', ortho: { height: 10 } }, { label: 'Interno: Soggiorno' }];
 const day = blenderScript({ glbName: 'casa.glb', time: 'afternoon', north: 0, views });
 assert.match(day, /GLB = "casa\.glb"/);
 assert.match(day, /LAMPADE_ACCESE = False/);
 assert.match(day, /"CAM_TRE-QUARTI"/);
+assert.match(day, /ORTOGRAFICHE = \{[^\n]*\n    "CAM_PIANTA-3D-DALL-ALTO": 17\.778,/);   // 10 m × 16:9
+assert.match(day, /hide_render = dall_alto/);
 assert.match(day, /"CAM_INTERNO-SOGGIORNO"/);
 assert.match(day, /scene\.render\.engine = 'CYCLES'/);
 assert.match(day, /RENDER_TUTTE = 'tutte' in sys/);
