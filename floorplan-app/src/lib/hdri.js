@@ -1,6 +1,7 @@
 /* Cieli HDRI (Poly Haven, CC0, public/hdri): luce d'ambiente e riflessi veri, e sfondo «Cielo» del render. */
 const FILE = { morning: 'day', noon: 'day', afternoon: 'day', sunset: 'dusk', evening: 'night' };
 const cache = new Map();
+export const hdriFile = (timeId) => FILE[timeId] || 'day';
 
 /* Copia della texture con i colori attenuati verso il grigio: come luce diffusa il cielo azzurro tingerebbe
    di blu soffitto e tessuti (dentro casa le pareti rimbalzano e neutralizzano); i riflessi restano nitidi. */
@@ -27,7 +28,7 @@ function softened(THREE, tex, keep) {
 /* Il cielo HDRI dell'ora del giorno: la texture, con in `userData.soft` la versione per la luce diffusa.
    Se il file non si carica restituisce null e resta lo studio neutro. */
 export async function loadHdri(THREE, timeId) {
-  const name = FILE[timeId] || 'day';
+  const name = hdriFile(timeId);
   if (!cache.has(name)) {
     cache.set(name, import('three/examples/jsm/loaders/RGBELoader.js').then(({ RGBELoader }) => new Promise((ok) => {
       new RGBELoader().setDataType(THREE.HalfFloatType).load(`/hdri/${name}.hdr`, (t) => {
