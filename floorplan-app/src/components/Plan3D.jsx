@@ -7,7 +7,7 @@ import { themeFor, themeWithPalette } from '../lib/palette';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady }) {
+export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);   // «Riprova» ricrea il contesto WebGL
@@ -46,7 +46,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           : { floor: f, y: f.level * (st.FLOOR_H + (spreadBy || 0)), plan: f.plan }))
         .filter((f) => f.floor.level !== 'out' || f.host)
       : [{ floor: { id: ov.floorId }, y: 0, plan }];
-    const built = st.buildOverlays(st.THREE, { floors, devices: ov.devices || [], electric: ov.electric, theme: themeWithPalette(THEMES[style] || THEMES.modern, project?.palette || palette) });
+    const built = st.buildOverlays(st.THREE, { floors, devices: ov.devices || [], electric: ov.electric, theme: themeWithPalette(THEMES[style] || THEMES.modern, project?.palette || palette, project?.materials || materials) });
     for (const g of [built.sensors, built.electric, built.cables, built.cones, built.lights]) target.add(g);   // i gruppi dei piani con host stanno già nel loro host
     applyShow(st, built, ov.show, ov.lightsOn);
     return built;
@@ -95,7 +95,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         const scene = new THREE.Scene();
         const model = project
           ? buildHouse(THREE, project, (f) => themeFor(project, f), { lowWalls, spread })
-          : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette), { lowWalls });
+          : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials), { lowWalls });
         scene.add(model);
         sceneRef.current = { THREE, model, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null };
         setReady((n) => n + 1);
@@ -185,11 +185,11 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           glb: async (extra = {}) => {
             const fresh = project
               ? buildHouse(THREE, project, (f) => themeFor(project, f))
-              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette));
+              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
             const rf = roofRef.current;
             if (rf) {
               const top = project ? roofFloor(project) : { floor: { plan }, y: plan?.height || WALL_H };
-              if (top) fresh.add(buildRoof(THREE, top.floor.plan, top.y, { ...rf, style: project ? (top.floor.meta?.style || style) : style }));
+              if (top) fresh.add(buildRoof(THREE, top.floor.plan, top.y, { ...rf, style: project ? (top.floor.meta?.style || style) : style, palette: project?.palette || palette, materials: project?.materials || materials }));
             }
             // i corpi illuminanti ci sono sempre (anche senza impianto elettrico: se ne ricavano i punti luce)
             const cur = overlayRef.current;
@@ -209,7 +209,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             if (!spread && !lowWalls) return sceneToDxf(THREE, model);
             const fresh = project
               ? buildHouse(THREE, project, (f) => themeFor(project, f))
-              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette));
+              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
             attach(sceneRef.current, fresh, 0);   // sensori e impianto visibili vanno nel DXF anche con la vista esplosa o i muri bassi
             return sceneToDxf(THREE, fresh);
           },
@@ -237,7 +237,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     };
     // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, project, palette, style, lowWalls, spread, north, attempt]);
+  }, [plan, project, palette, materials, style, lowWalls, spread, north, attempt]);
 
   /*
    * Livelli del loft e sezione 3D, senza ricostruire la scena. «Sotto» nasconde il soppalco e tutto ciò che sta sopra;
@@ -290,8 +290,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     if (!roof) return;
     const top = project ? st.roofFloor(project) : { floor: { plan }, y: plan?.height || st.WALL_H };
     const roofStyle = project ? (top?.floor.meta?.style || style) : style;
-    if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle }));
-  }, [roof, ready, plan, project, spread, style]);
+    if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle, palette: project?.palette || palette, materials: project?.materials || materials }));
+  }, [roof, ready, plan, project, palette, materials, spread, style]);
 
   // sensori, impianto e luci: si ricostruiscono quando cambiano i dati e si accendono con gli interruttori
   const overlayKey = overlay ? `${overlay.devices?.length || 0}|${overlay.electric ? 1 : 0}|${overlay.floorId}` : '';

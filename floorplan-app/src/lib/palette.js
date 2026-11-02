@@ -6,6 +6,7 @@
  */
 import { THEMES } from './themes';
 import { STYLE_KITS } from './style3d';
+import { cleanMaterials } from './materials';
 
 export const PALETTE_KEYS = [
   { key: 'walls', label: 'Pareti interne' },
@@ -52,10 +53,12 @@ export function styleColors(styleId) {
 }
 
 /* Il tema (arredi, tessuti, pavimento della pianta) con la palette sopra. Senza palette ritorna lo stesso tema. */
-export function themeWithPalette(theme, palette) {
+export function themeWithPalette(theme, palette, materials = null) {
   const p = cleanPalette(palette);
-  if (!p) return theme;
-  const out = { ...theme, palette: p };
+  const mats = cleanMaterials(materials);
+  if (!p && !mats) return theme;
+  const out = { ...theme, ...(p && { palette: p }), ...(mats && { materials: mats }) };
+  if (!p) return out;
   if (p.wood) Object.assign(out, { wood: p.wood, woodLine: shade(p.wood, 0.3), chair: tint(p.wood, 0.1), cabinet: tint(p.wood, 0.4) });
   if (p.fabric) {
     Object.assign(out, {
@@ -75,7 +78,7 @@ export function kitWithPalette(kit, palette) {
   if (p.walls) out.wallIn = { ...kit.wallIn, color: p.walls, tone: shade(p.walls, 0.07) };
   if (p.facade) {
     // mattoni, doghe e travertino hanno la loro seconda tinta (malta, fughe): si cambia solo il colore principale
-    const flat = kit.facade.tex === 'stucco' || kit.facade.tex === 'concrete';
+    const flat = ['stucco', 'concrete', 'woodlap', 'logwall', 'cladding'].includes(kit.facade.tex);
     out.facade = { ...kit.facade, color: p.facade, ...(flat && { tone: shade(p.facade, 0.1) }) };
   }
   if (p.floor) out.floor = { ...kit.floor, a: p.floor, b: shade(p.floor, 0.07), joint: shade(p.floor, 0.3) };
@@ -83,4 +86,4 @@ export function kitWithPalette(kit, palette) {
 }
 
 /* Tema del piano `f` del progetto con la palette del progetto. */
-export const themeFor = (project, f) => themeWithPalette(THEMES[f?.meta?.style] || THEMES.modern, project?.palette);
+export const themeFor = (project, f) => themeWithPalette(THEMES[f?.meta?.style] || THEMES.modern, project?.palette, project?.materials);

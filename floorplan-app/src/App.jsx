@@ -28,6 +28,7 @@ import FilterCheck from './components/FilterCheck';
 import DesignReport from './components/DesignReport';
 import CompliancePanel from './components/CompliancePanel';
 import PalettePanel from './components/PalettePanel';
+import MaterialsPanel from './components/MaterialsPanel';
 import NorthPanel from './components/NorthPanel';
 import SheetsView from './components/SheetsView';
 import { ROOF_DEFAULTS, ROOF_TYPES } from './lib/roof';
@@ -1943,7 +1944,7 @@ export default function App() {
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
                 <div className="pf-3d-wrap">
-                  <Plan3D plan={plan} palette={current?.palette} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                  <Plan3D plan={plan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
                     spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
                   {view3d.render && (
                     <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
@@ -2156,6 +2157,11 @@ export default function App() {
                   highlight={coverHighlight} onHighlight={setCoverHighlight} onReport={exportCoverage} />
               )}
 
+              {!readOnly && !selectedRoom && (
+                <MaterialsPanel materials={current?.materials}
+                  onChange={(mat) => editProject((p) => { const { materials: _m, ...rest } = p; return mat ? { ...rest, materials: mat } : rest; })}
+                  onLook={({ materials: mat, palette: pal }) => editProject((p) => ({ ...p, materials: mat, palette: pal }))} />
+              )}
               {!readOnly && !selectedRoom && (
                 <PalettePanel palette={current?.palette} styleId={floor.meta?.style || form.style}
                   onChange={(pal) => editProject((p) => { const { palette: _p, ...rest } = p; return pal ? { ...rest, palette: pal } : rest; })} />

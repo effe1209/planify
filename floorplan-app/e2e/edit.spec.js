@@ -697,6 +697,8 @@ test('un loft con il giardino si vede in 3D insieme: casa intera con il giardino
   await page.getByRole('dialog', { name: 'Aggiungi piano' }).locator('select').selectOption({ label: 'Giardino / esterno' });
   await page.getByRole('button', { name: /Genera con i parametri/ }).click();
   await page.getByRole('button', { name: /Genera «Giardino/ }).click();
+  await expect(page.getByText('Giardino / esterno').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.pf-floor-pending')).toHaveCount(0, { timeout: 20_000 });   // il giardino è già un piano del progetto
   await expect(page.getByRole('button', { name: '3D', exact: true })).toBeEnabled({ timeout: 20_000 });
   await page.getByRole('button', { name: '3D', exact: true }).click();
   const whole = page.getByRole('button', { name: 'Tutta la casa' });
@@ -757,5 +759,34 @@ test('i colori principali della casa ricolorano pianta e 3D, e si possono ripris
   await expect(panel.getByRole('button', { name: /Torna ai colori dello stile/ })).toBeDisabled();
   await panel.getByRole('button', { name: 'Sabbia e salvia' }).click();
   await expect(panel.getByLabel('Tessuti e divani: codice esadecimale')).toHaveValue('#A8B59A');
+  expect(errors).toEqual([]);
+});
+
+test('i materiali della casa: combinazione Chalet in legno, struttura e scelte singole', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const mat = page.locator('section.pf-materials');
+  await expect(mat).toBeVisible();
+  await expect(mat.getByRole('button', { name: 'Torna ai materiali dello stile' })).toBeDisabled();
+  await mat.getByRole('button', { name: 'Chalet in legno' }).click();
+  await expect(mat.getByLabel('Materiale: Facciata')).toHaveValue('log');
+  await expect(mat.getByLabel('Materiale: Tetto')).toHaveValue('shingle');
+  await expect(mat.getByLabel('Struttura della casa')).toHaveValue('wood');
+  await expect(page.locator('section.pf-palette').getByLabel('Facciata: codice esadecimale')).toHaveValue('#A8794A');   // anche i colori
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  const layers = await page.evaluate(() => { const s = new Set(); window.__planify3d.model.traverse((o) => { if (o.userData?.layer) s.add(o.userData.layer); }); return [...s]; });
+  expect(layers).toContain('STRUTTURA');
+  if (process.env.SHOTM) await page.screenshot({ path: process.env.SHOTM });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await mat.getByLabel('Materiale: Facciata').selectOption('stone');
+  await mat.getByLabel('Struttura della casa').selectOption('standard');
+  await expect(mat.getByLabel('Struttura della casa')).toHaveValue('standard');
+  await mat.getByRole('button', { name: 'Torna ai materiali dello stile' }).click();
+  await expect(mat.getByLabel('Materiale: Facciata')).toHaveValue('');
   expect(errors).toEqual([]);
 });

@@ -756,3 +756,8 @@
 .pf-pal-ch input { width: 46px; text-align: center; -moz-appearance: textfield; appearance: textfield; }
 .pf-pal-ch input::-webkit-outer-spin-button, .pf-pal-ch input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pf-pal-codes { gap: 6px; }
+
+/* Materiali della casa */
+.pf-mat-list { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 8px; }
+.pf-mat-list label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.pf-mat-list select { min-width: 150px; max-width: 190px; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line, rgba(0,0,0,.15)); border-radius: 8px; background: var(--card, #fff); color: var(--text); }

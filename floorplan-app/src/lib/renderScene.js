@@ -71,7 +71,7 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   // il tetto lo decide chi chiama (il pannello Render lo accende da solo nelle viste da fuori e lo spegne nella pianta dall'alto)
   const withRoof = roof !== false;
   const top = withRoof ? roofFloor(project) : null;
-  if (top) model.add(buildRoof(THREE, top.floor.plan, top.y, { ...ROOF_DEFAULTS, style: top.floor.meta?.style || 'modern' }));
+  if (top) model.add(buildRoof(THREE, top.floor.plan, top.y, { ...ROOF_DEFAULTS, style: top.floor.meta?.style || 'modern', palette: project.palette, materials: project.materials }));
   refineMaterials(THREE, model, renderer?.capabilities?.getMaxAnisotropy?.() || 8);
   scene.add(model);
   const bounds = addGround(THREE, scene, model);
@@ -112,7 +112,7 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   // corpi illuminanti (sempre) e sensori dell'allarme (se ci sono): accesi al tramonto e di sera
   const devices = project.security?.devices || [];
   const electric = planElectric(project, { level: project.electric?.level || 2 });
-  const built = buildOverlays(THREE, { floors: overlayFloors(project), devices, electric, theme: themeWithPalette(THEMES[top?.floor.meta?.style] || THEMES.modern, project.palette) });
+  const built = buildOverlays(THREE, { floors: overlayFloors(project), devices, electric, theme: themeWithPalette(THEMES[top?.floor.meta?.style] || THEMES.modern, project.palette, project.materials) });
   scene.add(built.lights);
   if (devices.length) scene.add(built.sensors);
   setLights(built, lampsOn(time));

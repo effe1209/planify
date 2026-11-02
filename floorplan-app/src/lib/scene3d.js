@@ -39,13 +39,14 @@ const WOOD_FLOORS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study
 const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 
 import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
+import { buildTimber, rafterTails } from './timber';
 import { stairHoles, stairSteps } from './stairs3d';
 import { buildObject } from './furniture3d';
 import { projectStairs } from './stairs';
 import { kitMaterials, styleKit, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
 
-export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null } = {}) {
+export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
@@ -60,9 +61,9 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     accent: mat(theme.accent || '#4f6d8f'),
   };
   // kit dello stile: interni e pavimenti dal tema del piano, facciata dallo stile della casa
-  const kit = styleKit(theme.id, theme.palette);
+  const kit = styleKit(theme.id, theme.palette, theme.materials);
   const K = kitMaterials(THREE, mat, kit);
-  const facadeKit = facade && facade !== theme.id ? styleKit(facade, theme.palette) : kit;
+  const facadeKit = facade && facade !== theme.id ? styleKit(facade, theme.palette, theme.materials) : kit;
   const KF = facadeKit === kit ? K : kitMaterials(THREE, mat, facadeKit);
   M.wall = K.wallIn;
   M.wood.userData.pbr = 'plank';          // il legno degli arredi e del soppalco: nel render diventa legno vero con venature
@@ -444,6 +445,10 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       root.add(m);
     }
   }
+  // casa in legno: pilastri, travi a vista e portico (nella casa intera li mette buildHouse, una volta sola)
+  if (timber && theme.materials?.structure === 'wood') {
+    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color }));
+  }
   return root;
 }
 
@@ -564,7 +569,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     // le scale partono dal piano e salgono al successivo: sul piano di sopra non si disegnano
     const up = (byFloor[f.id] || []).filter((st) => st.engine ? st.upTo : st.role === 'up');
     const voids = f.level === lowest ? [] : floorVoids(byFloor[f.id]);
-    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids, facade: facadeId });
+    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids, facade: facadeId, timber: false });
     const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
@@ -593,6 +598,11 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
       slab.userData.floor = { id: f.id, name: f.name, level: f.level };
       house.add(slab);
     }
+  }
+  // casa in legno: pilastri d'angolo, travi a vista e portico, una volta per tutta la casa
+  const homeTheme = themeFor(floors.find((f) => f.level === 0) || floors[0]);
+  if (homeTheme.materials?.structure === 'wood') {
+    house.add(buildTimber(THREE, floors.map((f) => ({ plan: f.plan, y: quota(f.level) })), { roofColor: styleKit(homeTheme.id, homeTheme.palette, homeTheme.materials).roof.color }));
   }
   // soffitto del piano più alto (render): senza, da dentro si vedrebbe il tetto da sotto o il cielo; i piani sotto hanno già il solaio sopra
   if (ceiling) {
@@ -695,11 +705,11 @@ export function addGround(THREE, scene, model) {
  * spegne con `visible`. type = 'gable' (due falde, un'ala per ogni parte rettangolare dell'edificio) | 'flat'.
  */
 export function buildRoof(THREE, plan, y, opts = {}) {
-  const { type, slope, overhang, style } = { ...ROOF_DEFAULTS, ...opts };
+  const { type, slope, overhang, style, palette = null, materials = null } = { ...ROOF_DEFAULTS, ...opts };
   const g = new THREE.Group();
   g.name = 'tetto';
   g.position.y = y;
-  const kit = styleKit(style);
+  const kit = styleKit(style, palette, materials);
   const mk = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
   const tile = kitMaterials(THREE, mk, kit).roof;
   const slab = mk(kit.plinth);
@@ -714,6 +724,7 @@ export function buildRoof(THREE, plan, y, opts = {}) {
       continue;
     }
     const { tris } = gableTriangles(w, { slope, overhang });
+    if (materials?.structure === 'wood') g.add(rafterTails(THREE, [w], { slope, overhang }));
     const geo = new THREE.BufferGeometry();
     const flat = tris.flat(2);
     geo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
