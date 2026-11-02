@@ -86,7 +86,12 @@ export async function houseImage(project, {
     const { scene, bounds } = built;
     const { size } = bounds;
     built.sun.shadow.mapSize.set(width > 2500 ? 4096 : 2048, width > 2500 ? 4096 : 2048);
-    const camera = new THREE.PerspectiveCamera(v.fov, width / height, 0.05, 400);
+    // la pianta dall'alto è ortografica (il path tracing non la supporta: lì resta un campo strettissimo da lontano)
+    const asp = width / height;
+    const oh = v.ortho ? Math.max(v.ortho.length ?? 0, (v.ortho.width ?? 0) / asp, v.ortho.height * 0) || v.ortho.height : 0;   // altezza visibile: la casa entra in entrambe le direzioni, con qualunque proporzione
+    const camera = v.ortho && quality !== 'high'
+      ? new THREE.OrthographicCamera(-(oh / 2) * asp, (oh / 2) * asp, oh / 2, -oh / 2, 0.5, 800)
+      : new THREE.PerspectiveCamera(v.fov, width / height, 0.05, 400 + (v.ortho ? v.position[1] * 3 : 0));
     camera.position.set(...v.position);
     camera.lookAt(new THREE.Vector3(...v.target));
     // colore dello sfondo in sRGB 0-255 (per non contarlo nella luminosità)

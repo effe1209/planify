@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Download, Loader2, X } from 'lucide-react';
 import { BACKGROUNDS, SIZES, TIMES, cameraViews, shiftView } from '../lib/renderStudio';
 import { FLOOR_H } from '../lib/scene3d';
@@ -10,8 +10,9 @@ import { SAMPLE_PRESETS } from '../lib/pathTrace';
  * risoluzione, ora del giorno e sfondo. «Vai alla vista» sposta la telecamera della vista 3D; «Salva render»
  * produce il PNG della casa intera fuori schermo, anche se in vista c'è un piano solo.
  */
-export default function RenderPanel({ project, three, whole, level = 0, roof, lowWalls, name, onClose, onDone }) {
+export default function RenderPanel({ project, three, whole, level = 0, roofOn, onRoof, lowWalls, name, onClose, onDone }) {
   const [viewId, setViewId] = useState('three-quarter');
+  useEffect(() => { onRoof?.(true); }, []);   // eslint-disable-line react-hooks/exhaustive-deps -- si apre sulla vista «tre quarti»: da fuori, con il tetto
   const [size, setSize] = useState('hd');
   const [time, setTime] = useState('afternoon');
   const [bg, setBg] = useState('white');
@@ -45,6 +46,8 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
   const go = (id) => {
     setViewId(id);
     const v = find(id);
+    // vista da fuori: il tetto si accende da solo, tranne nella pianta dall'alto (stile planimetria); la scelta resta modificabile con l'interruttore
+    if (v?.kind === 'outside') onRoof?.(id !== 'plan3d');
     if (v && three.current?.setCamera) three.current.setCamera(shiftView(v, dy));
   };
   const save = async () => {
@@ -61,7 +64,7 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
       abort.current = new AbortController();
       setProgress(0);
       const img = await houseImage(project, {
-        width: px.w, height: px.h, view, time, background: bg, lowWalls, quality,
+        width: px.w, height: px.h, view, time, background: bg, lowWalls, quality, roof: !!roofOn,
         samples: SAMPLE_PRESETS.find((p) => p.id === samples)?.samples, onProgress: setProgress, signal: abort.current.signal,
       });
       if (!img) throw new Error('niente da disegnare');
@@ -96,6 +99,10 @@ export default function RenderPanel({ project, three, whole, level = 0, roof, lo
           )}
           <option value="current">Vista attuale (telecamera libera)</option>
         </select>
+      </label>
+      <label className="pf-render-check">
+        <input type="checkbox" checked={!!roofOn} onChange={(e) => onRoof?.(e.target.checked)} aria-label="Tetto nel render" />
+        <span>Tetto <em>(si accende da solo nelle viste da fuori, si spegne nella pianta dall'alto)</em></span>
       </label>
       <label>
         <span>Risoluzione</span>

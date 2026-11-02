@@ -719,3 +719,7 @@
 .pf-canvas:has(.pf-3d-wrap) { align-items: stretch; justify-content: stretch; }
 .pf-3d-wrap { flex: 1; min-width: 0; display: flex; }
 .pf-3d-wrap .pf-3d { flex: 1; width: auto; height: auto; min-height: 360px; border-radius: inherit; }
+.pf-render-check { flex-direction: row !important; align-items: flex-start; gap: 8px !important; }
+.pf-render-check input { margin-top: 3px; accent-color: var(--accent); }
+.pf-render-check span { font-size: 12.5px !important; color: var(--text) !important; }
+.pf-render-check em { display: block; font-style: normal; font-size: 11px; color: var(--text-muted); }

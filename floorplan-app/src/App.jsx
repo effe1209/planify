@@ -1943,7 +1943,7 @@ export default function App() {
                     spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
                   {view3d.render && (
                     <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
-                      roof={view3d.roof} lowWalls={view3d.low} name={threeName()} onClose={() => setView3d({ ...view3d, render: false })} onDone={say} />
+                      roofOn={!!view3d.roof} onRoof={(on) => setView3d((v) => (v ? { ...v, roof: on ? { ...ROOF_DEFAULTS } : null } : v))} lowWalls={view3d.low} name={threeName()} onClose={() => setView3d({ ...view3d, render: false })} onDone={say} />
                   )}
                 </div>
               </ErrorBoundary>
