@@ -727,7 +727,10 @@
 .pf-3d-error { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px; background: var(--card, #fff); color: var(--text); z-index: 2; }
 .pf-3d-error p { margin: 0; max-width: 420px; }
 
-/* Logo tondo: un anello sottile lo stacca dal fondo; nel tema scuro (nero su grigio scuro) l'anello è lime e c'è un alone leggero */
-.pf-logo { border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(23, 33, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.16); }
-.pf-app[data-theme="dark"] .pf-logo { box-shadow: 0 0 0 1.5px rgba(209, 244, 98, 0.6), 0 0 16px rgba(209, 244, 98, 0.2); }
-.pf-brand { gap: 12px; }
+/* Marchio senza tondo: due immagini che si alternano con il tema */
+.pf-logo { display: inline-flex; line-height: 0; }
+.pf-logo img { display: block; }
+.pf-logo-dark { display: none !important; }
+.pf-app[data-theme="dark"] .pf-logo-light { display: none !important; }
+.pf-app[data-theme="dark"] .pf-logo-dark { display: block !important; }
+.pf-brand { gap: 6px; }
