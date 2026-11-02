@@ -778,3 +778,12 @@
 .pf-mezz-size .pf-row { align-items: center; gap: 8px; }
 .pf-mezz-size input[type=range] { flex: 1; }
 .pf-mezz-num { width: 70px; }
+
+/* Schizzo: zoom e scorrimento della vista (i tratti restano sottili a ogni zoom) */
+.pf-sketch-svg path, .pf-sketch-svg line, .pf-sketch-svg polyline { vector-effect: non-scaling-stroke; }
+.pf-sketch-zoom { position: absolute; top: 10px; right: 10px; z-index: 5; display: flex; align-items: center; gap: 2px; padding: 3px;
+  border-radius: 12px; background: var(--bg-panel); border: 1px solid var(--border); box-shadow: var(--shadow-md); }
+.pf-sketch-zoom button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--text); cursor: pointer; }
+.pf-sketch-zoom button:hover { background: var(--fill, rgba(0,0,0,.06)); }
+.pf-sketch-zoom span { min-width: 42px; padding: 0 6px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }

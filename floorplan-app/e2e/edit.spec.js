@@ -274,16 +274,20 @@ test('un PDF scansionato si ricalca con la bacchetta magica: un clic nel locale 
   const svg = page.locator('.pf-sketch-svg');
   await expect(svg).toBeVisible({ timeout: 40_000 });
   await expect(page.getByRole('radio', { name: 'Bacchetta' })).toHaveAttribute('aria-checked', 'true');
-  const box = await svg.boundingBox();
-  // il foglio parte da (0, 0) a 40 px al metro: il soggiorno va da 3,1 a 10 m in x e da 4,1 a 9 m in y
-  await page.mouse.click(box.x + 6 * 40, box.y + 6 * 40);
+  // la vista si adatta al disegno: l'origine del foglio e i pixel al metro si ricavano dall'immagine e dallo zoom mostrato
+  const sheet = await svg.locator('image').boundingBox();
+  const zoom = parseInt((await page.locator('.pf-sketch-zoom span').textContent()), 10) / 100;
+  const pxm = 40 * zoom;
+  const box = { x: sheet.x, y: sheet.y, scaleX: pxm };
+  // il soggiorno va da 3,1 a 10 m in x e da 4,1 a 9 m in y (metri sul foglio)
+  await page.mouse.click(box.x + 6 * pxm, box.y + 6 * pxm);
   const areas = page.locator('.pf-sketch-area');
   await expect(areas).toHaveCount(1, { timeout: 15_000 });
   const m2 = parseFloat((await areas.first().textContent()).replace(',', '.'));
   expect(m2).toBeGreaterThan(31);
   expect(m2).toBeLessThan(37);
   // il locale a destra, lungo e con due varchi, è un'altra stanza che si appoggia alla prima
-  await page.mouse.click(box.x + 11 * 40, box.y + 6 * 40);
+  await page.mouse.click(box.x + 11 * pxm, box.y + 6 * pxm);
   await expect(areas).toHaveCount(2, { timeout: 15_000 });
   await page.getByRole('button', { name: /Genera planimetria arredata/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 40_000 });
@@ -858,5 +862,37 @@ test('un DXF con muri solo campiti si importa con i suoi locali; uno senza muri 
   });
   await expect(page.getByRole('alert')).toContainText('non importo nulla', { timeout: 30_000 });
   await expect(page.getByRole('alert')).toContainText('Quote');
+  expect(errors).toEqual([]);
+});
+
+test('lo sfondo PDF si adatta alla vista, si ingrandisce e si sposta, e cambiando scala resta tutto visibile', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../tests/fixtures/pianta_raster.pdf'));
+  const svg = page.locator('.pf-sketch-svg');
+  await expect(svg).toBeVisible({ timeout: 40_000 });
+  const area = await page.locator('.pf-sketch-canvas-area').boundingBox();
+  const zoomOf = async () => parseInt(await page.locator('.pf-sketch-zoom span').textContent(), 10);
+  const z0 = await zoomOf();
+  // cambiando la scala (foglio il doppio più grande) la vista si adatta di nuovo: lo zoom scende e il foglio resta dentro
+  await page.getByLabel('Scala del disegno').fill('200');
+  await expect.poll(zoomOf).toBeLessThan(z0);
+  // ingrandisci e adatta
+  await page.getByRole('button', { name: 'Ingrandisci lo schizzo' }).click();
+  const zIn = await zoomOf();
+  expect(zIn).toBeGreaterThan(await (async () => { await page.getByRole('button', { name: 'Riduci lo schizzo' }).click(); return zoomOf(); })());
+  await page.getByRole('button', { name: 'Adatta lo schizzo alla finestra' }).click();
+  await page.waitForTimeout(100);
+  // la mano sposta la vista
+  await page.getByRole('radio', { name: 'Mano', exact: true }).click();
+  const before = await svg.locator('image').boundingBox();
+  await page.mouse.move(area.x + 200, area.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(area.x + 260, area.y + 230, { steps: 4 });
+  await page.mouse.up();
+  const after = await svg.locator('image').boundingBox();
+  expect(Math.round(after.x - before.x)).toBe(60);
+  expect(Math.round(after.y - before.y)).toBe(30);
   expect(errors).toEqual([]);
 });
