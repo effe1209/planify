@@ -35,6 +35,13 @@ def build(style, door_style='arc', win_style='lines', sym_layer=None):
                 msp.add_line((x0, y0), (x1, y0), dxfattribs={'layer': 'A-WALL'}); msp.add_line((x0, y1), (x1, y1), dxfattribs={'layer': 'A-WALL'})
             else:
                 msp.add_line((x0, y0), (x0, y1), dxfattribs={'layer': 'A-WALL'}); msp.add_line((x1, y0), (x1, y1), dxfattribs={'layer': 'A-WALL'})
+    if style == 'wide_poly':
+        # l'asse del muro come polilinea con spessore 0,2 m (un tratto per ogni muro, con le aperture)
+        for x0, y0, x1, y1 in rs:
+            if (x1 - x0) >= (y1 - y0):
+                msp.add_lwpolyline([(x0 + 0.1, (y0 + y1) / 2), (x1 - 0.1, (y0 + y1) / 2)], dxfattribs={'layer': 'A-WALL', 'const_width': 0.2})
+            else:
+                msp.add_lwpolyline([((x0 + x1) / 2, y0 + 0.1), ((x0 + x1) / 2, y1 - 0.1)], dxfattribs={'layer': 'A-WALL', 'const_width': 0.2})
     if style == 'closed_polys':
         for x0, y0, x1, y1 in rs:
             msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True, dxfattribs={'layer': 'A-WALL'})

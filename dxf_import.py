@@ -190,6 +190,11 @@ def _read(text: str, want_extra: bool = False):
                 elif t == "LINE":
                     s, f = e.dxf.start, e.dxf.end
                     segs.append((s.x, s.y, f.x, f.y, role))
+                elif t == "MLINE":
+                    # multilinea (muri a più linee parallele): ogni elemento è una linea
+                    for v in e.virtual_entities():
+                        if v.dxftype() == "LINE":
+                            segs.append((v.dxf.start.x, v.dxf.start.y, v.dxf.end.x, v.dxf.end.y, role))
                 elif t == "LWPOLYLINE":
                     poly_edges([(p[0], p[1], p[4]) for p in e.get_points("xyseb")], e.closed, role)
                 elif t == "POLYLINE" and not e.is_3d_polyline and not e.is_poly_face_mesh and not e.is_polygon_mesh:
@@ -661,6 +666,37 @@ def _fill_paths(doc):
         except Exception:  # noqa: BLE001
             continue
     return out
+
+
+def _wide_pieces(doc, k):
+    """Muri disegnati come polilinee con spessore (la linea è l'asse del muro, il «width» è lo spessore): tratti di muro
+    orizzontali e verticali (asse, inizio, fine, spessore) in metri, prolungati di mezzo spessore per riempire gli angoli."""
+    hp, vp = [], []
+    for e in doc.modelspace().query("LWPOLYLINE"):
+        try:
+            layer = e.dxf.get("layer", "0")
+            if HARD_IGNORE_RE.search(layer or "") or IGNORE_RE.search(layer or "") or DOOR_RE.search(layer or "") \
+                    or WINDOW_RE.search(layer or ""):
+                continue
+            pts = list(e.get_points("xyseb"))
+            const = float(e.dxf.get("const_width", 0) or 0)
+            n = len(pts)
+            for i in range(n if e.closed else n - 1):
+                (x1, y1, w1, _, b), (x2, y2, _, _, _) = pts[i], pts[(i + 1) % n]
+                w = max(const, w1 or 0) * k
+                if abs(b) > 1e-6 or not T_MIN <= w <= T_MAX:
+                    continue
+                x1, y1, x2, y2 = x1 * k, y1 * k, x2 * k, y2 * k
+                dx, dy = x2 - x1, y2 - y1
+                if math.hypot(dx, dy) < PIECE_MIN:
+                    continue
+                if abs(dy) <= abs(dx) * math.tan(ANG):
+                    hp.append((round((y1 + y2) / 2, 3), round(min(x1, x2) - w / 2, 3), round(max(x1, x2) + w / 2, 3), round(w, 3)))
+                elif abs(dx) <= abs(dy) * math.tan(ANG):
+                    vp.append((round((x1 + x2) / 2, 3), round(min(y1, y2) - w / 2, 3), round(max(y1, y2) + w / 2, 3), round(w, 3)))
+        except Exception:  # noqa: BLE001
+            continue
+    return hp, vp
 
 
 def _bridge(pieces, gap=0.25):
@@ -1161,6 +1197,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     vp, vh = _split_infill(_pair_walls(vs))
     # muri campiti (riempimento pieno): le campiture sottili sono i muri anche dove le linee non si abbinano o mancano
     fill_h, fill_v = _fill_pieces(_fill_paths(doc), k)
+    wide_h, wide_v = _wide_pieces(doc, k)
+    fill_h, fill_v = fill_h + wide_h, fill_v + wide_v
     fill_h, fill_v = _uncovered(fill_h, hp), _uncovered(fill_v, vp)
     n_fill = len(fill_h) + len(fill_v)
     hp, vp = hp + fill_h, vp + fill_v

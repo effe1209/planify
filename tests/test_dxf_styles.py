@@ -1,5 +1,5 @@
 """Importazione DXF: lo stesso appartamento disegnato in stili diversi (muri a coppie di linee, polilinee chiuse, campiture,
-cappotto esterno; porte ad arco o in blocchi con nomi qualsiasi; simboli su layer generici) dà sempre la stessa pianta.
+cappotto esterno, polilinee con spessore; porte ad arco o in blocchi con nomi qualsiasi; simboli su layer generici) dà sempre la stessa pianta.
 
 Avvio:  python3 -m pytest tests/test_dxf_styles.py   (oppure  python3 tests/test_dxf_styles.py)
 """
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import planner  # noqa: E402
 from dxf_styles import build  # noqa: E402
 
-STYLES = ("pairs", "closed_polys", "pairs_hatch", "insulation")
+STYLES = ("pairs", "closed_polys", "pairs_hatch", "insulation", "wide_poly")
 SYMBOLS = (("arc", "lines"), ("block_named", "block_named"))
 
 
