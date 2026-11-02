@@ -64,15 +64,23 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         const { sceneToDxf } = await import('../lib/dxf3d');
         if (disposed || !host.current) return;
         const el = host.current;
-        // il contesto WebGL: prima completo; se il browser lo rifiuta (scheda grafica sotto stress, poca memoria) si riprova più leggero
+        // il contesto WebGL: prima completo; se il browser lo rifiuta (scheda grafica sotto stress, poca memoria) si riprova più leggero.
+        // Il motivo del rifiuto (lo dice il browser nell'evento webglcontextcreationerror) finisce nel messaggio: serve a capire se è un
+        // limite di contesti, l'accelerazione spenta o la scheda grafica in lista nera.
+        let why = '';
+        const make = (opts) => {
+          const cv = document.createElement('canvas');
+          cv.addEventListener('webglcontextcreationerror', (ev) => { why = ev.statusMessage || why; });
+          return new THREE.WebGLRenderer({ canvas: cv, preserveDrawingBuffer: true, ...opts });
+        };
         let renderer;
         try {
-          renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+          renderer = make({ antialias: true });
         } catch (e1) {
           try {
-            renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, powerPreference: 'default' });
+            renderer = make({ antialias: false, powerPreference: 'default' });
           } catch (e2) {
-            throw new Error(`${e2.message}`);
+            throw new Error(`${e2.message}${why ? ` (${why.slice(0, 160)})` : ''}`);
           }
         }
         // se la scheda grafica si resetta (render pesanti, 4K) il contesto va perso: lo si dice e «Riprova» lo ricrea
