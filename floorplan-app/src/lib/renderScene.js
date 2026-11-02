@@ -67,8 +67,8 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   const scene = new THREE.Scene();
   const model = buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, ceiling: true });
   if (!model.children.length) return null;
-  // tetto sempre, tranne nella pianta 3D dall'alto (da sopra non si vedrebbe niente)
-  const withRoof = roof !== false && view?.id !== 'plan3d';
+  // il tetto lo decide chi chiama (il pannello Render lo accende da solo nelle viste da fuori e lo spegne nella pianta dall'alto)
+  const withRoof = roof !== false;
   const top = withRoof ? roofFloor(project) : null;
   if (top) model.add(buildRoof(THREE, top.floor.plan, top.y, { ...ROOF_DEFAULTS, style: top.floor.meta?.style || 'modern' }));
   refineMaterials(THREE, model, renderer?.capabilities?.getMaxAnisotropy?.() || 8);

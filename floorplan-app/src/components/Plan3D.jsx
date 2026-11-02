@@ -97,7 +97,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         sceneRef.current.hemi = hemi;
         sceneRef.current.sun = sun;
 
-        const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+        const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1500);
         // inquadratura a tre quarti dall'alto, abbastanza lontana da far entrare tutta la pianta
         // inquadratura a tre quarti dall'alto: tutta la sfera che contiene il modello entra nel campo più stretto
         const sphere = bb.getBoundingSphere(new THREE.Sphere());
@@ -113,7 +113,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         controls.enableDamping = true;
         controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
         controls.minDistance = 2;
-        controls.maxDistance = ext * 6;
+        controls.maxDistance = ext * 14;   // la pianta dall'alto sta lontano (campo stretto)
         sceneRef.current.camera = camera;
         sceneRef.current.controls = controls;
         window.__planify3d = { THREE, camera, controls, model, renderer };   // per i test dell'interfaccia (inquadrature precise)
@@ -144,7 +144,12 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           // telecamera della vista: per il render con «vista attuale» e per spostarla sulle inquadrature automatiche
           camera: () => ({ position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov }),
           setCamera: (v) => {
-            camera.position.set(...v.position);
+            if (v.ortho) {
+              // pianta dall'alto: la distanza si calcola sulla proporzione del riquadro, così la casa entra tutta e riempie il lato che la limita
+              const need = Math.max(v.ortho.length ?? 0, (v.ortho.width ?? 0) / Math.max(0.2, camera.aspect)) || v.ortho.height;
+              const dist = need / 2 / Math.tan((v.fov * Math.PI) / 360);
+              camera.position.set(v.target[0], v.target[1] + dist, v.target[2] + dist * 0.0015);
+            } else camera.position.set(...v.position);
             controls.target.set(...v.target);
             camera.fov = v.fov;
             camera.updateProjectionMatrix();

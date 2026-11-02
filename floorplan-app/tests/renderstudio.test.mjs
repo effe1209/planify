@@ -33,7 +33,16 @@ assert.ok(Math.hypot(liv2.position[0] - liv.position[0], liv2.position[2] - liv.
 const tq = views[0];
 assert.deepEqual(tq.target, b.center);
 assert.ok(tq.position[1] > b.top && Math.hypot(tq.position[0] - 5, tq.position[2] - 4) > 5);
-assert.ok(views[1].position[1] > views[0].position[1] * 0.9 && Math.abs(views[1].position[0] - 5) < 3, 'pianta 3D dall\'alto');
+// pianta 3D: dritta sopra il centro, perpendicolare (inclinazione sotto 0,2°), ortografica e a tutto quadro nel lato che lo limita
+const pv = views[1];
+assert.ok(pv.ortho && Math.abs(pv.position[0] - 5) < 1e-9 && Math.abs(pv.target[0] - 5) < 1e-9 && pv.target[1] === 0, 'sopra il centro');
+const tilt = Math.atan2(Math.abs(pv.position[2] - pv.target[2]), pv.position[1]) * 180 / Math.PI;
+assert.ok(tilt > 0 && tilt < 0.2, `inclinazione ${tilt}°`);       // appena inclinata, per orientare il foglio col nord in alto
+assert.ok(pv.position[2] > pv.target[2], 'il basso del foglio è verso +z');
+assert.ok(Math.abs(pv.ortho.height - Math.max(8 * 1.03, (10 * 1.03) / (16 / 9))) < 1e-9, `altezza ${pv.ortho.height}`);   // 10 × 8 m, 16:9: limita l'altezza
+// una casa molto larga: limita la larghezza
+const wide = cameraViews({ floors: [{ id: 'w', name: 'W', level: 0, plan: plan([rm(1, 'Sala', 'living', 0, 0, 30, 8)], { dimensions: { width: 30, length: 8 } }) }] });
+assert.ok(Math.abs(wide[1].ortho.height - (30 * 1.03) / (16 / 9)) < 1e-9, 'lato largo');
 
 // loft con soppalco: vista dall'alto del soppalco verso il soggiorno, a 1,6 m sopra il suo pavimento
 const loft = { floors: [{ id: 'l', name: 'Loft', level: 0, plan: plan([rm(1, 'Soggiorno', 'living', 0, 0, 12, 8)], { dimensions: { width: 12, length: 8 }, height: 5,

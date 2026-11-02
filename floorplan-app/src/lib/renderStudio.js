@@ -90,7 +90,17 @@ export function cameraViews(project, { aspect = 16 / 9 } = {}) {
     out.push({ id, label, kind: 'outside', fov: f, target: b.center, position: b.center.map((c, i) => c + (dir[i] / n) * d) });
   };
   outside('three-quarter', 'Tre quarti', [0.55, 0.65, 0.8]);
-  outside('plan3d', 'Pianta 3D dall\'alto', [0.04, 1, 0.12]);
+  // pianta 3D: dritta sopra la casa, perpendicolare al terreno, con la stessa orientazione della pianta (nord/alto del foglio in alto) e a tutto
+  // schermo: ortografica (nessuna prospettiva) nel render; la vista viva e il path tracing usano un campo molto stretto da lontano, quasi uguale
+  {
+    const m = 1.03;
+    const viewH = Math.max(b.L * m, (b.W * m) / aspect);   // altezza visibile: la casa riempie il quadro nel lato che lo limita
+    const pf = 10;
+    const dist = viewH / 2 / Math.tan((pf * Math.PI) / 360);
+    const off = dist * 0.0015;                             // 0,09° di inclinazione verso il basso del foglio: serve solo a orientare l'immagine
+    out.push({ id: 'plan3d', label: 'Pianta 3D dall\'alto', kind: 'outside', fov: pf, ortho: { height: viewH, width: b.W * m, length: b.L * m },
+      target: [b.center[0], 0, b.center[2]], position: [b.center[0], dist, b.center[2] + off] });
+  }
   outside('front', 'Fronte', [0, 0.22, 1]);
   const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length).sort((a, c) => a.level - c.level);
   for (const f of floors) {

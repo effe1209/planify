@@ -629,7 +629,7 @@ export async function exportProjectPdf(project) {
     const picks = [all.find((v) => v.id === 'plan3d'), all.find((v) => v.id === 'front'), living, bedroom].filter(Boolean);
     const shots = [];
     for (const v of picks) {
-      const img = await houseImage(project, { width: 1280, height: 720, view: v, effects: false });
+      const img = await houseImage(project, { width: 1280, height: 720, view: v, effects: false, roof: v.id !== 'plan3d' });   // dall'alto stile planimetria senza tetto
       if (img) shots.push({ v, img });
     }
     if (shots.length) {

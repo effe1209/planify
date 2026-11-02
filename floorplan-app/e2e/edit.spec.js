@@ -507,6 +507,32 @@ test('il render in qualità alta usa il path tracing e salva il PNG', async ({ p
   expect(errors).toEqual([]);
 });
 
+test('il tetto del render si accende da solo nelle viste da fuori e si spegne nella pianta dall\'alto', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('button', { name: /^Render/ }).click();
+  const panel = page.getByRole('complementary', { name: 'Render' });
+  const roof = panel.getByLabel('Tetto nel render');
+  await expect(roof).toBeChecked();                                        // si apre su «tre quarti», da fuori
+  await panel.getByLabel('Inquadratura del render').selectOption({ label: "Pianta 3D dall'alto" });
+  await expect(roof).not.toBeChecked();                                    // stile planimetria: senza tetto
+  await page.waitForFunction(() => !!window.__planify3d);
+  const cam = await page.evaluate(() => { const { camera, controls } = window.__planify3d; return { p: camera.position.toArray(), t: controls.target.toArray(), fov: camera.fov }; });
+  expect(cam.p[1]).toBeGreaterThan(20);                                    // da lontano, dritta sopra
+  expect(Math.abs(cam.p[0] - cam.t[0])).toBeLessThan(0.01);
+  await roof.check();                                                      // la scelta si può cambiare a mano
+  await expect(roof).toBeChecked();
+  await panel.getByLabel('Inquadratura del render').selectOption({ label: 'Fronte' });
+  await expect(roof).toBeChecked();                                        // di nuovo da fuori: acceso da solo
+  await panel.getByLabel('Inquadratura del render').selectOption({ label: "Pianta 3D dall'alto" });
+  await page.screenshot({ path: process.env.SHOTTOP || '/tmp/pianta3d-viva.png' });
+  expect(errors).toEqual([]);
+});
+
 test('il PDF del progetto ha la tavola tecnica A4 con cartiglio', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(420_000);
