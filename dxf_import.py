@@ -455,9 +455,12 @@ def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool):
         cx, cy, r = cx * k, cy * k, r * k
         along, across = (cx, cy) if orient == "h" else (cy, cx)
         if not (abs(r - w) <= 0.2 * w + 0.05 or abs(r - w / 2) <= 0.12 * w + 0.05):
-            continue
-        if min(abs(along - g0), abs(along - g1)) > 0.3 or abs(across - c) > t / 2 + 0.3:
-            continue
+            # porta d'angolo: l'anta è più lunga del varco, ma il cardine dista dal suo centro quanto il raggio
+            if not (0.8 * w <= r <= 1.5 * w and abs(math.hypot(along - (g0 + g1) / 2, across - c) - r) <= 0.2):
+                continue
+        elif min(abs(along - g0), abs(along - g1)) > 0.3 or abs(across - c) > t / 2 + 0.3:
+            if not (0.8 * w <= r <= 1.5 * w and abs(math.hypot(along - (g0 + g1) / 2, across - c) - r) <= 0.2):
+                continue
         mid = math.radians((a0 + ((a1 - a0) % 360) / 2))
         my = (cy + r * math.sin(mid)) if orient == "h" else (cx + r * math.cos(mid))
         return "door", (1 if my > c else -1)
@@ -864,17 +867,28 @@ def _corner_doors(arcs, k, hwalls, vwalls, known):
         orient, c, end, t = hinge
         for a in (a0, a1):
             ex, ey = hx + r * math.cos(math.radians(a)), hy + r * math.sin(math.radians(a))
-            if not on_wall(ex, ey) or end_piece(ex, ey) is None:
+            far = end_piece(ex, ey) if on_wall(ex, ey) else None
+            if far is None:
                 continue
-            e_along = ex if orient == "h" else ey
-            g0, g1 = sorted((end, e_along))
+            f_orient, f_c, f_end, f_t = far
+            if f_orient == orient:
+                # muri sulla stessa linea: il varco sta tra le due estremità
+                e_along = ex if orient == "h" else ey
+                g0, g1 = sorted((end, e_along))
+                gap = (orient, (c, g0, g1, t))
+                leg = ("v", (ex, min(ey, c), max(ey, c))) if orient == "h" else ("h", (ey, min(ex, c), max(ex, c)))
+            else:
+                # muri ad angolo: la porta si apre nel muro dell'estremo dell'anta (quello che finisce lì), dal suo ultimo tratto
+                # fino all'asse del muro del cardine; il muro del cardine si prolunga fino a quello per chiudere l'angolo
+                g0, g1 = sorted((f_end, c))
+                gap = (f_orient, (f_c, g0, g1, f_t))
+                lo_, hi_ = sorted((end, f_c))
+                leg = (orient, (c, lo_, hi_))
             if not OPEN_MIN <= g1 - g0 <= OPEN_MAX:
                 continue
-            if any(o == orient and abs(g[0] - c) <= 0.2 and min(g1, g[2]) - max(g0, g[1]) > 0.3 for o, g in known):
+            if any(o == gap[0] and abs(g[0] - gap[1][0]) <= 0.2 and min(g1, g[2]) - max(g0, g[1]) > 0.3 for o, g in known):
                 continue   # il varco c'è già
-            # la gamba che chiude l'angolo: dall'estremo dell'anta, perpendicolare, fino all'asse del muro del cardine
-            leg = ("v", (ex, min(ey, c), max(ey, c))) if orient == "h" else ("h", (ey, min(ex, c), max(ex, c)))
-            out.append((orient, (c, g0, g1, t), leg))
+            out.append((gap[0], gap[1], leg))
             break
     return out
 

@@ -121,7 +121,9 @@ def test_walls_only_as_fill_glazed_facade_and_corner_door():
     assert any("campiture" in n for n in plan["notes"])
     entrances = [d for d in plan["doors"] if d["entrance"]]
     assert len(entrances) == 2                                           # ingresso a sud e porta a nord
-    assert len([d for d in plan["doors"] if not d["entrance"]]) == 1     # porta del bagno, tra due locali
+    inner = [d for d in plan["doors"] if not d["entrance"]]
+    assert len(inner) == 1                                               # porta del bagno, tra due locali
+    assert inner[0]["rot"] == 90 and 2.0 <= inner[0]["x"] <= 2.5         # sul lato destro del bagno (muro verticale), non sopra
     assert len(plan["windows"]) == 1                                     # la finestra a nord
     assert any("nome dedotto dagli arredi" in n for n in plan["notes"])  # wc e bidet dicono che è il bagno
 
