@@ -64,7 +64,7 @@ test('una finestra si seleziona e si elimina', async ({ page }, info) => {
 
 test('un DXF importato si arreda dopo, con lo stile scelto', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(150_000);
+  test.setTimeout(60_000);
   const errors = await open(page);
   await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/appartamento_cm.dxf'));
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
@@ -690,7 +690,7 @@ test('il soppalco si allarga dal pannello con l\'avviso oltre 1/3, e si mette un
 
 test('un loft con il giardino si vede in 3D insieme: casa intera con il giardino davanti', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
-  test.setTimeout(150_000);
+  test.setTimeout(60_000);
   const errors = await open(page);
   await page.getByRole('radio', { name: 'Loft' }).click();
   await page.getByLabel('Larghezza').fill('12');
@@ -797,5 +797,31 @@ test('i materiali della casa: combinazione Chalet in legno, struttura e scelte s
   await expect(mat.getByLabel('Struttura della casa')).toHaveValue('standard');
   await mat.getByRole('button', { name: 'Torna ai materiali dello stile' }).click();
   await expect(mat.getByLabel('Materiale: Facciata')).toHaveValue('');
+  expect(errors).toEqual([]);
+});
+
+test('una palette si salva, si riapplica dopo il reset e si elimina', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(60_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const panel = page.locator('section.pf-palette');
+  await panel.getByLabel('Facciata: codice esadecimale').fill('#b7773f');
+  await panel.getByLabel('Nome della palette da salvare').fill('Mia rossa');
+  await panel.getByRole('button', { name: 'Salva la palette' }).click();
+  const mine = panel.getByRole('group', { name: 'Le mie palette' });
+  await expect(mine.getByRole('button', { name: 'Mia rossa', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: /Torna ai colori dello stile/ }).click();
+  await expect(panel.getByRole('button', { name: /Torna ai colori dello stile/ })).toBeDisabled();
+  await expect(panel.getByLabel('Facciata: codice esadecimale')).not.toHaveValue('#B7773F');
+  await mine.getByRole('button', { name: 'Mia rossa', exact: true }).click();
+  await expect(panel.getByLabel('Facciata: codice esadecimale')).toHaveValue('#B7773F');
+  await page.reload();   // resta nel browser
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('section.pf-palette').getByRole('button', { name: 'Mia rossa', exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.locator('section.pf-palette').getByRole('group', { name: 'Le mie palette' }).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await page.locator('section.pf-palette').getByRole('button', { name: 'Elimina la palette Mia rossa' }).click();
+  await expect(page.locator('section.pf-palette').getByRole('button', { name: 'Mia rossa', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
