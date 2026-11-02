@@ -56,10 +56,17 @@ export async function houseImage(project, {
   const THREE = await import('three');
   const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
   const { buildRenderScene } = await import('./renderScene');
-  const canvas = document.createElement('canvas');
+  let canvas = document.createElement('canvas');
   const bg = backgroundFor(background, time);
   const t = timeById(time);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+  } catch {
+    // il browser rifiuta il contesto completo: si riprova su un canvas nuovo, senza antialias (il canvas ha già provato un contesto)
+    renderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), antialias: false, alpha: true, preserveDrawingBuffer: true });
+  }
+  canvas = renderer.domElement;   // quello che ha davvero il contesto
   try {
     const gl = renderer.getContext();
     const info = { gpu: gpuName(gl), mode: '', exposure: 0, notes: [] };
@@ -212,6 +219,7 @@ export async function houseImage(project, {
     return { data, w: width, h: height, info };
   } finally {
     renderer.dispose();
+    renderer.forceContextLoss();   // senza, il contesto WebGL resta vivo: dopo una quindicina di render il browser rifiuta di crearne di nuovi («Error creating WebGL context»)
     clearTextureCache();   // e la vista 3D, la prossima volta, ne costruisce di fresche
   }
 }
