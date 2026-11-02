@@ -765,6 +765,25 @@ def _uncovered(fill, pairs):
     return out
 
 
+def _drop_adjacent_thin(walls):
+    """Muri doppi: un tratto sottile (≤ 16 cm: cappotto, controparete, faccia isolante) accanto a un muro più spesso, o
+    dentro, che lo accompagna per almeno metà della sua lunghezza, non è un altro muro. {asse: [[da, a, spessore]]} → senza di loro."""
+    out = {}
+    for c, ivs in walls.items():
+        keep = []
+        for lo, hi, t in ivs:
+            thin = t <= 0.16
+            doubled = thin and any(
+                t2 > t + 0.02 and abs(c2 - c) <= (t + t2) / 2 + 0.12 and abs(c2 - c) > 1e-6
+                and min(hi, h2) - max(lo, l2) >= 0.5 * (hi - lo)
+                for c2, ivs2 in walls.items() for l2, h2, t2 in ivs2)
+            if not doubled:
+                keep.append([lo, hi, t])
+        if keep:
+            out[c] = keep
+    return out
+
+
 def _join_lines(lines, gap=0.12):
     """Linee dello stesso asse (±5 mm) spezzate da un muro che le attraversa (≤ gap): una linea sola, così la coppia di
     facce del muro si abbina per tutta la lunghezza."""
@@ -886,7 +905,7 @@ def _corner_doors(arcs, k, hwalls, vwalls, known):
                 for lo, hi, t in ivs:
                     along, across = (x, y) if orient == "h" else (y, x)
                     if abs(across - c) <= t / 2 + 0.15 and (abs(along - lo) <= 0.15 or abs(along - hi) <= 0.15):
-                        return orient, c, (lo if abs(along - lo) <= abs(along - hi) else hi), t
+                        return orient, c, (lo if abs(along - lo) <= abs(along - hi) else hi), t, (lo, hi)
         return None
 
     def on_wall(x, y):
@@ -907,13 +926,15 @@ def _corner_doors(arcs, k, hwalls, vwalls, known):
         hinge = end_piece(hx, hy)
         if not hinge:
             continue
-        orient, c, end, t = hinge
+        orient, c, end, t, span = hinge
         for a in (a0, a1):
             ex, ey = hx + r * math.cos(math.radians(a)), hy + r * math.sin(math.radians(a))
             far = end_piece(ex, ey) if on_wall(ex, ey) else None
             if far is None:
                 continue
-            f_orient, f_c, f_end, f_t = far
+            f_orient, f_c, f_end, f_t, f_span = far
+            if (f_orient, f_c, f_span) == (orient, c, span):
+                continue   # l'estremo dell'anta cade sullo stesso tratto del cardine: non c'è un varco ad angolo
             if f_orient == orient:
                 # muri sulla stessa linea: il varco sta tra le due estremità
                 e_along = ex if orient == "h" else ey
@@ -1192,6 +1213,7 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
         boxes.append(((c - t) / k, lo / k, (c + t) / k, hi / k, "window"))
     hwalls, vwalls = _merge([(c, lo, hi, t) for c, ivs in hwalls.items() for lo, hi, t in ivs]), \
         _merge([(c, lo, hi, t) for c, ivs in vwalls.items() for lo, hi, t in ivs])
+    hwalls, vwalls = _drop_adjacent_thin(hwalls), _drop_adjacent_thin(vwalls)
     n_pieces = sum(len(v) for v in hwalls.values()) + sum(len(v) for v in vwalls.values())
     if n_pieces < 4:
         return None
@@ -1283,7 +1305,18 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
     # (es. verso il portico). Si chiudono anche quelle e si tengono le zone con un nome o già interne prima,
     # così i pezzi di giardino tra la casa e la recinzione non diventano locali.
     leaked = [p for p in named if grid.v[grid.ij(*p)[1] * grid.nx + grid.ij(*p)[0]] == 2]
-    if leaked and len(all_gaps) > len(gaps):
+    # senza nomi (o con nomi che non bastano): se chiudendo tutti i varchi si scoprono locali interi che con quelli aperti
+    # finivano nell'esterno (un varco largo, senza simbolo riconosciuto, verso fuori), i varchi verso l'esterno si chiudono
+    reveals = False
+    if not leaked and len(all_gaps) > len(gaps):
+        _, c_all = partition(all_gaps)
+        was_out = 0
+        for cell_list in c_all:
+            sample = cell_list[:: max(1, len(cell_list) // 100)]
+            if len(cell_list) * step * step >= 3.0 and sum(1 for i, j in sample if grid.v[j * grid.nx + i] == 2) > len(sample) * 0.5:
+                was_out += 1
+        reveals = was_out > 0
+    if (leaked or reveals) and len(all_gaps) > len(gaps):
         before = grid
 
         def keep_indoor(grid, comps2):
@@ -1299,6 +1332,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
             def indoor(c):
                 if c in with_name or not any(before.v[j * before.nx + i] == 2 for i, j in c[:: max(1, len(c) // 200)]):
                     return True
+                if not with_name:
+                    return len(c) * step * step >= 3.0   # disegno senza nomi: un locale intero ritrovato, non un pezzo di giardino
                 return box is not None and all(box[0] <= i <= box[2] and box[1] <= j <= box[3] for i, j in c)
             kept = [c for c in comps2 if indoor(c)]
             dropped = {grid.v[c[0][1] * grid.nx + c[0][0]] for c in comps2 if not indoor(c)}
@@ -1450,6 +1485,15 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
         return near if abs(near - line) <= 0.2 else line
 
     n_doors = n_win = n_pass = 0
+    placed: List[tuple] = []   # (orient, linea, da, a) delle aperture già create: due varchi sovrapposti sono la stessa apertura
+
+    def dup(orient, line, a, b):
+        for o2, l2, a2, b2 in placed:
+            if o2 == orient and abs(l2 - line) <= 0.2 and min(b, b2) - max(a, a2) >= 0.6 * min(b - a, b2 - a2):
+                return True
+        placed.append((orient, line, a, b))
+        return False
+
     for orient, (c, g0, g1, t) in gaps:
         if orient == "h":
             line, start = RY1 - c, g0 - RX0
@@ -1464,6 +1508,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False):
             continue
         if ra is not None and rb is not None and ra.group == rb.group:
             continue   # vano interno allo stesso locale
+        if dup(orient, line, start, start + (g1 - g0)):
+            continue
         exterior = ra is None or rb is None
         kind, side = _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, exterior)
         line = edge_line(orient, line)
