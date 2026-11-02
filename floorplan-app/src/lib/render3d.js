@@ -97,9 +97,11 @@ export async function houseImage(project, {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(bg.color, bg.alpha ? 0 : 1);
     const v = view || cameraViews(project, { aspect: width / height })[0];
+    const { RectAreaLightUniformsLib } = await import('three/examples/jsm/lights/RectAreaLightUniformsLib.js');
+    RectAreaLightUniformsLib.init();
     const { loadHdri } = await import('./hdri');
     const hdri = await loadHdri(THREE, time);
-    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls });
+    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls, windows: true });
     if (!built) return null;
     try {
       const { upgradeMaterials } = await import('./pbr');

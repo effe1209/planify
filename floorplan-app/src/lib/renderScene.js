@@ -62,7 +62,7 @@ const overlayFloors = (project) => project.floors
  * { scene, model, bounds: { bb, center, size }, lamps: [{ x, y, z }], sun, built }
  *   opts: renderer (per l'ambiente), view (la vista: la «pianta 3D dall'alto» toglie il tetto), time, background, roof (false per toglierlo)
  */
-export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false } = {}) {
+export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false, windows = false } = {}) {
   const t = timeById(time);
   const scene = new THREE.Scene();
   const model = buildHouse(THREE, project, (f) => THEMES[f.meta?.style] || THEMES.modern, { lowWalls, ceiling: true });
@@ -118,5 +118,36 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
   // le lampade accese illuminano la stanza con calore, senza bruciare l'immagine (setLights è tarato per la vista interattiva)
   for (const l of built.realLights) l.intensity = lampsOn(time) ? 1.6 : 0;
   for (const g of built.glow) g.emissiveIntensity = lampsOn(time) ? 1.3 : 0.1;
-  return { scene, model, bounds, sun, hemi, built, lamps: built.lightPoints, lampsOn: lampsOn(time), time: t, background: bg };
+  const windowLights = windowAreaLights(THREE, model, bounds, view, t, lampsOn(time), windows);
+  for (const l of windowLights) scene.add(l);
+  return { scene, model, bounds, sun, hemi, built, lamps: built.lightPoints, lampsOn: lampsOn(time), time: t, background: bg, windowLights };
+}
+
+/* Luce d'area vera alle finestre più vicine alla telecamera (di giorno): la luce del cielo entra morbida e gli interni non restano
+   «spenti» dove il sole non arriva. Il pannello è nel vano, rivolto verso l'interno (verso il centro della casa). */
+function windowAreaLights(THREE, model, bounds, view, t, night, enabled) {
+  if (!enabled || night || !view) return [];
+  const cam = new THREE.Vector3(...view.position);
+  const cands = [];
+  model.updateMatrixWorld(true);
+  model.traverse((o) => {
+    if (!o.isMesh || o.userData?.layer !== 'VETRI') return;
+    const bb = new THREE.Box3().setFromObject(o);
+    const sz = bb.getSize(new THREE.Vector3());
+    const w = Math.max(sz.x, sz.z);
+    if (w < 0.5 || sz.y < 0.5 || Math.min(sz.x, sz.z) > 0.2) return;   // solo vetrate verticali sottili
+    const c = bb.getCenter(new THREE.Vector3());
+    if (c.y > 4.5 && cam.y < 3) return;   // finestre di altri piani lontani dalla vista
+    cands.push({ c, w, h: sz.y, alongX: sz.x >= sz.z, d: c.distanceTo(cam) });
+  });
+  cands.sort((a, b) => a.d - b.d);
+  return cands.slice(0, 3).map((k) => {
+    const l = new THREE.RectAreaLight(t.sky, 2.2 * t.env / 0.3, k.w, k.h);
+    const inward = new THREE.Vector3(bounds.center.x - k.c.x, 0, bounds.center.z - k.c.z);
+    if (k.alongX) { inward.set(0, 0, Math.sign(inward.z) || 1); } else { inward.set(Math.sign(inward.x) || 1, 0, 0); }
+    l.position.copy(k.c).addScaledVector(inward, 0.05);
+    l.lookAt(k.c.clone().addScaledVector(inward, 1));
+    l.userData.windowLight = true;
+    return l;
+  });
 }
