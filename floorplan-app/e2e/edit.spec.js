@@ -2,6 +2,14 @@ import { expect, test } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/* Il pannello destro ha quattro schede (Pianta, Arredi, Impianti, Documenti): si apre quella che serve (e il cassetto su iPad e telefono). */
+async function tabTo(page, name) {
+  const details = page.getByRole('button', { name: 'Mostra il pannello dei dettagli' });
+  if (await details.count()) await details.click();
+  await page.getByRole('tab', { name, exact: true }).click();
+}
+
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 async function open(page) {
@@ -68,6 +76,7 @@ test('un DXF importato si arreda dopo, con lo stile scelto', async ({ page }, in
   const errors = await open(page);
   await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/appartamento_cm.dxf'));
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
+  await tabTo(page, 'Arredi');
   await expect(page.getByRole('button', { name: /Arreda tutto/ })).toBeVisible({ timeout: 30_000 });
   const bare = (await page.locator('.pf-sheet svg g[filter] > *').count());
   await page.getByRole('radiogroup', { name: 'Stile', exact: true }).getByRole('radio', { name: 'Nordico' }).click();
@@ -731,6 +740,7 @@ test('i colori principali della casa ricolorano pianta e 3D, e si possono ripris
   const errors = await open(page);
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await tabTo(page, 'Arredi');
   const panel = page.locator('section.pf-palette');
   await expect(panel).toBeVisible();
   const before = await page.locator('.pf-sheet svg').first().innerHTML();
@@ -782,6 +792,7 @@ test('i materiali della casa: combinazione Chalet in legno, struttura e scelte s
   const errors = await open(page);
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await tabTo(page, 'Arredi');
   const mat = page.locator('section.pf-materials');
   await expect(mat).toBeVisible();
   await expect(mat.getByRole('button', { name: 'Torna ai materiali dello stile' })).toBeDisabled();
@@ -811,6 +822,7 @@ test('una palette si salva, si riapplica dopo il reset e si elimina', async ({ p
   const errors = await open(page);
   await page.getByRole('button', { name: /Genera planimetria/ }).click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await tabTo(page, 'Arredi');
   const panel = page.locator('section.pf-palette');
   await panel.getByLabel('Facciata: codice esadecimale').fill('#b7773f');
   await panel.getByLabel('Nome della palette da salvare').fill('Mia rossa');

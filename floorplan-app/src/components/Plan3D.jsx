@@ -7,7 +7,7 @@ import { themeFor, themeWithPalette } from '../lib/palette';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady }) {
+export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady, onPick = null, selection = null }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);   // «Riprova» ricrea il contesto WebGL
@@ -19,6 +19,11 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
   overlayRef.current = overlay;
   const prevLevel = useRef('all');
   const builtRef = useRef(null);   // gruppi di sensori, impianto e luci attualmente nella scena
+  const propsRef = useRef(null);   // proprietà correnti: la scena resta viva e legge sempre le ultime (esportazioni e ricostruzione del modello)
+  propsRef.current = { plan, project, palette, materials, style, lowWalls, spread, north };
+  const attachRef = useRef(null);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
 
   /* Mostra o nasconde sensori, impianto, cavi, coni e luci; a luci accese la scena si abbassa come di sera. */
   const applyShow = (st, built, show, on) => {
@@ -32,6 +37,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     st.setLights(built, !!on);
     if (st.hemi) st.hemi.intensity = on ? 0.85 : 1.3;   // di sera la scena si abbassa ma resta leggibile, con le lampade che spiccano
     if (st.sun) st.sun.intensity = on ? 0.5 : 1.6;
+    st.invalidate?.(true);
   };
   /* Costruisce i gruppi del progetto e li aggiunge a `target` (la scena o una copia per il DXF). */
   const attach = (st, target, spreadBy, override = null) => {
@@ -51,6 +57,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     applyShow(st, built, ov.show, ov.lightsOn);
     return built;
   };
+  attachRef.current = attach;
 
   useEffect(() => {
     let disposed = false;
@@ -93,52 +100,150 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         el.appendChild(renderer.domElement);
 
         const scene = new THREE.Scene();
-        const model = project
-          ? buildHouse(THREE, project, (f) => themeFor(project, f), { lowWalls, spread })
-          : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials), { lowWalls });
-        scene.add(model);
-        sceneRef.current = { THREE, model, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null };
-        setReady((n) => n + 1);
-        // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
-        const { bb, center, size } = addGround(THREE, scene, model);
-        const W = Math.max(1, size.x), L = Math.max(1, size.z), Ht = Math.max(1, bb.max.y);
+        // disegno solo quando serve: a riposo la scheda grafica non lavora. Le ombre (luce e geometria fisse) si ricalcolano solo
+        // quando la scena cambia, non a ogni movimento della telecamera.
+        renderer.shadowMap.autoUpdate = false;
+        renderer.shadowMap.needsUpdate = true;
+        let dirty = true;
+        let raf = 0;
+        let controls = null;
+        const basePixelRatio = Math.min(2, window.devicePixelRatio || 1);
+        const invalidate = (sceneChanged = false) => {
+          if (sceneChanged) renderer.shadowMap.needsUpdate = true;
+          dirty = true;
+          if (!raf && !disposed) raf = requestAnimationFrame(loop);
+        };
+        function loop() {
+          raf = 0;
+          if (disposed) return;
+          const moving = controls ? controls.update() : false;   // true finché la telecamera si muove (anche per l'inerzia)
+          if (moving || dirty) {
+            dirty = false;
+            renderer.render(scene, camera);
+            if (moving && !raf) raf = requestAnimationFrame(loop);   // (un 'change' di update() può averlo già pianificato)
+          }
+        }
+        sceneRef.current = { THREE, scene, model: null, ground: null, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null, invalidate };
         const hemi = new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3);
         scene.add(hemi);
         const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
-        const dir = sunDirection(north);   // il sole segue il nord del progetto (pomeriggio, a sud-ovest)
-        const reach = Math.max(W, L) * 0.6 + 8;
-        sun.position.set(center.x + dir.dx * reach, 14 + Ht, center.z + dir.dz * reach);
-        sun.target.position.set(center.x, 0, center.z);
         sun.castShadow = true;
         sun.shadow.bias = -0.0004;        // niente righe sfarfallanti sui muri esposti al sole (shadow acne)
         sun.shadow.normalBias = 0.03;
         sun.shadow.mapSize.set(2048, 2048);
-        const ext = Math.max(W, L, Ht);
-        Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + Ht * 2 });
         scene.add(sun, sun.target);
         sceneRef.current.hemi = hemi;
         sceneRef.current.sun = sun;
 
         const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1500);
-        // inquadratura a tre quarti dall'alto, abbastanza lontana da far entrare tutta la pianta
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
+        controls.minDistance = 2;
+        controls.addEventListener('change', () => invalidate());
+
+        /*
+         * Clic sulla scena (non un trascinamento per ruotare): un raggio dalla telecamera trova cosa c'è sotto il cursore.
+         * Le parti costruite da scene3d portano un'etichetta (arredo, porta o finestra di origine, locale); tetto e vetri si saltano.
+         */
+        const raycaster = new THREE.Raycaster();
+        const ndc = new THREE.Vector2();
+        const visible = (o) => { for (let n = o; n; n = n.parent) if (n.visible === false) return false; return true; };
+        const pick = (e) => {
+          const st = sceneRef.current;
+          if (!st?.model) return null;
+          const r = renderer.domElement.getBoundingClientRect();
+          ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+          raycaster.setFromCamera(ndc, camera);
+          for (const h of raycaster.intersectObject(st.model, true)) {
+            if (!visible(h.object) || h.object.isLine || h.object.isPoints) continue;
+            let tag = null;
+            let floorId = null;
+            for (let n = h.object; n; n = n.parent) {
+              const u = n.userData;
+              if (u.layer === 'TETTO' || u.layer === 'VETRI') { tag = 'skip'; break; }
+              if (!tag && u.itemIndex !== undefined) tag = { kind: 'item', index: u.itemIndex };
+              else if (!tag && u.openingKind) tag = { kind: u.openingKind, index: u.openingIndex };
+              else if (!tag && u.roomId !== undefined) tag = { kind: 'room', roomId: u.roomId };
+              if (u.floor?.id !== undefined) floorId = u.floor.id;
+            }
+            if (tag === 'skip') continue;
+            return tag ? { ...tag, floorId } : null;   // un muro o altro senza etichetta: nessuna selezione
+          }
+          return null;
+        };
+        let down = null;
+        renderer.domElement.addEventListener('pointerdown', (e) => { down = e.button === 0 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null; });
+        renderer.domElement.addEventListener('pointerup', (e) => {
+          const d = down;
+          down = null;
+          if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || performance.now() - d.t > 600) return;
+          onPickRef.current?.(pick(e));
+        });
+        // mentre si ruota la risoluzione scende (fluido), a mano ferma torna piena
+        controls.addEventListener('start', () => { if (basePixelRatio > 1) renderer.setPixelRatio(1); });
+        controls.addEventListener('end', () => { if (basePixelRatio > 1) { renderer.setPixelRatio(basePixelRatio); invalidate(); } });
+        sceneRef.current.camera = camera;
+        sceneRef.current.controls = controls;
+
         // inquadratura a tre quarti dall'alto: tutta la sfera che contiene il modello entra nel campo più stretto
-        const sphere = bb.getBoundingSphere(new THREE.Sphere());
-        const frame = (aspect) => {
+        const frame = (sphere, aspect) => {
           const v = (40 * Math.PI) / 180;
           const h = 2 * Math.atan(Math.tan(v / 2) * aspect);
           const dist = (sphere.radius / Math.sin(Math.min(v, h) / 2)) * 1.08;
           const dir = new THREE.Vector3(0.45, 0.8, 0.75).normalize();
           camera.position.copy(sphere.center).addScaledVector(dir, dist);
+          controls.target.copy(sphere.center);
+          controls.update();
         };
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.copy(sphere.center);
-        controls.enableDamping = true;
-        controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
-        controls.minDistance = 2;
-        controls.maxDistance = ext * 14;   // la pianta dall'alto sta lontano (campo stretto)
-        sceneRef.current.camera = camera;
-        sceneRef.current.controls = controls;
-        window.__planify3d = { THREE, camera, controls, model, renderer };   // per i test dell'interfaccia (inquadrature precise)
+        let lastSphere = null;
+        /*
+         * (Ri)costruisce il modello dalle proprietà correnti senza toccare renderer, luci, telecamera e comandi: così una modifica
+         * del progetto (o un salvataggio sul cloud) non fa lampeggiare la vista né riporta l'inquadratura all'inizio.
+         * L'inquadratura si rifà solo la prima volta o se la casa cambia molto (un altro progetto).
+         */
+        const loadModel = () => {
+          const P = propsRef.current;
+          const st = sceneRef.current;
+          if (!P || !st || disposed) return;
+          const old = st.model;
+          const oldGround = st.ground;
+          const model = P.project
+            ? buildHouse(THREE, P.project, (f) => themeFor(P.project, f), { lowWalls: P.lowWalls, spread: P.spread })
+            : buildScene(THREE, P.plan, themeWithPalette(THEMES[P.style] || THEMES.modern, P.palette, P.materials), { lowWalls: P.lowWalls });
+          scene.add(model);
+          if (old) {
+            scene.remove(old);
+            old.traverse((o) => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
+          }
+          if (oldGround) {
+            scene.remove(oldGround);
+            oldGround.geometry.dispose();
+            oldGround.material.dispose();
+          }
+          // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
+          const { bb, center, size, ground } = addGround(THREE, scene, model);
+          const W = Math.max(1, size.x), L = Math.max(1, size.z), Ht = Math.max(1, bb.max.y);
+          const dir = sunDirection(P.north);   // il sole segue il nord del progetto (pomeriggio, a sud-ovest)
+          const reach = Math.max(W, L) * 0.6 + 8;
+          sun.position.set(center.x + dir.dx * reach, 14 + Ht, center.z + dir.dz * reach);
+          sun.target.position.set(center.x, 0, center.z);
+          const ext = Math.max(W, L, Ht);
+          Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + Ht * 2 });
+          sun.shadow.camera.updateProjectionMatrix();
+          controls.maxDistance = ext * 14;   // la pianta dall'alto sta lontano (campo stretto)
+          const sphere = bb.getBoundingSphere(new THREE.Sphere());
+          st.model = model;
+          st.ground = ground;
+          window.__planify3d = { THREE, camera, controls, model, renderer };   // per i test dell'interfaccia (inquadrature precise)
+          const changed = !lastSphere || Math.abs(sphere.radius - lastSphere.radius) > lastSphere.radius * 0.35
+            || sphere.center.distanceTo(lastSphere.center) > lastSphere.radius * 0.6;
+          lastSphere = sphere;
+          if (changed) frame(sphere, camera.aspect);
+          setReady((n) => n + 1);
+          invalidate(true);
+        };
+        sceneRef.current.loadModel = loadModel;
 
         const resize = () => {
           const w = el.clientWidth || 600;
@@ -146,22 +251,12 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           renderer.setSize(w, h);
           camera.aspect = w / h;
           camera.updateProjectionMatrix();
-          if (!framed) {
-            frame(w / h);
-            framed = true;
-          }
+          invalidate();
         };
-        let framed = false;
         const ro = new ResizeObserver(resize);
         ro.observe(el);
         resize();
-        let raf = 0;
-        const loop = () => {
-          controls.update();
-          renderer.render(scene, camera);
-          raf = requestAnimationFrame(loop);
-        };
-        loop();
+        loadModel();
         onReady?.({
           // telecamera della vista: per il render con «vista attuale» e per spostarla sulle inquadrature automatiche
           camera: () => ({ position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov }),
@@ -176,6 +271,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             camera.fov = v.fov;
             camera.updateProjectionMatrix();
             controls.update();
+            invalidate();
           },
           png: () => {
             renderer.render(scene, camera);
@@ -183,6 +279,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           },
           // GLB per Blender: la scena com'è (tetto, impianto e sensori visibili), con tutte le luci vere e il sole
           glb: async (extra = {}) => {
+            const { plan, project, style, palette, materials, north } = propsRef.current;
             const fresh = project
               ? buildHouse(THREE, project, (f) => themeFor(project, f))
               : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
@@ -195,7 +292,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             const cur = overlayRef.current;
             const lamps = { devices: cur?.devices || [], electric: cur?.electric || extra.electric || null, floorId: cur?.floorId,
               show: { ...(cur?.show || {}), lights: true }, lightsOn: false };
-            const built = attach(sceneRef.current, fresh, 0, lamps);
+            const built = attachRef.current(sceneRef.current, fresh, 0, lamps);
             if (built) {
               setLights(built, false);
               for (const g of built.glow) g.emissiveIntensity = 1.8;   // corpi illuminanti accesi
@@ -206,16 +303,18 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           },
           // il DXF ha sempre le quote vere e i muri interi, anche se la vista è esplosa o con i muri bassi
           dxf: () => {
-            if (!spread && !lowWalls) return sceneToDxf(THREE, model);
+            const { plan, project, style, palette, materials, spread, lowWalls } = propsRef.current;
+            if (!spread && !lowWalls) return sceneToDxf(THREE, sceneRef.current.model);
             const fresh = project
               ? buildHouse(THREE, project, (f) => themeFor(project, f))
               : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
-            attach(sceneRef.current, fresh, 0);   // sensori e impianto visibili vanno nel DXF anche con la vista esplosa o i muri bassi
+            attachRef.current(sceneRef.current, fresh, 0);   // sensori e impianto visibili vanno nel DXF anche con la vista esplosa o i muri bassi
             return sceneToDxf(THREE, fresh);
           },
         });
         cleanup = () => {
           onReady?.(null);
+          sceneRef.current = null;
           cancelAnimationFrame(raf);
           ro.disconnect();
           controls.dispose();
@@ -235,9 +334,15 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       disposed = true;
       cleanup();
     };
-    // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena
+    // onReady è un callback dell'app: cambiarlo non deve ricostruire la scena. Renderer, luci, telecamera e comandi nascono una volta
+    // sola (e con «Riprova»); i dati del progetto cambiano solo il modello (effetto qui sotto).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, project, palette, materials, style, lowWalls, spread, north, attempt]);
+  }, [attempt]);
+
+  // il progetto cambia (modifica, palette, stile, nord, vista esplosa…): si sostituisce solo il modello, la vista resta viva
+  useEffect(() => {
+    sceneRef.current?.loadModel?.();
+  }, [plan, project, palette, materials, style, lowWalls, spread, north]);
 
   /*
    * Livelli del loft e sezione 3D, senza ricostruire la scena. «Sotto» nasconde il soppalco e tutto ciò che sta sopra;
@@ -266,6 +371,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       planes.push(new THREE.Plane(n, -sign * pos));
     }
     renderer.clippingPlanes = planes;
+    st.invalidate?.(true);
     // passando a «Sopra» la telecamera sale a guardare il soppalco dall'alto, oltre il muro davanti
     if (loftLevel === 'above' && prevLevel.current !== 'above' && mzFloor && st.camera) {
       const mz = mzFloor.plan.mezzanine;
@@ -275,29 +381,68 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       st.camera.position.set(c.x - 3, c.y + Math.max(9, mz.h * 1.1), c.z + Math.max(7, mz.h * 0.8));
       st.controls.update();
     }
+    st.invalidate?.(true);
     prevLevel.current = loftLevel;
   }, [loftLevel, cut?.axis, cut?.t, cut?.flip, !!cut, ready, plan, project, spread]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // tetto: si toglie e si rimette senza muovere l'inquadratura
   useEffect(() => {
     const st = sceneRef.current;
-    if (!st) return;
+    if (!st?.model) return;
     const old = st.model.getObjectByName('tetto');
     if (old) {
       st.model.remove(old);
       old.traverse((o) => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
     }
+    st.invalidate?.(true);
     if (!roof) return;
     const top = project ? st.roofFloor(project) : { floor: { plan }, y: plan?.height || st.WALL_H };
     const roofStyle = project ? (top?.floor.meta?.style || style) : style;
     if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle, palette: project?.palette || palette, materials: project?.materials || materials }));
   }, [roof, ready, plan, project, palette, materials, spread, style]);
 
+  // selezione: un riquadro colorato attorno all'oggetto scelto (arredo, porta, finestra o locale)
+  const selKey = selection ? `${selection.kind}|${selection.index ?? ''}|${selection.roomId ?? ''}|${selection.floorId ?? ''}` : '';
+  useEffect(() => {
+    const st = sceneRef.current;
+    if (!st?.model) return undefined;
+    const THREE = st.THREE;
+    const old = st.scene.getObjectByName('selezione');
+    if (old) { st.scene.remove(old); old.geometry.dispose(); old.material.dispose(); }
+    if (selection) {
+      const box = new THREE.Box3();
+      st.model.traverse((o) => {
+        const u = o.userData;
+        const mine = selection.kind === 'item' ? u.itemIndex === selection.index
+          : selection.kind === 'room' ? u.roomId === selection.roomId
+            : u.openingKind === selection.kind && u.openingIndex === selection.index;
+        if (!mine || !(o.isMesh || o.isGroup)) return;
+        if (selection.floorId != null) { // nella casa a più piani vale solo quello giusto
+          let fid = null;
+          for (let n = o; n; n = n.parent) if (n.userData.floor?.id !== undefined) { fid = n.userData.floor.id; break; }
+          if (fid != null && fid !== selection.floorId) return;
+        }
+        box.expandByObject(o);
+      });
+      if (!box.isEmpty()) {
+        const helper = new THREE.Box3Helper(box.expandByScalar(0.03), '#58760a');
+        helper.name = 'selezione';
+        helper.material.depthTest = false;
+        helper.material.transparent = true;
+        helper.renderOrder = 999;
+        st.scene.add(helper);
+      }
+    }
+    st.invalidate?.();
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selKey, ready]);
+
   // sensori, impianto e luci: si ricostruiscono quando cambiano i dati e si accendono con gli interruttori
   const overlayKey = overlay ? `${overlay.devices?.length || 0}|${overlay.electric ? 1 : 0}|${overlay.floorId}` : '';
   useEffect(() => {
     const st = sceneRef.current;
-    if (!st) return undefined;
+    if (!st?.model) return undefined;
     const old = builtRef.current;
     if (old) for (const g of Object.values(old.groups).flat()) {
       g.parent?.remove(g);
@@ -306,6 +451,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     // le luci puntuali dei gruppi tolti non fanno più parte della scena
 
     builtRef.current = attach(st, st.model, spread || 0);
+    st.invalidate?.(true);
     return undefined;
     // attach legge overlay e project dall'ultimo render: si ricostruisce solo quando cambiano i dati veri
     // eslint-disable-next-line react-hooks/exhaustive-deps

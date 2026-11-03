@@ -54,6 +54,13 @@ import { pointInPolygon } from './geometry';
 export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
   const plan = withCornerWindows(plan0);   // due finestre vicine in un angolo sono una sola, con il montante
   const root = new THREE.Group();
+  // ogni pezzo costruito mentre `curTag` è acceso porta quell'etichetta (arredo o apertura di origine): serve a riconoscere cosa si clicca nel 3D
+  let curTag = null;
+  const rawAdd = root.add.bind(root);
+  root.add = (...objs) => {
+    if (curTag) for (const o of objs) Object.assign(o.userData, curTag);
+    return rawAdd(...objs);
+  };
   const s = plan.scale;
   const t = plan.wallThickness / s;
   const wallH = lowWalls ? 1.2 : (plan.height || WALL_H);   // il loft ha il volume a doppia altezza
@@ -126,13 +133,14 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     floor.position.y = 0.002;
     floor.receiveShadow = true;
     floor.userData.layer = 'PAVIMENTI';
+    floor.userData.roomId = r.id;
     root.add(floor);
   }
 
   // vani di porte e finestre come rettangoli in pianta (come li disegna PlanSvg)
   const allOpenings = [
-    ...plan.doors.filter((d) => d.kind !== 'gate').map((d) => ({ ...d, door: true })),
-    ...plan.windows.map((w) => ({ ...w, door: false })),
+    ...plan.doors.map((d, i) => ({ ...d, door: true, _i: i })).filter((d) => d.kind !== 'gate'),
+    ...plan.windows.map((w, i) => ({ ...w, door: false, _i: i })),
   ];
   // sui muri dritti le aperture sono orizzontali o verticali; su muri curvi o obliqui (forme libere, facciata ad arco) hanno un angolo qualsiasi
   const axisAligned = (o) => {
@@ -299,6 +307,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   const doorOf = (o) => tint(K.door, o.color);
   // aperture oblique: sopra e sotto il vano il muro continua; finestra con vetro e telaio, porta con stipiti, architrave e anta
   for (const o of oblique) {
+    curTag = { openingKind: o.door ? 'door' : 'window', openingIndex: o._i };
     const a = ((o.rot || 0) * Math.PI) / 180;
     const ux = Math.cos(a), uz = Math.sin(a);
     const nx = -uz, nz = ux;
@@ -356,9 +365,11 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     leaf.traverse((c) => { if (c.isMesh) { c.userData.layer = 'PORTE'; c.receiveShadow = true; } });
     root.add(leaf);
   }
+  curTag = null;
 
   // infissi e porte nei colori dello stile: telaio e traversa centrale, davanzale, anta socchiusa con maniglia
   list.forEach((o, i) => {
+    curTag = { openingKind: o.door ? 'door' : 'window', openingIndex: o._i };
     const q = openings[i];
     const horiz = o.rot === 0 || !o.rot;
     const len = o.w;
@@ -442,6 +453,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     leaf.traverse((c) => { if (c.isMesh) { c.userData.layer = 'PORTE'; c.receiveShadow = true; } });
     root.add(leaf);
   });
+  curTag = null;
 
   // ringhiera attorno all'apertura della scala nei lati lunghi non appoggiati a un muro (i lati corti sono il passaggio)
   for (const v of voids) {
@@ -571,7 +583,8 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       }
     }
   };
-  for (const it of plan.furniture) {
+  for (const [fi, it] of plan.furniture.entries()) {
+    curTag = { itemIndex: fi };
     if (it.type === 'rug') continue;   // il tappeto è già disegnato sopra
     if (it.type === 'table' || it.type === 'table_round') chairsAround(it);
     const from = root.children.length;
@@ -619,7 +632,23 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       box(it.x, it.y, it.w, it.h, lift, h, material);
     }
     raise(it, from);
+    // rotazione libera: i volumi di questo arredo girano attorno al suo centro (i modelli veri hanno già la loro rotazione)
+    if (it.rot && root.children.length > from) {
+      const pivot = new THREE.Group();
+      const cx = it.x + it.w / 2;
+      const cz = it.y + it.h / 2;
+      pivot.position.set(cx, 0, cz);
+      pivot.rotation.y = -(((it.rot % 360) * Math.PI) / 180);
+      for (const child of root.children.splice(from)) {
+        child.parent = null;
+        child.position.x -= cx;
+        child.position.z -= cz;
+        pivot.add(child);
+      }
+      root.add(pivot);
+    }
   }
+  curTag = null;
   // layer di ogni volume (per il DXF 3D): muri, vetri, pavimenti, il resto sono arredi
   root.traverse((o) => {
     if (!o.isMesh || o.userData.layer) return;

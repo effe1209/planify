@@ -19,7 +19,7 @@ import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
 import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setOpeningType, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
-import { itemProblems, resizeItem, rotateItem, snapItem } from './lib/furnitureEdit';
+import { itemProblems, resizeItem, rotateItem, rotateItemBy, setItemRot, snapItem } from './lib/furnitureEdit';
 import { mezzAxis, mezzLimits, mezzRatio, resizeMezz } from './lib/mezz';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
@@ -45,9 +45,10 @@ import { buildEstimate } from './lib/estimate';
 import { scheduleFor } from './lib/schedule';
 import { readSharedProject, shareUrl } from './lib/share';
 import { cloud, cloudTokenFrom } from './lib/cloud';
-import { sharePayload } from './lib/share';
 import { useCloud } from './hooks/useCloud';
 import CloudDialog from './components/CloudDialog';
+import CloudSync from './components/CloudSync';
+import InspectorTabs from './components/InspectorTabs';
 import SheetsDialog from './components/SheetsDialog';
 import LibraryDialog, { LibraryPanel } from './components/LibraryDialog';
 import { getLibrary, purchaseQuote, storeLibrary } from './lib/materialLibrary';
@@ -171,8 +172,7 @@ export default function App() {
   const [libraryDialog, setLibraryDialog] = useState(false);
   const [sheetsBusy, setSheetsBusy] = useState(false);
   const cx = useCloud();
-  const [cloudStatus, setCloudStatus] = useState('idle');   // idle | saving | saved | error | conflict
-  const cloudSig = useRef(new Map());                        // progetto locale → ultima versione salvata (per non salvare due volte lo stesso)
+  const syncApi = useRef(null);                              // CloudSync: segna come già salvati i progetti appena aperti dal cloud
   const history = usePlanHistory(consent.decided ? (consent.allowHistory ? 'on' : 'off') : 'pending');
   // progetto condiviso aperto da un link (#progetto=…): si guarda in sola lettura, finché non se ne salva una copia
   const [shared, setShared] = useState(null);
@@ -190,31 +190,6 @@ export default function App() {
   }, []);
   const readOnly = !!shared;
   const current = shared || history.current;     // progetto aperto
-  /* salvataggio automatico sul cloud: dopo una pausa di 2,5 s dall'ultima modifica, solo per i progetti già sul cloud */
-  const cloudSave = async (project, { force = false } = {}) => {
-    const sig = JSON.stringify(sharePayload(project));
-    setCloudStatus('saving');
-    try {
-      const res = await cx.api.current.save(project, { force });
-      cloudSig.current.set(project.id, sig);
-      history.update(project.id, (p) => ({ ...p, cloudSaved: res.updated_at, cloudShare: res.share_token }));
-      setCloudStatus('saved');
-      cx.refresh();
-    } catch (err) {
-      setCloudStatus(err.conflict ? 'conflict' : 'error');
-    }
-  };
-  useEffect(() => {
-    if (!cx.user || !current?.cloudId || shared || cloudStatus === 'conflict' || cloudStatus === 'saving') return undefined;
-    const t = setTimeout(() => {
-      const sig = JSON.stringify(sharePayload(current));
-      if (!cloudSig.current.has(current.id)) { cloudSig.current.set(current.id, sig); return; }   // appena aperto o collegato: è già sul cloud
-      if (cloudSig.current.get(current.id) !== sig) cloudSave(current);
-    }, 2500);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, cx.user, shared, cloudStatus]);
-  useEffect(() => { setCloudStatus('idle'); }, [current?.id]);
   const floor = activeFloor(current);            // piano su cui si lavora
   const plan = floor?.plan || null;
   // scale tra piani consecutivi: stessa posizione su entrambe le piante (vedi lib/stairs.js)
@@ -805,6 +780,9 @@ export default function App() {
     say('Facciata raddrizzata');
   };
   /* ── modifica diretta: muri interni, porte e finestre ── */
+  const [inspTab, setInspTab] = useState(() => { const v = storage.get('planify.inspTab', 'plan'); return ['plan', 'furn', 'sys', 'docs'].includes(v) ? v : 'plan'; });
+  useEffect(() => { storage.set('planify.inspTab', inspTab); }, [inspTab]);
+  const T = (id) => inspTab === id;   // schede del pannello destro: Pianta · Arredi e materiali · Impianti · Documenti
   const [wallEdit, setWallEdit] = useState(false);
   const [addMode, setAddMode] = useState(null);
   const [selectedOpening, setSelectedOpening] = useState(null);   // { kind: 'door' | 'window', index }
@@ -820,6 +798,38 @@ export default function App() {
     setWallEdit((on) => !on);
     setAddMode(null); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); setSelectedId(null);
   };
+  /* Clic nella vista 3D: arredo, locale, porta o finestra diventano la selezione, con lo stesso pannello di dettaglio della pianta. */
+  const [pendingPick, setPendingPick] = useState(null);
+  const applyPick = (hit) => {
+    if (!hit) { setSelectedItem(null); setSelectedId(null); setSelectedOpening(null); return; }
+    if (hit.kind === 'item') { setSelectedId(null); setSelectedOpening(null); setSelectedItem(hit.index); }
+    else if (hit.kind === 'room') { setSelectedItem(null); setSelectedOpening(null); setSelectedId(hit.roomId); }
+    else if (editable) {   // porte e finestre si modificano nella modalità «Modifica pianta»
+      setSelectedItem(null); setSelectedId(null);
+      if (!wallEdit) setWallEdit(true);
+      setSelectedOpening({ kind: hit.kind, index: hit.index });
+    } else return;
+    setPanels((pp) => (pp.right ? pp : { ...pp, right: true, ...(narrow() && { left: false }) }));   // il pannello con i dettagli deve vedersi
+  };
+  const pick3d = (hit) => {
+    // casa a più piani: se l'oggetto è su un altro piano, quel piano diventa quello aperto e la selezione segue
+    if (hit?.floorId && hit.floorId !== floor?.id && current?.floors.some((f) => f.id === hit.floorId)) {
+      setPendingPick(hit);
+      editProject((p) => ({ ...p, activeFloor: hit.floorId }));
+      return;
+    }
+    applyPick(hit);
+  };
+  useEffect(() => {
+    if (pendingPick && floor?.id === pendingPick.floorId) { applyPick(pendingPick); setPendingPick(null); }
+  }, [pendingPick, floor?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selection3d = useMemo(() => {
+    if (!view3d || !floor) return null;
+    if (selectedItem != null) return { kind: 'item', index: selectedItem, floorId: floor.id };
+    if (selectedOpening) return { kind: selectedOpening.kind, index: selectedOpening.index, floorId: floor.id };
+    if (selectedId != null && selectedId !== 'mezz') return { kind: 'room', roomId: selectedId, floorId: floor.id };
+    return null;
+  }, [view3d, floor?.id, selectedItem, selectedOpening, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
   /* Registra la modifica come un passo di annulla; i locali che hanno cambiato misura si riarredano con il motore (un solo passo). */
   const applyPlanEdit = async (res) => {
     const edited = res.plan;
@@ -1011,6 +1021,7 @@ export default function App() {
         moveFurniture(selectedItem, it.x + arrows[e.key][0], it.y + arrows[e.key][1]);
       } else if (e.key === 'r' || e.key === 'R') rotateFurniture(selectedItem);
       else if (e.key === 'f' || e.key === 'F') flipFurniture(selectedItem);
+      else if (['[', ']', 'q', 'Q', 'e', 'E'].includes(e.key)) editFurniture((list) => list.map((f, i) => (i === selectedItem ? rotateItemBy(f, ['[', 'q', 'Q'].includes(e.key) ? -15 : 15) : f)));
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         removeFurniture(selectedItem);
@@ -1695,21 +1706,7 @@ export default function App() {
           {engine.status === 'error' && (
             <button type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</button>
           )}
-          {current?.cloudId && cx.user && cloudStatus !== 'idle' && (
-            <span className={`pf-cloud-status is-${cloudStatus}`} role="status">
-              {{ saving: 'Salvo…', saved: 'Salvato sul cloud', error: 'Non salvato: offline?', conflict: 'Versione più recente sul cloud' }[cloudStatus]}
-              {cloudStatus === 'error' && <button type="button" className="pf-mini" onClick={() => cloudSave(current)}>Riprova</button>}
-              {cloudStatus === 'conflict' && (
-                <>
-                  <button type="button" className="pf-mini" onClick={async () => {
-                    const { id: _l, ...p } = await cx.api.current.open(current.cloudId);
-                    history.add({ ...p, name: `${p.name || 'Progetto'} (cloud)` });
-                  }}>Apri quella</button>
-                  <button type="button" className="pf-mini is-danger" onClick={() => cloudSave(current, { force: true })}>Tieni la mia</button>
-                </>
-              )}
-            </span>
-          )}
+          <CloudSync cx={cx} current={current} shared={shared} onUpdate={history.update} onAdd={history.add} apiRef={syncApi} />
           <button type="button" className="pf-mini" onClick={() => setCloudDialog(true)} title="Account e progetti sul cloud">
             <CloudIcon size={14} /> <span className="pf-tl-mobile">Cloud</span>
           </button>
@@ -2149,7 +2146,7 @@ export default function App() {
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
                 <div className="pf-3d-wrap">
-                  <Plan3D plan={plan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                  <Plan3D onPick={pick3d} selection={selection3d} plan={plan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
                     spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
                   {view3d.render && (
                     <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
@@ -2178,7 +2175,7 @@ export default function App() {
                     selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
                     onSelectStair: setSelectedStair, onApply: applyPlanEdit, onMoveWall: moveWall, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
                   } : null} codes={schedule?.codes[floor.id]}
-                  onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
+                  onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture} onItemRotate={(i, deg) => editFurniture((list) => list.map((f, k) => (k === i ? setItemRot(f, deg) : f)))}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
                   onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
                   onDeviceDrag={setDevicePreview} coverage={coverage} coverageHighlight={coverHighlight}
@@ -2249,6 +2246,7 @@ export default function App() {
               {selectedItem != null && (
                 <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
                   onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onRotation={(deg) => editFurniture((list) => list.map((f, i) => (i === selectedItem ? setItemRot(f, deg) : f)))}
                   onSize={(dim, lock) => editFurniture((list) => list.map((f, i) => (i === selectedItem ? resizeItem(plan, f, dim, lock) : f)))}
                   onColor={(c) => editFurniture((list) => list.map((f, i) => {
                     if (i !== selectedItem) return f;
@@ -2294,10 +2292,6 @@ export default function App() {
                   onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
                   onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />
               )}
-              {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
-                <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}
-                  onStyle={setFloorStyle} onFurnish={() => furnishPlan()} onClear={() => furnishPlan({ clear: true })} />
-              )}
               {selectedRoom && (
                 <RoomEditor
                   key={selectedRoom.id}
@@ -2315,7 +2309,15 @@ export default function App() {
                   onClose={() => setSelectedId(null)}
                 />
               )}
+              <InspectorTabs tab={inspTab} onTab={setInspTab} />
+              {T('furn') && (<>
+              {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
+                <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}
+                  onStyle={setFloorStyle} onFurnish={() => furnishPlan()} onClear={() => furnishPlan({ clear: true })} />
+              )}
+              </>)}
 
+              {T('plan') && (<>
               <section className="pf-sec">
                 <h2>Pianta {SHAPE_NAME[plan.shape] || 'rettangolare'}</h2>
                 <label className="pf-field-sm pf-project-name">
@@ -2365,50 +2367,78 @@ export default function App() {
                   </p>
                 )}
               </section>
+              </>)}
 
+              {T('sys') && (<>
               <ElectricPanel config={electricCfg} data={electricPlan} floorId={floor.id} sheet={showElectric ? 'electric' : 'arch'}
                 onStart={startElectric} onSheet={setSheet} onChange={changeElectric} onClear={clearElectric} />
+              </>)}
 
+              {T('sys') && (<>
               <PlumbingPanel config={plumbingCfg} data={plumbingPlan} floorId={floor.id} sheet={showPlumbing ? 'plumbing' : 'arch'}
                 onStart={startPlumbing} onSheet={setSheet} onChange={changePlumbing} onClear={clearPlumbing} />
+              </>)}
 
+              {T('docs') && (<>
               <SchedulePanel schedule={schedule} />
+              </>)}
 
+              {T('furn') && (<>
               <LibraryPanel count={library.length} quote={quote} onOpen={() => setLibraryDialog(true)} />
+              </>)}
 
+              {T('docs') && (<>
               <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
                 onClear={clearEstimate} />
+              </>)}
 
+              {T('sys') && (<>
               <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm}
                 doors={doorState} onDoors={setDoors} onAddSensor={readOnly ? null : addSensor}
                 roomName={plan.rooms.find((r) => r.id === selectedId)?.name} />
+              </>)}
+              {T('sys') && (<>
               {floorDevices?.length > 0 && !showElectric && !showPlumbing && (
                 <CoveragePanel coverage={coverage} shown={!!layers.coverage}
                   onToggle={() => { setLayers((l) => ({ ...l, coverage: !l.coverage, alarm: true })); setCoverHighlight(null); }}
                   highlight={coverHighlight} onHighlight={setCoverHighlight} onReport={exportCoverage} />
               )}
+              </>)}
 
+              {T('furn') && (<>
               {!readOnly && !selectedRoom && (
                 <MaterialsPanel materials={current?.materials}
                   onChange={(mat) => editProject((p) => { const { materials: _m, ...rest } = p; return mat ? { ...rest, materials: mat } : rest; })}
                   onLook={({ materials: mat, palette: pal }) => editProject((p) => ({ ...p, materials: mat, palette: pal }))} />
               )}
+              </>)}
+              {T('furn') && (<>
               {!readOnly && !selectedRoom && (
                 <PalettePanel palette={current?.palette} styleId={floor.meta?.style || form.style}
                   onChange={(pal) => editProject((p) => { const { palette: _p, ...rest } = p; return pal ? { ...rest, palette: pal } : rest; })} />
               )}
+              </>)}
+              {T('plan') && (<>
               <NorthPanel plan={plan} north={current?.north ?? 0}
                 onNorth={readOnly ? () => {} : (v) => editProject((p) => ({ ...p, north: v }))} />
+              </>)}
+              {T('plan') && (<>
               <DesignReport design={plan.design} />
+              </>)}
+              {T('docs') && (<>
               <CompliancePanel plan={plan} type={floor.meta?.type} height={floor.meta?.height} stairs={floorStairs}
                 complex={current?.floors.filter((f) => f.id !== floor.id && typeof f.level === 'number' && f.plan).map((f) => ({ plan: f.plan, type: f.meta?.type }))}
                 onHeight={readOnly ? null : (v) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, height: v } })))}
                 onSelectRoom={setSelectedId} />
+              </>)}
 
+              {T('plan') && (<>
               {floor.meta?.type === 'apartment' && floor.params?.doubles != null && (
                 <FilterCheck plan={plan} params={floor.params} />
               )}
+              </>)}
 
+              {T('plan') && (<>
               <section className="pf-sec">
                 <h2>Locali (clicca per personalizzare)</h2>
                 <ul className="pf-rooms">
@@ -2430,7 +2460,9 @@ export default function App() {
                   })}
                 </ul>
               </section>
+              </>)}
 
+              {T('plan') && (<>
               {notes.length > 0 && (
                 <section className="pf-sec">
                   <h2>Note e conformità</h2>
@@ -2473,7 +2505,9 @@ export default function App() {
                   )}
                 </section>
               )}
+              </>)}
 
+              {T('plan') && (<>
               <section className="pf-sec">
                 <h2>Legenda</h2>
                 <ul className="pf-legend">
@@ -2484,6 +2518,7 @@ export default function App() {
                   <li><i className="lg-out" /> Esterno</li>
                 </ul>
               </section>
+              </>)}
             </>
           ) : (
             <section className="pf-sec">
@@ -2495,7 +2530,8 @@ export default function App() {
             </section>
           )}
 
-          <HistoryPanel
+          {(!(plan && stats) || T('docs')) && (
+            <HistoryPanel
             entries={history.entries}
             currentId={history.currentId}
             persistent={consent.allowHistory}
@@ -2509,9 +2545,10 @@ export default function App() {
               const { id: _l, ...p } = await cx.api.current.open(id);
               closeShared();
               const e = history.add(p);
-              cloudSig.current.set(e.id, JSON.stringify(sharePayload(e)));
+              syncApi.current?.baseline(e);
             }}
           />
+          )}
         </aside>
       </div>
 
@@ -2530,7 +2567,7 @@ export default function App() {
       {cloudDialog && (
         <CloudDialog cx={cx} project={current} readOnly={readOnly} onClose={() => setCloudDialog(false)} say={say}
           onSaved={(patch) => current && history.update(current.id, (p) => ({ ...p, ...patch }))}
-          onOpen={(p) => { closeShared(); const e = history.add(p); cloudSig.current.set(e.id, JSON.stringify(sharePayload(e))); }} />
+          onOpen={(p) => { closeShared(); const e = history.add(p); syncApi.current?.baseline(e); }} />
       )}
       {cookieDialog && (
         <CookieDialog consent={consent.consent} onSave={saveConsent} onClose={() => setCookieDialog(false)} />

@@ -17,6 +17,7 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
   const [error, setError] = useState(null);
   const { configured, ready, user, items, refresh, api } = cx;
 
+  useEffect(() => { if (user) refresh(); }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = dialogRef.current;
     if (el && !el.open) el.showModal?.();

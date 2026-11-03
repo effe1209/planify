@@ -830,3 +830,12 @@
 .pf-lib-chip { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.15); flex: none; }
 .pf-lib-price { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pf-lib-report { margin: 6px 0; }
+.pf-cloud-status-text { display: inline-flex; align-items: center; gap: 4px; min-width: 7.5rem; justify-content: flex-end; }
+.pf-cloud-status.is-idle .pf-cloud-status-text { visibility: hidden; }
+
+/* schede del pannello destro */
+.pf-insp-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--fill); position: sticky; top: 0; z-index: 3; }
+.pf-insp-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 7px 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.pf-insp-tabs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-insp-tabs button.is-on { background: var(--bg-panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.pf-insp-tabs button:focus-visible { outline: 2px solid var(--accent-line); outline-offset: -2px; }

@@ -5,6 +5,7 @@ import { resizeItem } from '../src/lib/furnitureEdit.js';
 import { shade, tintTheme, validColor } from '../src/lib/furnitureColor.js';
 import { THEMES } from '../src/lib/themes.js';
 import { buildScene } from '../src/lib/scene3d.js';
+import { buildDxf } from '../src/lib/dxf.js';
 
 const plan = {
   dimensions: { width: 6, length: 4 }, scale: 50, wallThickness: 10, height: 2.7,
@@ -43,3 +44,39 @@ assert.ok(colors.has('336699'), 'divano colorato');
 assert.ok(colors.has('aa3322'), 'porta colorata');
 assert.ok(colors.has('223344'), 'finestra colorata');
 console.log('itemedit ok');
+
+// rotazione libera
+{
+  const { itemBox, itemProblems, normAngle, rotateItemBy, setItemRot, snapItem } = await import('../src/lib/furnitureEdit.js');
+  assert.deepEqual(itemBox({ x: 1, y: 1, w: 2, h: 1 }), { x: 1, y: 1, w: 2, h: 1 }, 'senza rot: com\'è');
+  const b45 = itemBox({ x: 0, y: 0, w: 2, h: 1, rot: 45 });
+  assert.ok(Math.abs(b45.w - 3 / Math.SQRT2) < 1e-9 && Math.abs(b45.h - 3 / Math.SQRT2) < 1e-9, 'ingombro a 45°');
+  assert.ok(Math.abs(b45.x + b45.w / 2 - 1) < 1e-9, 'resta centrato');
+  const b90 = itemBox({ x: 0, y: 0, w: 2, h: 1, rot: 90 });
+  assert.ok(Math.abs(b90.w - 1) < 1e-9 && Math.abs(b90.h - 2) < 1e-9);
+  assert.equal(normAngle(-15), 345);
+  assert.equal(normAngle(375), 15);
+  assert.equal(setItemRot({ rot: 30 }, 360).rot, undefined, '0° toglie il campo');
+  assert.equal(rotateItemBy({ rot: 350 }, 15).rot, 5);
+  assert.equal(rotateItemBy({}, -15).rot, 345);
+  // aggancio: l'ingombro ruotato si appoggia al muro (alla sinistra del locale c'è 0,2 m di muro)
+  const it45 = { x: 1, y: 1, w: 2, h: 1, rot: 45, type: 'table', room: 'r' };
+  const snapped = snapItem(plan, it45, 0.18, 1);
+  const bb = itemBox({ ...it45, x: snapped.x, y: snapped.y });
+  assert.ok(Math.abs(bb.x - 0.2) < 0.001, `bordo dell'ingombro a filo muro (${bb.x})`);
+  // problemi: ruotato esce dal locale dove dritto ci sta
+  const room = plan.rooms[0];
+  const tight = { id: 't', room: 'r', type: 'table', x: room.x + 0.2, y: room.y + 0.2, w: room.w - 0.4, h: 0.4 };
+  const p2 = { ...plan, rooms: [{ ...room, id: 'r' }], furniture: [tight], doors: [], windows: [] };
+  assert.deepEqual(itemProblems(p2, 0), [], 'dritto: nessun problema');
+  assert.ok(itemProblems(p2, 0, { ...tight, rot: 30 }).some((x) => /Esce/.test(x)), 'ruotato: esce dal locale');
+  // 3D e DXF
+  const rotated = { ...plan, furniture: [{ ...plan.furniture[0], rot: 30 }] };
+  const g3 = buildScene(THREE, rotated, THEMES.modern);
+  let ok3 = false;
+  g3.traverse((o) => { if (o.userData.itemIndex === 0 && Math.abs(Math.abs(o.rotation.y) - (30 * Math.PI) / 180) < 0.9 && o.rotation.y !== 0) ok3 = true; });
+  assert.ok(ok3, 'l\'arredo ruotato ha una rotazione nel 3D');
+  const dxf = buildDxf({ ...rotated, wallThickness: 10, scale: 50 });
+  assert.ok(dxf.includes('ARREDI'), 'il DXF resta valido con un arredo ruotato');
+}
+console.log('itemedit rotazione ok');

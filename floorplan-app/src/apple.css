@@ -77,8 +77,8 @@
 
 /* ── Comparsa di menu, pannelli e finestre ─────────────────────────────── */
 @keyframes pf-materialize {
-  from { opacity: 0; transform: translateY(6px) scale(0.98); filter: blur(4px); }
-  to { opacity: 1; transform: none; filter: none; }
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 .pf-floor-menu, .pf-dialog[open], .pf-cookie-banner, .pf-customizer, .pf-sketch-panel, .pf-flash {
   animation: pf-materialize 420ms var(--ease-out) both;
@@ -144,11 +144,11 @@
 
 /* ── Pannelli laterali fluttuanti in vetro, sezioni a card ─────────────── */
 :root {
-  --sidebar-material: rgba(242, 242, 247, 0.72);
+  --sidebar-material: rgba(242, 242, 247, 0.98);
   --card: #ffffff;
 }
 .pf-app[data-theme="dark"] {
-  --sidebar-material: rgba(28, 28, 30, 0.72);
+  --sidebar-material: rgba(28, 28, 30, 0.98);
   --card: #2c2c2e;
 }
 .pf-body {
@@ -162,9 +162,7 @@
 .pf-rail, .pf-inspector {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--sidebar-material);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  backdrop-filter: blur(30px) saturate(180%);
+  background: var(--sidebar-material);   /* superficie piena: niente vetro sfocato sul contenuto che scorre (costa a ogni fotogramma) */
   box-shadow: var(--shadow-float), inset 0 1px 0 var(--glass-edge);
   scrollbar-width: thin;
   scrollbar-color: var(--fill-strong) transparent;
