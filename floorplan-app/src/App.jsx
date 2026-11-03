@@ -45,6 +45,8 @@ import { buildEstimate } from './lib/estimate';
 import { scheduleFor } from './lib/schedule';
 import { readSharedProject, shareUrl } from './lib/share';
 import { cloud, cloudTokenFrom } from './lib/cloud';
+import { sharePayload } from './lib/share';
+import { useCloud } from './hooks/useCloud';
 import CloudDialog from './components/CloudDialog';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
@@ -161,6 +163,9 @@ export default function App() {
   const consent = useConsent();
   const [cookieDialog, setCookieDialog] = useState(false);
   const [cloudDialog, setCloudDialog] = useState(false);
+  const cx = useCloud();
+  const [cloudStatus, setCloudStatus] = useState('idle');   // idle | saving | saved | error | conflict
+  const cloudSig = useRef(new Map());                        // progetto locale → ultima versione salvata (per non salvare due volte lo stesso)
   const history = usePlanHistory(consent.decided ? (consent.allowHistory ? 'on' : 'off') : 'pending');
   // progetto condiviso aperto da un link (#progetto=…): si guarda in sola lettura, finché non se ne salva una copia
   const [shared, setShared] = useState(null);
@@ -178,6 +183,31 @@ export default function App() {
   }, []);
   const readOnly = !!shared;
   const current = shared || history.current;     // progetto aperto
+  /* salvataggio automatico sul cloud: dopo una pausa di 2,5 s dall'ultima modifica, solo per i progetti già sul cloud */
+  const cloudSave = async (project, { force = false } = {}) => {
+    const sig = JSON.stringify(sharePayload(project));
+    setCloudStatus('saving');
+    try {
+      const res = await cx.api.current.save(project, { force });
+      cloudSig.current.set(project.id, sig);
+      history.update(project.id, (p) => ({ ...p, cloudSaved: res.updated_at, cloudShare: res.share_token }));
+      setCloudStatus('saved');
+      cx.refresh();
+    } catch (err) {
+      setCloudStatus(err.conflict ? 'conflict' : 'error');
+    }
+  };
+  useEffect(() => {
+    if (!cx.user || !current?.cloudId || shared || cloudStatus === 'conflict' || cloudStatus === 'saving') return undefined;
+    const t = setTimeout(() => {
+      const sig = JSON.stringify(sharePayload(current));
+      if (!cloudSig.current.has(current.id)) { cloudSig.current.set(current.id, sig); return; }   // appena aperto o collegato: è già sul cloud
+      if (cloudSig.current.get(current.id) !== sig) cloudSave(current);
+    }, 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, cx.user, shared, cloudStatus]);
+  useEffect(() => { setCloudStatus('idle'); }, [current?.id]);
   const floor = activeFloor(current);            // piano su cui si lavora
   const plan = floor?.plan || null;
   // scale tra piani consecutivi: stessa posizione su entrambe le piante (vedi lib/stairs.js)
@@ -1622,6 +1652,21 @@ export default function App() {
           {engine.status === 'error' && (
             <button type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</button>
           )}
+          {current?.cloudId && cx.user && cloudStatus !== 'idle' && (
+            <span className={`pf-cloud-status is-${cloudStatus}`} role="status">
+              {{ saving: 'Salvo…', saved: 'Salvato sul cloud', error: 'Non salvato: offline?', conflict: 'Versione più recente sul cloud' }[cloudStatus]}
+              {cloudStatus === 'error' && <button type="button" className="pf-mini" onClick={() => cloudSave(current)}>Riprova</button>}
+              {cloudStatus === 'conflict' && (
+                <>
+                  <button type="button" className="pf-mini" onClick={async () => {
+                    const { id: _l, ...p } = await cx.api.current.open(current.cloudId);
+                    history.add({ ...p, name: `${p.name || 'Progetto'} (cloud)` });
+                  }}>Apri quella</button>
+                  <button type="button" className="pf-mini is-danger" onClick={() => cloudSave(current, { force: true })}>Tieni la mia</button>
+                </>
+              )}
+            </span>
+          )}
           <button type="button" className="pf-mini" onClick={() => setCloudDialog(true)} title="Account e progetti sul cloud">
             <CloudIcon size={14} /> <span className="pf-tl-mobile">Cloud</span>
           </button>
@@ -2413,6 +2458,13 @@ export default function App() {
             onRemove={history.remove}
             onClear={history.clear}
             onManageConsent={() => setCookieDialog(true)}
+            cloudItems={cx.user ? cx.items.filter((it) => !history.entries.some((e) => e.cloudId === it.id)) : []}
+            onOpenCloud={async (id) => {
+              const { id: _l, ...p } = await cx.api.current.open(id);
+              closeShared();
+              const e = history.add(p);
+              cloudSig.current.set(e.id, JSON.stringify(sharePayload(e)));
+            }}
           />
         </aside>
       </div>
@@ -2425,9 +2477,9 @@ export default function App() {
         />
       )}
       {cloudDialog && (
-        <CloudDialog project={current} readOnly={readOnly} onClose={() => setCloudDialog(false)} say={say}
+        <CloudDialog cx={cx} project={current} readOnly={readOnly} onClose={() => setCloudDialog(false)} say={say}
           onSaved={(patch) => current && history.update(current.id, (p) => ({ ...p, ...patch }))}
-          onOpen={(p) => { closeShared(); history.add(p); }} />
+          onOpen={(p) => { closeShared(); const e = history.add(p); cloudSig.current.set(e.id, JSON.stringify(sharePayload(e))); }} />
       )}
       {cookieDialog && (
         <CookieDialog consent={consent.consent} onSave={saveConsent} onClose={() => setCookieDialog(false)} />

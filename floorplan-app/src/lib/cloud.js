@@ -38,6 +38,14 @@ export function getClient() {
   return clientPromise;
 }
 
+/* Il progetto è cambiato (o sparito) sul cloud dopo l'ultimo salvataggio di questo browser. */
+export class CloudConflict extends Error {
+  constructor() {
+    super('Sul cloud c\'è una versione più recente di questo progetto.');
+    this.conflict = true;
+  }
+}
+
 const fail = (error) => { if (error) throw new Error(error.message || String(error)); };
 
 export function makeCloud(client) {
@@ -45,6 +53,15 @@ export function makeCloud(client) {
   return {
     async signIn(email, redirectTo = window.location.origin + window.location.pathname) {
       const { error } = await client.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: redirectTo } });
+      fail(error);
+    },
+    /* accesso con il codice di 6 cifre dell'email (vale se il modello dell'email di Supabase contiene {{ .Token }}) */
+    async verifyCode(email, code) {
+      const { error } = await client.auth.verifyOtp({ email: email.trim(), token: String(code).trim(), type: 'email' });
+      fail(error);
+    },
+    async signInGoogle(redirectTo = window.location.origin + window.location.pathname) {
+      const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
       fail(error);
     },
     async user() {
@@ -64,12 +81,23 @@ export function makeCloud(client) {
       fail(error);
       return data;
     },
-    /* crea (senza cloudId) o aggiorna il progetto; ritorna { id, share_token, updated_at } */
-    async save(project) {
+    /*
+     * Crea (senza cloudId) o aggiorna il progetto; ritorna { id, share_token, updated_at }.
+     * L'aggiornamento vale solo se sul cloud c'è ancora la versione che questo browser ha salvato per ultima (cloudSaved):
+     * altrimenti CloudConflict, e `force` sovrascrive comunque.
+     */
+    async save(project, { force = false } = {}) {
       const row = { name: project.name || 'Senza nome', data: sharePayload(project) };
-      const q = project.cloudId ? t('projects').update(row).eq('id', project.cloudId) : t('projects').insert(row);
-      const { data, error } = await q.select('id, share_token, updated_at').single();
+      if (!project.cloudId) {
+        const { data, error } = await t('projects').insert(row).select('id, share_token, updated_at').single();
+        fail(error);
+        return data;
+      }
+      let q = t('projects').update(row).eq('id', project.cloudId);
+      if (!force && project.cloudSaved) q = q.eq('updated_at', project.cloudSaved);
+      const { data, error } = await q.select('id, share_token, updated_at').maybeSingle();
       fail(error);
+      if (!data) throw new CloudConflict();
       return data;
     },
     async open(id) {

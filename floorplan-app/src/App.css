@@ -818,3 +818,5 @@
 .pf-cloud-list li { display: flex; align-items: center; gap: 8px; }
 .pf-cloud-list li > span { flex: 1; min-width: 0; display: grid; }
 .pf-cloud-list em { font-style: normal; color: var(--pf-muted, #6b7280); font-size: 0.75rem; }
+.pf-cloud-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--pf-muted, #6b7280); }
+.pf-cloud-status.is-error, .pf-cloud-status.is-conflict { color: #b45309; }
