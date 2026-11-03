@@ -19,7 +19,7 @@ import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
 import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setOpeningType, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
-import { itemProblems, resizeItem, rotateItem, snapItem } from './lib/furnitureEdit';
+import { itemProblems, resizeItem, rotateItem, rotateItemBy, setItemRot, snapItem } from './lib/furnitureEdit';
 import { mezzAxis, mezzLimits, mezzRatio, resizeMezz } from './lib/mezz';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
@@ -1017,6 +1017,7 @@ export default function App() {
         moveFurniture(selectedItem, it.x + arrows[e.key][0], it.y + arrows[e.key][1]);
       } else if (e.key === 'r' || e.key === 'R') rotateFurniture(selectedItem);
       else if (e.key === 'f' || e.key === 'F') flipFurniture(selectedItem);
+      else if (['[', ']', 'q', 'Q', 'e', 'E'].includes(e.key)) editFurniture((list) => list.map((f, i) => (i === selectedItem ? rotateItemBy(f, ['[', 'q', 'Q'].includes(e.key) ? -15 : 15) : f)));
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         removeFurniture(selectedItem);
@@ -2170,7 +2171,7 @@ export default function App() {
                     selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
                     onSelectStair: setSelectedStair, onApply: applyPlanEdit, onMoveWall: moveWall, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
                   } : null} codes={schedule?.codes[floor.id]}
-                  onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture}
+                  onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture} onItemRotate={(i, deg) => editFurniture((list) => list.map((f, k) => (k === i ? setItemRot(f, deg) : f)))}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
                   onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
                   onDeviceDrag={setDevicePreview} coverage={coverage} coverageHighlight={coverHighlight}
@@ -2241,6 +2242,7 @@ export default function App() {
               {selectedItem != null && (
                 <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
                   onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onRotation={(deg) => editFurniture((list) => list.map((f, i) => (i === selectedItem ? setItemRot(f, deg) : f)))}
                   onSize={(dim, lock) => editFurniture((list) => list.map((f, i) => (i === selectedItem ? resizeItem(plan, f, dim, lock) : f)))}
                   onColor={(c) => editFurniture((list) => list.map((f, i) => {
                     if (i !== selectedItem) return f;

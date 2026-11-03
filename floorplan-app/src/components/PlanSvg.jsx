@@ -48,7 +48,7 @@ function Oriented({ item, scale, children }) {
   const cx = item.x * scale + sw / 2;
   const cy = item.y * scale + sh / 2;
   return (
-    <g transform={`translate(${cx},${cy}) rotate(${ROT_BY_FACING[facing] ?? 0})${item.flip ? ' scale(-1,1)' : ''} translate(${-cw / 2},${-ch / 2})`}>
+    <g transform={`translate(${cx},${cy}) rotate(${(ROT_BY_FACING[facing] ?? 0) + (item.rot || 0)})${item.flip ? ' scale(-1,1)' : ''} translate(${-cw / 2},${-ch / 2})`}>
       {children(cw, ch)}
     </g>
   );
@@ -1215,7 +1215,7 @@ export default function PlanSvg({
   plan: planProp, layers, hoverId = null, selectedId = null, onHover, onSelect,
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', palette = null, devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
-  editable = false, selectedItem = null, onItemSelect, onItemMove, codes = null,
+  editable = false, selectedItem = null, onItemSelect, onItemMove, onItemRotate, codes = null,
   selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
   coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0, bare = false,
   wallEdit = null, level = 'all', onMezzResize = null,
@@ -1236,7 +1236,12 @@ export default function PlanSvg({
     const p = pt.matrixTransform(g.getScreenCTM().inverse());
     return { x: p.x / plan.scale, y: p.y / plan.scale };
   };
-  const placed = (it, i) => (drag?.index === i ? { ...it, x: drag.x, y: drag.y } : it);
+  const [rotDrag, setRotDrag] = useState(null);   // { index, rot }: rotazione libera in corso con la maniglia
+  const placed = (it, i) => {
+    let r = drag?.index === i ? { ...it, x: drag.x, y: drag.y } : it;
+    if (rotDrag?.index === i) r = { ...r, rot: rotDrag.rot };
+    return r;
+  };
   const theme = themeWithPalette(THEMES[style] || THEMES.modern, palette);
   const s = plan.scale;
   const W = plan.svgWidth;
@@ -1567,8 +1572,11 @@ export default function PlanSvg({
           if (plan.mezzanine && ((level === 'below' && it.elev) || (level === 'above' && !it.elev))) return null;
           const sel = i === selectedItem;
           const bad = sel && itemProblems(plan, i, it).length > 0;
+          const cxp = (it.x + it.w / 2) * s;
+          const cyp = (it.y + it.h / 2) * s;
           return (
-            <rect key={`ih-${i}`} x={it.x * s} y={it.y * s} width={it.w * s} height={it.h * s} rx={2}
+            <g key={`ih-${i}`} transform={it.rot ? `rotate(${it.rot} ${cxp} ${cyp})` : undefined}>
+            <rect x={it.x * s} y={it.y * s} width={it.w * s} height={it.h * s} rx={2}
               fill="transparent" stroke={sel ? (bad ? '#d92d20' : '#58760a') : 'none'} strokeWidth="1.6"
               strokeDasharray={sel ? '4 3' : undefined} style={{ cursor: drag?.index === i ? 'grabbing' : 'grab' }}
               onPointerDown={(e) => {
@@ -1588,6 +1596,31 @@ export default function PlanSvg({
                 setDrag(null);
               }}
               onClick={(e) => e.stopPropagation()} />
+            {sel && onItemRotate && (
+              /* maniglia di rotazione: si tira attorno al centro (passi di 15°, con Maiusc a 1°) */
+              <g style={{ cursor: rotDrag ? 'grabbing' : 'grab', touchAction: 'none' }}>
+                <line x1={cxp} y1={it.y * s} x2={cxp} y2={it.y * s - 12} stroke="#58760a" strokeWidth="1.2" pointerEvents="none" />
+                <circle cx={cxp} cy={it.y * s - 17} r="7" fill="#fff" stroke="#58760a" strokeWidth="1.6" />
+                <circle cx={cxp} cy={it.y * s - 17} r="14" fill="transparent"
+                  onPointerDown={(e) => { e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); setRotDrag({ index: i, rot: raw.rot || 0 }); }}
+                  onPointerMove={(e) => {
+                    if (rotDrag?.index !== i) return;
+                    const m = toMeters(e);
+                    const cm = { x: raw.x + raw.w / 2, y: raw.y + raw.h / 2 };
+                    let deg = (Math.atan2(m.x - cm.x, -(m.y - cm.y)) * 180) / Math.PI;
+                    deg = e.shiftKey ? Math.round(deg) : Math.round(deg / 15) * 15;
+                    setRotDrag({ index: i, rot: ((deg % 360) + 360) % 360 });
+                  }}
+                  onPointerUp={() => {
+                    if (rotDrag?.index === i) onItemRotate(i, rotDrag.rot);
+                    setRotDrag(null);
+                  }}
+                  onPointerCancel={() => setRotDrag(null)}
+                  onClick={(e) => e.stopPropagation()} />
+                <title>Ruota: trascina (15° alla volta, Maiusc per i gradi singoli)</title>
+              </g>
+            )}
+            </g>
           );
         })}
 

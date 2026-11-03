@@ -632,6 +632,21 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       box(it.x, it.y, it.w, it.h, lift, h, material);
     }
     raise(it, from);
+    // rotazione libera: i volumi di questo arredo girano attorno al suo centro (i modelli veri hanno già la loro rotazione)
+    if (it.rot && root.children.length > from) {
+      const pivot = new THREE.Group();
+      const cx = it.x + it.w / 2;
+      const cz = it.y + it.h / 2;
+      pivot.position.set(cx, 0, cz);
+      pivot.rotation.y = -(((it.rot % 360) * Math.PI) / 180);
+      for (const child of root.children.splice(from)) {
+        child.parent = null;
+        child.position.x -= cx;
+        child.position.z -= cz;
+        pivot.add(child);
+      }
+      root.add(pivot);
+    }
   }
   curTag = null;
   // layer di ogni volume (per il DXF 3D): muri, vetri, pavimenti, il resto sono arredi

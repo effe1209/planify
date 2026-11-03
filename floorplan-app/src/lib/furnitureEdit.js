@@ -27,6 +27,29 @@ function innerBox(plan, r) {
   };
 }
 
+/*
+ * Rotazione libera: `rot` in gradi (senso orario visto dall'alto) sopra il verso (`facing`), attorno al centro dell'arredo.
+ * Per collisioni, aggancio e limiti del locale conta l'ingombro del rettangolo ruotato (il più piccolo rettangolo dritto che lo contiene).
+ */
+export const normAngle = (deg) => ((Math.round(deg * 10) / 10 % 360) + 360) % 360;
+export function itemBox(it) {
+  if (!it.rot) return { x: it.x, y: it.y, w: it.w, h: it.h };
+  const a = (it.rot * Math.PI) / 180;
+  const c = Math.abs(Math.cos(a));
+  const s = Math.abs(Math.sin(a));
+  const w = it.w * c + it.h * s;
+  const h = it.w * s + it.h * c;
+  return { x: it.x + it.w / 2 - w / 2, y: it.y + it.h / 2 - h / 2, w, h };
+}
+/* Arredo con la rotazione libera impostata (0 = nessuna: il campo sparisce). */
+export function setItemRot(it, deg) {
+  const r = normAngle(deg);
+  const next = { ...it, rot: r };
+  if (!r) delete next.rot;
+  return next;
+}
+export const rotateItemBy = (it, delta) => setItemRot(it, (it.rot || 0) + delta);
+
 /* Posizione agganciata per un arredo spostato in (x, y): griglia di 5 cm e muri vicini. */
 /* Il soppalco: l'arredo in quota si aggancia ai suoi bordi (muri sui lati chiusi) e resta del locale sotto cui è nato. */
 function mezzBox(plan) {
@@ -43,23 +66,27 @@ function mezzBox(plan) {
 export function snapItem(plan, item, x, y) {
   let nx = round(x);
   let ny = round(y);
+  // l'ingombro (ruotato) si appoggia ai muri: dx, dy = scarto del suo bordo sinistro/alto rispetto al rettangolo dell'arredo
+  const bb = itemBox(item);
+  const dx = bb.x - item.x;
+  const dy = bb.y - item.y;
   if (item.elev && plan.mezzanine) {
     const b = mezzBox(plan);
-    nx = Math.max(b.x0, Math.min(b.x1 - item.w, nx));
-    ny = Math.max(b.y0, Math.min(b.y1 - item.h, ny));
-    if (Math.abs(nx - b.x0) < WALL_SNAP) nx = b.x0;
-    else if (Math.abs(nx + item.w - b.x1) < WALL_SNAP) nx = b.x1 - item.w;
-    if (Math.abs(ny - b.y0) < WALL_SNAP) ny = b.y0;
-    else if (Math.abs(ny + item.h - b.y1) < WALL_SNAP) ny = b.y1 - item.h;
+    nx = Math.max(b.x0 - dx, Math.min(b.x1 - bb.w - dx, nx));
+    ny = Math.max(b.y0 - dy, Math.min(b.y1 - bb.h - dy, ny));
+    if (Math.abs(nx + dx - b.x0) < WALL_SNAP) nx = b.x0 - dx;
+    else if (Math.abs(nx + dx + bb.w - b.x1) < WALL_SNAP) nx = b.x1 - bb.w - dx;
+    if (Math.abs(ny + dy - b.y0) < WALL_SNAP) ny = b.y0 - dy;
+    else if (Math.abs(ny + dy + bb.h - b.y1) < WALL_SNAP) ny = b.y1 - bb.h - dy;
     return { x: +nx.toFixed(3), y: +ny.toFixed(3), room: item.room };
   }
   const room = roomAtPoint(plan, nx + item.w / 2, ny + item.h / 2);
   if (room && room.kind !== 'garden') {
     const b = innerBox(plan, room);
-    if (Math.abs(nx - b.x0) < WALL_SNAP) nx = b.x0;
-    else if (Math.abs(nx + item.w - b.x1) < WALL_SNAP) nx = b.x1 - item.w;
-    if (Math.abs(ny - b.y0) < WALL_SNAP) ny = b.y0;
-    else if (Math.abs(ny + item.h - b.y1) < WALL_SNAP) ny = b.y1 - item.h;
+    if (Math.abs(nx + dx - b.x0) < WALL_SNAP) nx = b.x0 - dx;
+    else if (Math.abs(nx + dx + bb.w - b.x1) < WALL_SNAP) nx = b.x1 - bb.w - dx;
+    if (Math.abs(ny + dy - b.y0) < WALL_SNAP) ny = b.y0 - dy;
+    else if (Math.abs(ny + dy + bb.h - b.y1) < WALL_SNAP) ny = b.y1 - bb.h - dy;
   }
   return { x: +nx.toFixed(3), y: +ny.toFixed(3), room: room?.id ?? item.room };
 }
@@ -104,12 +131,16 @@ export function rotateItem(item) {
     facing: NEXT[item.facing || 'S'] || 'S' };
 }
 
-const overlap = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.02
-  && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0.02;
+const overlap = (a0, b0) => {
+  const a = itemBox(a0);
+  const b = itemBox(b0);
+  return Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.02 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0.02;
+};
 
 /* Cosa non va nella posizione dell'arredo `index` (eventualmente spostato in `it`): elenco di frasi. */
-export function itemProblems(plan, index, it = plan.furniture[index]) {
-  if (!it || GROUND.has(it.type)) return [];
+export function itemProblems(plan, index, it0 = plan.furniture[index]) {
+  if (!it0 || GROUND.has(it0.type)) return [];
+  const it = { ...it0, ...itemBox(it0), rot: 0 };   // x, y, w, h = ingombro (già ruotato); `overlap` ricalcola quello degli altri
   const out = [];
   if (it.elev && plan.mezzanine) {
     const b = mezzBox(plan);

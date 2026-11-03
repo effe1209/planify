@@ -1133,6 +1133,6 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       return null;
   }
   g.position.set(it.x + it.w / 2, 0, it.y + it.h / 2);
-  g.rotation.y = YAW[it.facing || 'S'];
+  g.rotation.y = YAW[it.facing || 'S'] - (((it.rot || 0) % 360) * Math.PI) / 180;   // rotazione libera (gradi, in senso orario visto dall'alto) sopra il verso
   return g;
 }

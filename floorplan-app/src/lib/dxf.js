@@ -272,7 +272,13 @@ export function buildDxf(plan, { devices = [], codes = {}, coverage = null, view
 
   // arredi con nome e altezza (contano per le ombre dei rilevatori)
   for (const f of plan.furniture) {
-    d.rect('ARREDI', f.x, f.y, f.w, f.h);
+    if (f.rot) {
+      const a = ((f.rot % 360) * Math.PI) / 180;
+      const cx = f.x + f.w / 2;
+      const cy = f.y + f.h / 2;
+      d.poly('ARREDI', [[-f.w / 2, -f.h / 2], [f.w / 2, -f.h / 2], [f.w / 2, f.h / 2], [-f.w / 2, f.h / 2]]
+        .map(([x, y]) => [cx + x * Math.cos(a) - y * Math.sin(a), cy + x * Math.sin(a) + y * Math.cos(a)]));
+    } else d.rect('ARREDI', f.x, f.y, f.w, f.h);
     if (Math.min(f.w, f.h) < 0.35) continue;
     const [z0, z1] = f.z || furnitureZ(f.type);
     const h = Math.min(0.12, Math.min(f.w, f.h) / 4);

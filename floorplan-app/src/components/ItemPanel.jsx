@@ -12,7 +12,7 @@ import { fmtM } from '../lib/utils';
  */
 const SWATCHES = ['#f1ead9', '#d9c7a1', '#7d8050', '#8fa3a8', '#c58b6d', '#4b4f56', '#9a6b4a', '#ffffff'];
 
-export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onHeight, onSize, onColor, onClose }) {
+export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onHeight, onSize, onColor, onRotation, onClose }) {
   const [lock, setLock] = useState(true);
   const it = plan.furniture[index];
   if (!it) return null;
@@ -44,6 +44,18 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
             title={lock ? 'Proporzioni bloccate' : 'Proporzioni libere'}>
             {lock ? <Link2 size={13} /> : <Unlink2 size={13} />}
           </button>
+        </div>
+      )}
+      {onRotation && (
+        <div className="pf-row2">
+          <label className="pf-field-sm">
+            <span>Rotazione (°)</span>
+            <input className="pf-input-sm" type="number" min="0" max="359" step="1" value={Math.round(it.rot || 0)} aria-label="Rotazione in gradi"
+              onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) onRotation(v); }} />
+          </label>
+          <button type="button" className="pf-mini" onClick={() => onRotation((it.rot || 0) - 15)} title="Ruota di 15° in senso antiorario (Q)" aria-label="Ruota di 15 gradi a sinistra">−15°</button>
+          <button type="button" className="pf-mini" onClick={() => onRotation((it.rot || 0) + 15)} title="Ruota di 15° in senso orario (E)" aria-label="Ruota di 15 gradi a destra">+15°</button>
+          {it.rot ? <button type="button" className="pf-mini" onClick={() => onRotation(0)} title="Torna dritto"><RotateCcw size={13} /> 0°</button> : null}
         </div>
       )}
       {onColor && (
@@ -92,7 +104,7 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
         <button type="button" className="pf-mini" onClick={onFlip} title="Specchia (F)"><FlipHorizontal2 size={13} /> Specchia</button>
         <button type="button" className="pf-mini is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={13} /> Elimina</button>
       </div>
-      <p className="pf-hint">Trascina per spostare (aggancio a 5 cm e ai muri) · frecce 5 cm, Maiusc+frecce 25 cm · R ruota · ⌘Z annulla</p>
+      <p className="pf-hint">Trascina per spostare (aggancio a 5 cm e ai muri) · frecce 5 cm, Maiusc+frecce 25 cm · R ruota di 90° · Q/E di 15° · maniglia in pianta per l'angolo libero · ⌘Z annulla</p>
     </section>
   );
 }
