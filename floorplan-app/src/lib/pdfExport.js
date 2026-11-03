@@ -22,7 +22,7 @@ import { scheduleFor } from './schedule';
 import { houseFor, levelLabel } from './project';
 import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
-import { A4, CARTOUCHE_H, LEGEND_W, drawingArea, fitScale, roomLegend } from './techSheet';
+import { A4, CARTOUCHE_H, LEGEND_W, SHEET_SCALES, drawingArea, fitScale, roomLegend, sheetFormat } from './techSheet';
 import { getBranding } from './branding';
 import { fmt, fmtM } from './utils';
 
@@ -464,17 +464,21 @@ async function loadLogo(src) {
  */
 async function technicalPage(doc, floor, codes, extra, ctx) {
   const { project, branding, logo, schedule, sheet, sheets } = ctx;
+  const F = ctx.format || A4;                       // formato del foglio (di serie A4)
+  const wanted = ctx.scale && ctx.scale !== 'auto' ? Number(ctx.scale) : null;   // scala chiesta (1:N), altrimenti la migliore che entra
   const plan = floor.plan;
-  const area = drawingArea();
-  doc.setDrawColor(INK).setLineWidth(0.5).rect(A4.margin, A4.margin, A4.w - 2 * A4.margin, A4.h - 2 * A4.margin);
+  const area = drawingArea(F);
+  doc.setDrawColor(INK).setLineWidth(0.5).rect(F.margin, F.margin, F.w - 2 * F.margin, F.h - 2 * F.margin);
   const img = await floorImage(floor, [], { ...extra, codes, bare: true, layers: { ...LAYERS, technical: true, alarm: false } }, 4);
-  const fit = fitScale(img.w, img.h, plan.scale, area);
+  const fit = ctx.format
+    ? fitScale(img.w, img.h, plan.scale, area, wanted ? [wanted, ...SHEET_SCALES.filter((n) => n > wanted)] : SHEET_SCALES.slice(1))
+    : fitScale(img.w, img.h, plan.scale, area);
   doc.addImage(img.data, 'PNG', area.x + (area.w - fit.w) / 2, area.y + (area.h - fit.h) / 2, fit.w, fit.h, undefined, 'FAST');
 
   // colonna di destra
-  const x0 = A4.w - A4.margin - LEGEND_W;
-  const x1 = A4.w - A4.margin;
-  doc.setDrawColor(INK).setLineWidth(0.3).line(x0, A4.margin, x0, A4.h - A4.margin);
+  const x0 = F.w - F.margin - LEGEND_W;
+  const x1 = F.w - F.margin;
+  doc.setDrawColor(INK).setLineWidth(0.3).line(x0, F.margin, x0, F.h - F.margin);
   const cx = x0 + 11;
   const north = ((extra.north ?? 0) * Math.PI) / 180;
   doc.setDrawColor(INK).setLineWidth(0.3).circle(cx, 25, 6.5);
@@ -482,14 +486,15 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   doc.setFillColor(INK).triangle(tip[0], tip[1], cx - Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 - Math.sin(north) * 2 + Math.cos(north) * 3.5,
     cx + Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + Math.sin(north) * 2 + Math.cos(north) * 3.5, 'F');
   doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text('N', cx, 14.8, { align: 'center' });
-  // scala grafica: 0-1-2-5 m alla scala di stampa
+  // scala grafica alla scala di stampa: 0-1-2-5 m, o più corta se la colonna non basta (1:50 e 1:20)
   const mm = 1000 / fit.n;
   const bx = x0 + 17;
+  const marks = 5 * mm <= LEGEND_W - 22 ? [0, 1, 2, 5] : 2 * mm <= LEGEND_W - 22 ? [0, 1, 2] : [0, 0.5, 1];
   doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(INK);
-  [[0, 1], [1, 2], [2, 5]].forEach(([m0, m1], i) => {
-    doc.setFillColor(i % 2 ? '#ffffff' : INK).setDrawColor(INK).setLineWidth(0.2).rect(bx + m0 * mm, 22, (m1 - m0) * mm, 2, 'FD');
+  marks.slice(1).forEach((m1, i) => {
+    doc.setFillColor(i % 2 ? '#ffffff' : INK).setDrawColor(INK).setLineWidth(0.2).rect(bx + marks[i] * mm, 22, (m1 - marks[i]) * mm, 2, 'FD');
   });
-  [0, 1, 2, 5].forEach((m) => doc.text(m === 5 ? '5 m' : String(m), bx + m * mm, 28, { align: 'center' }));
+  marks.forEach((m) => doc.text(m === marks[marks.length - 1] ? `${String(m).replace('.', ',')} m` : String(m).replace('.', ','), bx + m * mm, 28, { align: 'center' }));
   doc.setFontSize(7).setTextColor(MUTED).text(safe(`Scala 1:${fit.n}${fit.fits ? '' : ' (non unificata)'}`), bx, 16);
 
   // legenda locali
@@ -498,7 +503,7 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('LOCALI', x0 + 4, y);
   doc.setDrawColor(INK).setLineWidth(0.2).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
   y += 6;
-  const limit = A4.h - A4.margin - CARTOUCHE_H - 40;
+  const limit = F.h - F.margin - CARTOUCHE_H - 40;
   doc.setFont('helvetica', 'normal').setFontSize(7.5);
   for (const r of rooms) {
     if (y > limit) { doc.setTextColor(MUTED).text('...', x0 + 4, y); y += 4; break; }
@@ -528,7 +533,7 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   }
 
   // cartiglio
-  const cy = A4.h - A4.margin - CARTOUCHE_H;
+  const cy = F.h - F.margin - CARTOUCHE_H;
   doc.setDrawColor(INK).setLineWidth(0.5).line(x0, cy, x1, cy);
   doc.setLineWidth(0.2);
   if (logo) {
@@ -548,14 +553,14 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   field('PROGETTISTA', branding.designer, cy + 36);
   field('N. PRATICA', branding.ref, cy + 41);
   doc.line(x0, cy + 43.5, x1, cy + 43.5);
-  doc.line(x0 + 25, cy + 43.5, x0 + 25, A4.h - A4.margin);
-  doc.line(x0 + 50, cy + 43.5, x0 + 50, A4.h - A4.margin);
+  doc.line(x0 + 25, cy + 43.5, x0 + 25, F.h - F.margin);
+  doc.line(x0 + 50, cy + 43.5, x0 + 50, F.h - F.margin);
   const cell = (label, value, xx) => {
     doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(MUTED).text(label, xx + 2, cy + 46.5);
     doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text(value, xx + 2, cy + 50.5);
   };
   cell('SCALA', `1:${fit.n}`, x0);
-  cell('FORMATO', 'A4', x0 + 25);
+  cell('FORMATO', F.id, x0 + 25);
   cell('TAV.', `${sheet} / ${sheets}`, x0 + 50);
 }
 
@@ -592,6 +597,30 @@ function estimatePage(doc, data) {
   doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(MUTED);
   doc.text(doc.splitTextToSize(safe('Prezzi medi indicativi (fornitura e posa, IVA esclusa) che variano per zona, finiture e impresa. '
     + 'Esclusi arredi, progettazione, pratiche edilizie e oneri. Ordine di grandezza, non offerta.'), doc.internal.pageSize.getWidth() - 2 * M), M, y);
+}
+
+/*
+ * «Tavole in scala»: solo le tavole tecniche (pianta quotata, legenda, serramenti, cartiglio), una per piano, nel formato
+ * scelto (A4, A3, A2, A1) e a una scala vera (1:20, 1:50, 1:100, 1:200, 1:500 o la migliore che entra).
+ */
+export async function exportSheetsPdf(project, { format = 'A3', scale = 'auto' } = {}) {
+  const F = sheetFormat(format);
+  const doc = new jsPDF({ unit: 'mm', format: [F.w, F.h], orientation: 'landscape', compress: true });
+  doc.setProperties({ title: safe(`${project.name || 'Progetto Planify'} - tavole ${F.id}`), creator: 'Planify' });
+  const { byFloor } = projectStairs(project);
+  const house = houseFor(project);
+  const schedule = scheduleFor(project);
+  const branding = getBranding(project);
+  const logo = await loadLogo(branding.logo);
+  const floors = project.floors.filter((x) => x.plan && schedule.codes[x.id] && x.plan.rooms.some((r) => r.kind !== 'garden'));
+  let n = 0;
+  for (const f of floors) {
+    if (n) doc.addPage([F.w, F.h], 'landscape');
+    await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++n, sheets: floors.length, format: F, scale });
+  }
+  if (!n) throw new Error('Nessuna pianta da mettere in tavola.');
+  const name = (project.name || 'progetto-planify').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  doc.save(`${name || 'progetto-planify'}-tavole-${F.id.toLowerCase()}.pdf`);
 }
 
 export async function exportProjectPdf(project) {
