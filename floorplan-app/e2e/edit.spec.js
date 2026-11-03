@@ -255,7 +255,7 @@ test('gli strumenti di modifica stanno in cima, piccoli e senza sovrapporsi', as
   await page.locator('.pf-editbtn').click();
   const bar = await page.locator('.pf-editbar').boundingBox();
   const buttons = await page.locator('.pf-segtools button').all();
-  expect(buttons.length).toBe(3);
+  expect(buttons.length).toBe(4);   // porta, finestra, vetrata, muro
   const boxes = [];
   for (const b of buttons) boxes.push(await b.boundingBox());
   for (const b of boxes) {
