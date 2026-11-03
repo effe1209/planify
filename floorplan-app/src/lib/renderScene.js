@@ -38,6 +38,7 @@ export function refineMaterials(THREE, model, maxAniso = 8) {
   const seen = new Set();
   model.traverse((o) => {
     if (!o.isMesh) return;
+    if (o.userData.customModel) return;  // rispetta materiali, roughness e texture del GLB creato in Blender
     const mats = [].concat(o.material);
     const glass = o.userData.layer === 'VETRI' || mats.some((m) => m.userData?.cat === 'VETRO');
     if (glass) o.castShadow = false;   // il sole passa dalle finestre
@@ -66,11 +67,13 @@ const overlayFloors = (project) => project.floors
  * { scene, model, bounds: { bb, center, size }, lamps: [{ x, y, z }], sun, built }
  *   opts: renderer (per l'ambiente), view (la vista: la «pianta 3D dall'alto» toglie il tetto), time, background, roof (false per toglierlo)
  */
-export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false, windows = false, ground = 'horizon' } = {}) {
+export async function buildRenderScene(THREE, project, { renderer = null, RoomEnvironment = null, hdri = null, view = null, time = 'afternoon', background = 'white', roof = true, lowWalls = false, windows = false, ground = 'horizon' } = {}) {
   const t = timeById(time);
   const scene = new THREE.Scene();
   const model = buildHouse(THREE, project, (f) => themeFor(project, f), { lowWalls, ceiling: true });
   if (!model.children.length) return null;
+  const { hydrateCustomModels } = await import('./customModels');
+  await hydrateCustomModels(THREE, model);
   // il tetto lo decide chi chiama (il pannello Render lo accende da solo nelle viste da fuori e lo spegne nella pianta dall'alto)
   const withRoof = roof !== false;
   const top = withRoof ? roofFloor(project) : null;

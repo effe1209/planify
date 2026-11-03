@@ -312,7 +312,7 @@ export async function blenderPackage(project, { time = 'afternoon', name = proje
   const THREE = await import('three');
   const { sceneToGlb } = await import('./glb');
   const { buildRenderScene } = await import('./renderScene');
-  const built = buildRenderScene(THREE, project, { time, background: 'white', roof: true, ground });
+  const built = await buildRenderScene(THREE, project, { time, background: 'white', roof: true, ground });
   if (!built) throw new Error('niente da esportare');
   try { const { upgradeMaterials } = await import('./pbr'); await upgradeMaterials(THREE, built.model, { aniso: 8 }); } catch { /* restano le texture disegnate */ }
   const { scene, bounds } = built;

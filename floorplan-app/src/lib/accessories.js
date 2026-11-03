@@ -19,9 +19,23 @@ const rotate = (x, y, deg) => {
   return { x: x * Math.cos(a) - y * Math.sin(a), y: x * Math.sin(a) + y * Math.cos(a) };
 };
 const center = (it) => ({ x: it.x + it.w / 2, y: it.y + it.h / 2 });
-const supportSurface = (it) => it.type === 'wall_shelf' ? (it.mountHeight ?? 1.58) : (it.z?.[1] ?? furnitureZ(it.type)[1]);
+const supportSurface = (it) => it.type === 'wall_shelf' ? (it.mountHeight ?? 1.58) + 0.055 : (it.z?.[1] ?? furnitureZ(it.type)[1]);
 const worldSizeFor = (parent, w, h) => parent.facing === 'E' || parent.facing === 'W' ? { w: h, h: w } : { w, h };
 const localSizeFor = (item) => worldSizeFor(item, item.w, item.h);
+const seatSurface = (type) => ({ bed: 0.52, sofa: 0.44, sofa_corner: 0.44, sofa_round: 0.44, sofa_curved: 0.44, armchair: 0.44, armchair_rattan: 0.52 }[type] || 0.44);
+
+function roomInside(plan, room) {
+  if (room.poly) return { x0: room.x, y0: room.y, x1: room.x + room.w, y1: room.y + room.h };
+  const t = (plan.wallThickness || 0) / (plan.scale || 1);
+  const { width = Infinity, length = Infinity } = plan.dimensions || {};
+  const edge = (v, max) => v < 1e-3 || Math.abs(v - max) < 1e-3;
+  return {
+    x0: room.x + (edge(room.x, width) ? t : t / 2),
+    y0: room.y + (edge(room.y, length) ? t : t / 2),
+    x1: room.x + room.w - (edge(room.x + room.w, width) ? t : t / 2),
+    y1: room.y + room.h - (edge(room.y + room.h, length) ? t : t / 2),
+  };
+}
 
 function makeAttached(parent, type, key, localX, localY, w, h, mountHeight, color) {
   const offset = rotate(localX, localY, rotationOf(parent));
@@ -53,19 +67,19 @@ function decorationsFor(item, rngSeed) {
       const palette = ['#c6b79e', '#83917e', '#b78f7a', '#737f91'];
       for (let i = 0; i < count; i++) {
         const x = count === 1 ? 0 : (i ? 1 : -1) * item.w * 0.22;
-        out.push(makeAttached(item, 'pillow', `pillow-${i}`, x, -item.h * 0.31, pw, 0.36, 0.52, palette[(parseInt(hash(`${rngSeed}:p${i}`), 36) || 0) % palette.length]));
+      out.push(makeAttached(item, 'pillow', `pillow-${i}`, x, -item.h * 0.31, pw, 0.36, seatSurface(item.type), palette[(parseInt(hash(`${rngSeed}:p${i}`), 36) || 0) % palette.length]));
       }
-      out.push(makeAttached(item, 'throw', 'throw', 0, item.h * 0.25, Math.min(0.68, item.w * 0.55), Math.min(0.88, item.h * 0.36), 0.48, '#8b8962'));
+      out.push(makeAttached(item, 'throw', 'throw', 0, item.h * 0.25, Math.min(0.68, item.w * 0.55), Math.min(0.88, item.h * 0.36), seatSurface(item.type) - 0.04, '#8b8962'));
     } else {
       const count = item.type === 'armchair' || item.type === 'armchair_rattan' ? 1 : 2;
       const palette = ['#9b806c', '#8b9278', '#526479', '#c2a981'];
       for (let i = 0; i < count; i++) {
         const x = count === 1 ? 0 : (i ? 1 : -1) * item.w * 0.24;
-        out.push(makeAttached(item, 'pillow', `pillow-${i}`, x, -item.h * 0.22, Math.min(0.42, item.w * 0.48), Math.min(0.38, item.h * 0.48), 0.66,
+        out.push(makeAttached(item, 'pillow', `pillow-${i}`, x, -item.h * 0.22, Math.min(0.42, item.w * 0.48), Math.min(0.38, item.h * 0.48), seatSurface(item.type),
           palette[(parseInt(hash(`${rngSeed}:s${i}`), 36) || 0) % palette.length]));
       }
       if ((parseInt(hash(`${rngSeed}:throw`), 36) || 0) % 3 === 0 && item.w > 1.4) {
-        out.push(makeAttached(item, 'throw', 'throw', item.w * 0.28, item.h * 0.08, 0.48, Math.min(0.6, item.h * 0.55), 0.62, '#a58870'));
+        out.push(makeAttached(item, 'throw', 'throw', item.w * 0.28, item.h * 0.08, 0.48, Math.min(0.6, item.h * 0.55), seatSurface(item.type), '#a58870'));
       }
     }
   }
@@ -97,11 +111,13 @@ function decorationsFor(item, rngSeed) {
 function shelfForRoom(plan, room) {
   const length = 0.72;
   const depth = 0.18;
+  const b = roomInside(plan, room);
+  const gap = 0.005;
   const candidates = [
-    { side: 'N', x: room.x + (room.w - length) / 2, y: room.y + 0.03, w: length, h: depth, facing: 'S', vertical: false },
-    { side: 'S', x: room.x + (room.w - length) / 2, y: room.y + room.h - depth - 0.03, w: length, h: depth, facing: 'N', vertical: false },
-    { side: 'W', x: room.x + 0.03, y: room.y + (room.h - length) / 2, w: depth, h: length, facing: 'E', vertical: true },
-    { side: 'E', x: room.x + room.w - depth - 0.03, y: room.y + (room.h - length) / 2, w: depth, h: length, facing: 'W', vertical: true },
+    { side: 'N', x: room.x + (room.w - length) / 2, y: b.y0 + gap, w: length, h: depth, facing: 'S', vertical: false },
+    { side: 'S', x: room.x + (room.w - length) / 2, y: b.y1 - depth - gap, w: length, h: depth, facing: 'N', vertical: false },
+    { side: 'W', x: b.x0 + gap, y: room.y + (room.h - length) / 2, w: depth, h: length, facing: 'E', vertical: true },
+    { side: 'E', x: b.x1 - depth - gap, y: room.y + (room.h - length) / 2, w: depth, h: length, facing: 'W', vertical: true },
   ];
   const openings = [...(plan.doors || []), ...(plan.windows || [])];
   const clear = (c) => openings.every((o) => {
@@ -130,16 +146,18 @@ export function snapWallMountedItem(plan, item, x, y) {
   const room = plan.rooms?.find((r) => r.id === item.room) || plan.rooms?.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
   if (!room || room.poly) return { ...item, x: +x.toFixed(3), y: +y.toFixed(3), wallMounted: true };
   const margin = 0.03;
+  const gap = 0.005;
   const canonical = item.mountSize || { w: item.w, h: item.h };
+  const b = roomInside(plan, room);
   const candidate = (side, facing, vertical) => {
     const w = vertical ? canonical.h : canonical.w;
     const h = vertical ? canonical.w : canonical.h;
-    const minX = room.x + margin;
-    const maxX = Math.max(minX, room.x + room.w - w - margin);
-    const minY = room.y + margin;
-    const maxY = Math.max(minY, room.y + room.h - h - margin);
-    const xx = side === 'W' ? minX : side === 'E' ? maxX : Math.max(minX, Math.min(maxX, x));
-    const yy = side === 'N' ? minY : side === 'S' ? maxY : Math.max(minY, Math.min(maxY, y));
+    const minX = b.x0 + margin;
+    const maxX = Math.max(minX, b.x1 - w - margin);
+    const minY = b.y0 + margin;
+    const maxY = Math.max(minY, b.y1 - h - margin);
+    const xx = side === 'W' ? b.x0 + gap : side === 'E' ? b.x1 - w - gap : Math.max(minX, Math.min(maxX, x));
+    const yy = side === 'N' ? b.y0 + gap : side === 'S' ? b.y1 - h - gap : Math.max(minY, Math.min(maxY, y));
     return { side, x: xx, y: yy, w, h, facing };
   };
   const candidates = [
@@ -153,11 +171,13 @@ export function snapWallMountedItem(plan, item, x, y) {
 function addShelfDetails(plan, shelf, list) {
   const before = list.length;
   const attached = list.filter((it) => it.supportId === shelf.id);
+  const length = shelf.mountSize?.w ?? (shelf.facing === 'E' || shelf.facing === 'W' ? shelf.h : shelf.w);
+  const depth = shelf.mountSize?.h ?? (shelf.facing === 'E' || shelf.facing === 'W' ? shelf.w : shelf.h);
   if (!attached.some((it) => it.type === 'book_stack')) {
-    list.push(makeAttached(shelf, 'book_stack', 'shelf-books', -0.16, 0, 0.28, 0.17, shelf.mountHeight + 0.1, '#596c78'));
+    list.push(makeAttached(shelf, 'book_stack', 'shelf-books', -length * 0.22, 0, 0.28, 0.17, supportSurface(shelf) + 0.008, '#596c78'));
   }
   if (!attached.some((it) => it.type === 'led_strip')) {
-    list.push(makeAttached(shelf, 'led_strip', 'shelf-led', 0, 0.07, shelf.w * 0.88, 0.025, shelf.mountHeight - 0.08, '#f1cf9d'));
+    list.push(makeAttached(shelf, 'led_strip', 'shelf-led', 0, depth * 0.32, length * 0.88, 0.025, shelf.mountHeight - 0.012, '#f1cf9d'));
   }
   return list.length !== before;
 }
@@ -221,18 +241,37 @@ export function placeDecorItem(plan, item, entry) {
     return { ...mounted, z: [mounted.mountHeight ?? 1.58, (mounted.mountHeight ?? 1.58) + (ACCESSORY_HEIGHT[item.type] || 0.2)] };
   }
   const sameLayer = (it) => (it.elev || 0) === (item.elev || 0);
-  const parent = plan.furniture.find((it) => !it.decor && it.room === item.room && sameLayer(it) && entry.supportTypes?.includes(it.type))
-    || plan.furniture.find((it) => it.type === 'wall_shelf' && it.room === item.room && sameLayer(it) && entry.supportTypes?.includes(it.type));
-  if (!parent) return entry.wallMounted ? snapWallMountedItem(plan, item, item.x, item.y) : { ...item, decor: true };
-  const n = plan.furniture.filter((it) => it.supportId === parent.id).length;
-  const column = n % 3;
-  const row = Math.floor(n / 3);
-  const localX = (column - 1) * Math.min(parent.w * 0.22, 0.28);
-  const localY = (row - 0.5) * Math.min(parent.h * 0.24, 0.2);
+  const supports = plan.furniture.filter((it) => it.room === item.room && sameLayer(it) && entry.supportTypes?.includes(it.type)
+    && (!it.decor || it.type === 'wall_shelf'));
+  const parent = supports.sort((a, b) => {
+    const point = center(item);
+    return Math.hypot(center(a).x - point.x, center(a).y - point.y) - Math.hypot(center(b).x - point.x, center(b).y - point.y);
+  })[0];
+  if (!parent) return entry.wallMounted ? snapWallMountedItem(plan, item, item.x, item.y) : null;
+  const localParent = localSizeFor(parent);
+  const childSize = { w: item.w, h: item.h };
+  const pad = 0.012;
+  const limitX = Math.max(0, (localParent.w - childSize.w) / 2 - pad);
+  const limitY = Math.max(0, (localParent.h - childSize.h) / 2 - pad);
+  const slots = [[0, 0], [-0.22, 0], [0.22, 0], [0, -0.22], [0, 0.22], [-0.3, -0.18], [0.3, 0.18]];
+  const occupied = plan.furniture.filter((it) => it.supportId === parent.id && it.supportOffset);
+  const slot = slots.map(([u, v]) => ({ x: u * localParent.w, y: v * localParent.h })).find((candidate) => {
+    const x = Math.max(-limitX, Math.min(limitX, candidate.x));
+    const y = Math.max(-limitY, Math.min(limitY, candidate.y));
+    return occupied.every((it) => {
+      const size = it.supportSize || { w: it.w, h: it.h };
+      const p = rotate(it.supportOffset.x, it.supportOffset.y, -rotationOf(parent));
+      return Math.abs(p.x - x) >= (size.w + childSize.w) / 2 + pad || Math.abs(p.y - y) >= (size.h + childSize.h) / 2 + pad;
+    });
+  }) || { x: 0, y: 0 };
+  const localX = Math.max(-limitX, Math.min(limitX, slot.x));
+  const localY = Math.max(-limitY, Math.min(limitY, slot.y));
   const offset = rotate(localX, localY, rotationOf(parent));
   const c = center(parent);
-  const top = parent.z?.[1] ?? furnitureZ(parent.type)[1];
-  const mountHeight = entry.mountOffset != null ? top + entry.mountOffset : top + 0.015;
+  const top = supportSurface(parent);
+  const mountHeight = item.type === 'pillow' || item.type === 'throw'
+    ? seatSurface(parent.type)
+    : top + 0.015;
   const size = worldSizeFor(parent, item.w, item.h);
   return {
     ...item, ...size, x: +(c.x + offset.x - size.w / 2).toFixed(3), y: +(c.y + offset.y - size.h / 2).toFixed(3),

@@ -108,7 +108,7 @@ export async function houseImage(project, {
     RectAreaLightUniformsLib.init();
     const { loadHdri } = await import('./hdri');
     const hdri = await loadHdri(THREE, time);
-    const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls, windows: true, ground });
+    const built = await buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: v, time, background, roof, lowWalls, windows: true, ground });
     if (!built) return null;
     try {
       const { upgradeMaterials } = await import('./pbr');

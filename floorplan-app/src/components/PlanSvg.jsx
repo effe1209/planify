@@ -546,6 +546,20 @@ const BASE_FURNITURE = {
       </>
     );
   },
+  /* guardaroba aperto a L: i colori distinguono i capi sui due bracci */
+  wardrobe_open_corner: (w, h, s) => {
+    const d = Math.min(0.58 * s, Math.min(w, h) * 0.4);
+    const colors = ['#c9b9a7', '#748092', '#8c9a78', '#c5aa8c', '#5e6a78'];
+    const n = Math.max(4, Math.floor((w - d) / (0.12 * s)));
+    return (
+      <>
+        <path d={`M0 0 H${w} V${d} H${d} V${h} H0 Z`} fill="#f5f1ea" stroke={F_STROKE} strokeWidth="1.1" strokeLinejoin="round" />
+        {Array.from({ length: n }, (_, i) => <rect key={`b${i}`} x={d + ((w - d) * i) / n} y={d * 0.22} width={(w - d) / n - 1} height={d * 0.56} rx="1" fill={colors[i % colors.length]} opacity="0.82" />)}
+        {Array.from({ length: Math.max(2, Math.floor((h - d) / (0.14 * s))) }, (_, i) => <rect key={`s${i}`} x={d * 0.22} y={d + ((h - d) * i) / Math.max(2, Math.floor((h - d) / (0.14 * s)))} width={d * 0.56} height={(h - d) / Math.max(2, Math.floor((h - d) / (0.14 * s))) - 1} rx="1" fill={colors[(i + 2) % colors.length]} opacity="0.82" />)}
+        <path d={`M${d} 0 V${h} M0 ${d} H${w}`} stroke={F_STROKE} strokeWidth="1.4" />
+      </>
+    );
+  },
   /* armadio aperto a vista: montanti, ripiani e capi appesi all'asta */
   wardrobe_open: (w, h, s) => {
     const n = Math.max(2, Math.round(w / (0.5 * s)));
@@ -659,6 +673,14 @@ const BASE_FURNITURE = {
       </>
     );
   },
+  custom_model: (w, h) => (
+    <>
+      <rect width={w} height={h} rx="3" fill="#e7edf2" stroke="#586b7a" strokeWidth="1.2" />
+      <path d={`M ${w * 0.2} ${h * 0.72} L ${w * 0.2} ${h * 0.36} L ${w * 0.5} ${h * 0.18} L ${w * 0.8} ${h * 0.36} L ${w * 0.8} ${h * 0.72} Z`}
+        fill="none" stroke="#586b7a" strokeWidth="1.2" />
+      <text x={w / 2} y={h * 0.91} textAnchor="middle" fontSize={Math.min(9, h * 0.22)} fill="#364957">GLB</text>
+    </>
+  ),
 };
 
 // i pezzi principali hanno disegni dettagliati e dipendenti dallo stile (lib/furnitureArt.jsx)

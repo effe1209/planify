@@ -20,7 +20,7 @@ const SLAB_T = 0.3;   // solaio tra un piano e l'altro
 /* Altezza (m) e materiale di ogni arredo; `lift` = quota da terra (TV appesa, pensili…). */
 const SHAPES = {
   sofa: [0.8, 'fabric'], sofa_corner: [0.8, 'fabric'], armchair: [0.8, 'fabric'], bed: [0.55, 'duvet'],
-  nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], wardrobe_corner: [2.2, 'cabinet'], wardrobe_open: [2.1, 'cabinet'],
+  nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], wardrobe_corner: [2.2, 'cabinet'], wardrobe_open_corner: [2.1, 'wood'], wardrobe_open: [2.1, 'cabinet'],
   sofa_round: [0.8, 'fabric'], sofa_curved: [0.8, 'fabric'], chair_design: [0.82, 'wood'], chair_outdoor: [0.85, 'wood'], armchair_rattan: [0.8, 'wood'], table_rattan: [0.5, 'wood'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
   kitchen_peninsula: [0.9, 'counter'], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
@@ -598,6 +598,22 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     if (it.type === 'rug') continue;   // il tappeto è già disegnato sopra
     if (it.type === 'table' || it.type === 'table_round') chairsAround(it);
     const from = root.children.length;
+    if (it.type === 'custom_model') {
+      const anchor = new THREE.Group();
+      anchor.name = `MODELLO_${String(it.name || 'GLB').toUpperCase()}`;
+      anchor.position.set(it.x + it.w / 2, it.z?.[0] || 0, it.y + it.h / 2);
+      const yaw = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 }[it.facing || 'S'] || 0;
+      anchor.rotation.y = yaw - (((it.rot || 0) * Math.PI) / 180);
+      if (it.flip) anchor.scale.x = -1;
+      const vertical = it.facing === 'E' || it.facing === 'W';
+      anchor.userData.customModel = {
+        id: it.modelId,
+        target: { w: vertical ? it.h : it.w, h: vertical ? it.w : it.h, height: Math.max(0.01, (it.z?.[1] ?? it.modelHeight ?? 1) - (it.z?.[0] || 0)) },
+      };
+      root.add(anchor);
+      raise(it, from);
+      continue;
+    }
     // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
     const obj = it.color ? buildObject(THREE, it, tintMaterials(M, it.type, it.color), mat, { ...theme, ...tintTheme(theme, it.type, it.color) }) : buildObject(THREE, it, M, mat, theme);
     if (obj) {
