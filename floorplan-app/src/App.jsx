@@ -2228,18 +2228,22 @@ export default function App() {
 
         {/* ───────── Dettagli, personalizzazione e cronologia ───────── */}
         <aside className="pf-inspector" aria-hidden={!panels.right} inert={!panels.right}>
-          {plan && stats && <InspectorTabs tab={inspTab} onTab={setInspTab} />}
-          {editable && (
-            <div className="pf-editbar">
-              <button type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
-                title="Attiva o disattiva la modifica di muri, aperture, locali e scale: resta attiva finché non la ripremi">
-                <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
-              </button>
-              {wallEdit && (
-                <EditTools addMode={addMode} splitDir={splitDir}
-                  onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
-                  onSplitDir={setSplitDir} />
-              )}
+          {(editable || (plan && stats)) && (
+            <div className="pf-insp-head">
+            {editable && (
+              <div className="pf-editbar">
+                <button type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
+                  title="Attiva o disattiva la modifica di muri, aperture, locali e scale: resta attiva finché non la ripremi">
+                  <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
+                </button>
+                {wallEdit && (
+                  <EditTools addMode={addMode} splitDir={splitDir}
+                    onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
+                    onSplitDir={setSplitDir} />
+                )}
+              </div>
+            )}
+              {plan && stats && <InspectorTabs tab={inspTab} onTab={setInspTab} />}
             </div>
           )}
           {plan && stats ? (

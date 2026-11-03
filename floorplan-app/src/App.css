@@ -717,18 +717,26 @@
 .pf-furnish .pf-row, .pf-customizer .pf-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .pf-furnish .pf-chip.is-on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 
-/* pulsante «Modifica pianta»: fisso in cima alla barra di destra, come «Genera» in quella di sinistra */
-.pf-editbar {
+/* testata fissa del pannello di destra: la bolla «Modifica pianta» (come un'isola) e sotto il menù delle schede; sotto scorre il resto */
+.pf-insp-head {
   position: sticky;
   top: -12px;
   z-index: 6;
   margin: -12px -12px 0;
-  padding: 12px;
-  border-bottom: 1px solid var(--hairline, var(--border));
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  padding: 12px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   background: var(--sidebar-material, var(--bg-panel));
+  border-bottom: 1px solid var(--hairline, var(--border));
   border-radius: var(--radius-lg, 12px) var(--radius-lg, 12px) 0 0;
+}
+.pf-editbar {
+  padding: 6px;
+  border: 1px solid var(--hairline, var(--border));
+  border-radius: 22px;
+  background: var(--card, var(--bg-panel));
+  box-shadow: var(--shadow-float, 0 4px 14px rgba(0, 0, 0, 0.12));
 }
 .pf-editbtn { width: 100%; justify-content: center; min-height: 40px; font-weight: 600; }
 .pf-editbtn.is-on { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -834,7 +842,7 @@
 .pf-cloud-status.is-idle .pf-cloud-status-text { visibility: hidden; }
 
 /* schede del pannello destro */
-.pf-insp-tabs-wrap { position: sticky; top: -12px; z-index: 6; margin: -12px -12px 0; padding: 12px 12px 8px; background: var(--sidebar-material); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.pf-insp-tabs-wrap { display: block; }
 .pf-insp-tabs { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--fill); }
 .pf-insp-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 7px 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 .pf-insp-tabs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
