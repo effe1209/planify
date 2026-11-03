@@ -47,3 +47,24 @@ scene.traverse((o) => { if (o.userData.layer === 'SCALA_ESTERNA') { n++; low = M
 assert.ok(n > g.count, 'gradini e pianerottolo ci sono');
 assert.ok(Math.abs(low + 3) < 0.02, `la scala parte dal giardino (${low})`);
 console.log('extstair ok');
+
+// casa rialzata: pilastri sotto il piano più basso (o basamento pieno, o niente) e giardino sotto la scala
+import { buildHouse } from '../src/lib/scene3d.js';
+import { frontOf } from '../src/lib/project.js';
+import { themeFor } from '../src/lib/palette.js';
+{
+  const proj = (extra = {}) => ({ floors: [{ id: 'a', level: 1, plan: r.plan, meta: { style: 'modern' } }], ...extra });
+  const layers = (p) => { const out = {}; buildHouse(THREE, p, (f) => themeFor(p, f)).traverse((o) => { if (o.userData.layer) out[o.userData.layer] = (out[o.userData.layer] || 0) + 1; }); return out; };
+  assert.ok(layers(proj()).PILASTRI >= 4, 'pilastri sotto la casa rialzata');
+  assert.ok(layers(proj({ houseBase: 'solid' })).BASAMENTO >= 1);
+  assert.ok(!layers(proj({ houseBase: 'none' })).PILASTRI);
+  const ground = { floors: [{ id: 'a', level: 0, plan, meta: { style: 'modern' } }] };
+  assert.ok(!layers(ground).PILASTRI, 'la casa a terra non ha pilastri');
+  // la porta è a sud ma la scala è a est: il giardino va davanti alla scala, salvo scelta diversa
+  const east = setExtStair(plan, 'E', { rise: 3 }).plan;
+  const pe = { floors: [{ id: 'a', level: 1, plan: east, meta: { style: 'modern' } }] };
+  assert.equal(frontOf(pe).facade.front, 'E');
+  assert.equal(frontOf(pe).facade.face, 'stair');
+  assert.equal(frontOf({ ...pe, gardenFace: 'door' }).facade.front, 'S');
+}
+console.log('extstair casa rialzata ok');

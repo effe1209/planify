@@ -942,7 +942,8 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
     g.name = `PIANO_${String(f.name || f.level).toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
     house.add(g);
-    if (f.level === lowest) continue;
+    // la casa rialzata (il piano più basso è il primo) ha anche il suo solaio e un sostegno sotto
+    if (f.level === lowest && !(lowest >= 1 && project.houseBase !== 'none')) continue;
     // solaio sotto il piano: un volume per locale, nessuno sopra la scala (il vano resta aperto)
     for (const r of f.plan.rooms) {
       if (r.kind === 'garden') continue;
@@ -964,6 +965,44 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
       slab.userData.layer = 'SOLAI';
       slab.userData.floor = { id: f.id, name: f.name, level: f.level };
       house.add(slab);
+    }
+  }
+  // casa rialzata sopra il giardino: pilastri di cemento (project.houseBase = 'pilotis', di serie) o basamento pieno ('solid'), niente con 'none'
+  if (floors[0].level >= 1 && project.houseBase !== 'none') {
+    const f0 = floors[0];
+    const top = quota(f0.level) - SLAB_T;
+    const wings = roofWings(f0.plan);
+    const concrete = new THREE.MeshStandardMaterial({ color: '#c9c6bf', roughness: 0.9 });
+    const put = (x, z, w, d, y0, h, layer) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), concrete);
+      m.position.set(x + w / 2, y0 + h / 2, z + d / 2);
+      m.castShadow = m.receiveShadow = true;
+      m.userData.layer = layer;
+      house.add(m);
+    };
+    if (top > 0.2) {
+      if (project.houseBase === 'solid') {
+        for (const w of wings) put(w.x0, w.y0, w.x1 - w.x0, w.y1 - w.y0, 0, top, 'BASAMENTO');
+      } else {
+        const seen = new Set();
+        const P = 0.3;
+        for (const w of wings) {
+          const nx = Math.max(1, Math.ceil((w.x1 - w.x0) / 4));
+          const nz = Math.max(1, Math.ceil((w.y1 - w.y0) / 4));
+          for (let i = 0; i <= nx; i++) {
+            for (let j = 0; j <= nz; j++) {
+              const x = w.x0 + ((w.x1 - w.x0) * i) / nx;
+              const z = w.y0 + ((w.y1 - w.y0) * j) / nz;
+              const onEdge = i === 0 || i === nx || j === 0 || j === nz;
+              if (!onEdge) continue;
+              const key = `${x.toFixed(2)}|${z.toFixed(2)}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              put(Math.min(Math.max(x - P / 2, w.x0 - P / 2 + 0.05), w.x1 - P / 2 - 0.05), Math.min(Math.max(z - P / 2, w.y0 - P / 2 + 0.05), w.y1 - P / 2 - 0.05), P, P, 0, top, 'PILASTRI');
+            }
+          }
+        }
+      }
     }
   }
   // casa in legno: pilastri d'angolo, travi a vista e portico, una volta per tutta la casa

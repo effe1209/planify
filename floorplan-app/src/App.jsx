@@ -2574,7 +2574,8 @@ export default function App() {
               )}
               </>)}
               {T('plan') && !readOnly && !['garden'].includes(floor.meta?.type) && (<>
-              <ExtStairPanel plan={plan} level={floor.level} error={extStairError}
+              <ExtStairPanel plan={plan} level={floor.level} error={extStairError} base={current?.houseBase || 'pilotis'}
+                onBase={(v) => editProject((p) => { const { houseBase: _b, ...rest } = p; return v === 'pilotis' ? rest : { ...rest, houseBase: v }; })}
                 onSet={(opts) => { const r = setExtStair(plan, opts.side, opts); if (r.error) setExtStairError(r.error); else { setExtStairError(null); editPlan(() => r.plan); } }}
                 onRemove={() => { setExtStairError(null); editPlan((p) => removeExtStair(p)); }} />
               </>)}
@@ -2641,11 +2642,11 @@ export default function App() {
                       <Shuffle size={15} /> Rigenera questo piano con la scala allineata
                     </button>
                   )}
-                  {gardenFront?.garage?.ramp && !readOnly && (
+                  {(gardenFront?.garage?.ramp || gardenFront?.hasStair) && !readOnly && (
                     <div className="pf-field-sm">
                       <span>Giardino davanti a</span>
                       <div className="pf-seg" role="radiogroup" aria-label="Giardino davanti a">
-                        {[['garage', 'Basculante del garage'], ['door', 'Portoncino']].map(([v, text]) => (
+                        {[...(gardenFront.hasStair ? [['stair', 'Scala esterna']] : []), ...(gardenFront.garage?.ramp ? [['garage', 'Basculante del garage']] : []), ['door', 'Portoncino']].map(([v, text]) => (
                           <button key={v} type="button" role="radio" aria-checked={gardenFront.face === v} disabled={isLoading}
                             className={gardenFront.face === v ? 'is-on' : ''}
                             onClick={() => {
@@ -2655,7 +2656,7 @@ export default function App() {
                             }}>{text}</button>
                         ))}
                       </div>
-                      <p className="pf-hint">Con il garage interrato il giardino sta davanti alla basculante, così la rampa c&apos;è sempre; il portoncino può restare sul fianco.</p>
+                      <p className="pf-hint">{gardenFront.hasStair ? 'Con la scala esterna il giardino sta sotto la scala: la rampa arriva sempre sul prato. ' : ''}{gardenFront.garage?.ramp ? 'Con il garage interrato il giardino sta davanti alla basculante, così la rampa c\'è sempre. ' : ''}Il portoncino può restare sul fianco.</p>
                     </div>
                   )}
                   {gardenFront && (

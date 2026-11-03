@@ -145,8 +145,11 @@ export function frontOf(project) {
   }
   // il giardino sta davanti alla facciata della strada: con il garage interrato è quella della basculante (la rampa scende da lì),
   // altrimenti quella del portoncino; chi preferisce il portoncino lo sceglie con `project.gardenFace = 'door'`
-  const byGarage = !!gar && gar.ramp && project?.gardenFace !== 'door';
-  const front = byGarage ? gar.side : doorSide;
+  const byGarage = !!gar && gar.ramp && project?.gardenFace !== 'door' && project?.gardenFace !== 'stair';
+  // casa rialzata con la scala esterna: il giardino sta sotto la scala (si torna al portoncino con gardenFace = 'door')
+  const es = (project.floors || []).find((x) => typeof x.level === 'number' && x.plan?.extStair?.side)?.plan.extStair;
+  const byStair = !!es && !byGarage && project?.gardenFace !== 'door' && project?.gardenFace !== 'garage';
+  const front = byStair ? es.side : byGarage ? gar.side : doorSide;
   const rel = (side) => (side === front ? 'front' : side === OPPOSITE[front] ? 'back' : side === LEFT_OF[front] ? 'left' : 'right');
   const map = toFront(front, W, L);
   const fw = front === 'S' || front === 'N' ? W : L;
@@ -154,7 +157,11 @@ export function frontOf(project) {
     const [a, b] = [map(r.x, r.y), map(r.x + r.w, r.y + r.h)];
     return { t: Math.min(a[0], b[0]), d: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]), kind: r.kind };
   });
-  const out = { w: fw, front, rects, face: byGarage ? 'garage' : 'door' };
+  const out = { w: fw, front, rects, face: byStair ? 'stair' : byGarage ? 'garage' : 'door', hasStair: !!es };
+  if (es) {
+    const [t, d] = map(es.at[0], es.at[1]);
+    out.stair = { x: t, w: es.w, d };
+  }
   if (door) {
     const o = openingSide(door, W, L);
     const [t, d] = map(o.cx, o.cy);

@@ -7,7 +7,7 @@ const SIDES = [['N', 'Nord'], ['E', 'Est'], ['S', 'Sud'], ['W', 'Ovest']];
  * Scala esterna al giardino: per la casa che comincia al primo piano e si scende in giardino da fuori. Si sceglie il lato della
  * facciata, dove sta lungo il muro, se la rampa va verso il giardino o corre lungo la facciata, larghezza e dislivello.
  */
-export default function ExtStairPanel({ plan, level, onSet, onRemove, error }) {
+export default function ExtStairPanel({ plan, level, onSet, onRemove, error, base = 'pilotis', onBase = null }) {
   const es = plan.extStair;
   const side = es?.side;
   const defaultRise = Math.max(1, typeof level === 'number' ? level : 1) * FLOOR_RISE;
@@ -56,6 +56,16 @@ export default function ExtStairPanel({ plan, level, onSet, onRemove, error }) {
           <p className="pf-hint">{g.count} alzate da {Math.round((es.rise / g.count) * 100)} cm; ingombro {g.bounds.w.toFixed(1).replace('.', ',')} × {g.bounds.h.toFixed(1).replace('.', ',')} m.</p>
           <button type="button" className="pf-minibtn is-danger" onClick={onRemove}><Trash2 size={12} /> Togli la scala esterna</button>
         </>
+      )}
+      {typeof level === 'number' && level >= 1 && onBase && (
+        <div className="pf-field-sm">
+          <span>Sotto la casa rialzata</span>
+          <div className="pf-segtools is-small" role="radiogroup" aria-label="Sostegno sotto la casa">
+            {[['pilotis', 'Pilastri'], ['solid', 'Basamento pieno'], ['none', 'Niente']].map(([id, label]) => (
+              <button key={id} type="button" role="radio" aria-checked={base === id} className={base === id ? 'is-on' : ''} onClick={() => onBase(id)}>{label}</button>
+            ))}
+          </div>
+        </div>
       )}
       {error && <p className="pf-warn" role="alert">{error}</p>}
     </section>
