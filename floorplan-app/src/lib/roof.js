@@ -64,27 +64,33 @@ export function roofWings(plan) {
  * Falde di un'ala a due falde, come triangoli [x, y(quota), z] relativi alla quota delle gronde.
  * Ritorna { tris: [[a, b, c]], ridge } con il colmo alto (lato minore / 2 + sporto) · tan(pendenza).
  */
-export function gableTriangles(w, { slope = 25, overhang = 0.4 } = {}) {
+export function gableTriangles(w, { slope = 25, overhang = 0.4, overhangs = null } = {}) {
   const alongX = w.x1 - w.x0 >= w.y1 - w.y0;
-  const o = overhang;
-  const e = Math.min(o, 0.25);   // sporto sui lati dei timpani
+  const edge = (key) => Math.max(0, overhangs?.[key] ?? overhang);
+  const ex0 = Math.min(edge('x0'), 0.25);
+  const ex1 = Math.min(edge('x1'), 0.25);
+  const ey0 = edge('y0');
+  const ey1 = edge('y1');
   const half = (alongX ? w.y1 - w.y0 : w.x1 - w.x0) / 2;
   const rise = Math.tan((slope * Math.PI) / 180);
-  const drop = o * rise;          // lo sporto scende sotto la gronda
   const ridge = half * rise;
   let t;
   if (alongX) {
-    const a0 = w.x0 - e, a1 = w.x1 + e, z0 = w.y0 - o, z1 = w.y1 + o, zm = (w.y0 + w.y1) / 2;
+    const a0 = w.x0 - ex0, a1 = w.x1 + ex1;
+    const z0 = w.y0 - ey0, z1 = w.y1 + ey1, zm = (w.y0 + w.y1) / 2;
+    const drop0 = ey0 * rise, drop1 = ey1 * rise;
     t = [
-      [[a0, -drop, z0], [a1, -drop, z0], [a1, ridge, zm]], [[a0, -drop, z0], [a1, ridge, zm], [a0, ridge, zm]],
-      [[a0, -drop, z1], [a1, ridge, zm], [a1, -drop, z1]], [[a0, -drop, z1], [a0, ridge, zm], [a1, ridge, zm]],
+      [[a0, -drop0, z0], [a1, -drop0, z0], [a1, ridge, zm]], [[a0, -drop0, z0], [a1, ridge, zm], [a0, ridge, zm]],
+      [[a0, -drop1, z1], [a1, ridge, zm], [a1, -drop1, z1]], [[a0, -drop1, z1], [a0, ridge, zm], [a1, ridge, zm]],
       [[w.x0, 0, w.y0], [w.x0, 0, w.y1], [w.x0, ridge, zm]], [[w.x1, 0, w.y0], [w.x1, ridge, zm], [w.x1, 0, w.y1]],
     ];
   } else {
-    const a0 = w.y0 - e, a1 = w.y1 + e, x0 = w.x0 - o, x1 = w.x1 + o, xm = (w.x0 + w.x1) / 2;
+    const a0 = w.y0 - ey0, a1 = w.y1 + ey1;
+    const x0 = w.x0 - ex0, x1 = w.x1 + ex1, xm = (w.x0 + w.x1) / 2;
+    const drop0 = ex0 * rise, drop1 = ex1 * rise;
     t = [
-      [[x0, -drop, a0], [xm, ridge, a0], [xm, ridge, a1]], [[x0, -drop, a0], [xm, ridge, a1], [x0, -drop, a1]],
-      [[x1, -drop, a0], [xm, ridge, a1], [xm, ridge, a0]], [[x1, -drop, a0], [x1, -drop, a1], [xm, ridge, a1]],
+      [[x0, -drop0, a0], [xm, ridge, a0], [xm, ridge, a1]], [[x0, -drop0, a0], [xm, ridge, a1], [x0, -drop0, a1]],
+      [[x1, -drop1, a0], [xm, ridge, a1], [xm, ridge, a0]], [[x1, -drop1, a0], [x1, -drop1, a1], [xm, ridge, a1]],
       [[w.x0, 0, w.y0], [xm, ridge, w.y0], [w.x1, 0, w.y0]], [[w.x0, 0, w.y1], [w.x1, 0, w.y1], [xm, ridge, w.y1]],
     ];
   }
