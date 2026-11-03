@@ -48,6 +48,7 @@ import { cloud, cloudTokenFrom } from './lib/cloud';
 import { useCloud } from './hooks/useCloud';
 import CloudDialog from './components/CloudDialog';
 import CloudSync from './components/CloudSync';
+import InspectorTabs from './components/InspectorTabs';
 import SheetsDialog from './components/SheetsDialog';
 import LibraryDialog, { LibraryPanel } from './components/LibraryDialog';
 import { getLibrary, purchaseQuote, storeLibrary } from './lib/materialLibrary';
@@ -779,6 +780,9 @@ export default function App() {
     say('Facciata raddrizzata');
   };
   /* ── modifica diretta: muri interni, porte e finestre ── */
+  const [inspTab, setInspTab] = useState(() => { const v = storage.get('planify.inspTab', 'plan'); return ['plan', 'furn', 'sys', 'docs'].includes(v) ? v : 'plan'; });
+  useEffect(() => { storage.set('planify.inspTab', inspTab); }, [inspTab]);
+  const T = (id) => inspTab === id;   // schede del pannello destro: Pianta · Arredi e materiali · Impianti · Documenti
   const [wallEdit, setWallEdit] = useState(false);
   const [addMode, setAddMode] = useState(null);
   const [selectedOpening, setSelectedOpening] = useState(null);   // { kind: 'door' | 'window', index }
@@ -2288,10 +2292,6 @@ export default function App() {
                   onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
                   onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />
               )}
-              {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
-                <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}
-                  onStyle={setFloorStyle} onFurnish={() => furnishPlan()} onClear={() => furnishPlan({ clear: true })} />
-              )}
               {selectedRoom && (
                 <RoomEditor
                   key={selectedRoom.id}
@@ -2309,7 +2309,15 @@ export default function App() {
                   onClose={() => setSelectedId(null)}
                 />
               )}
+              <InspectorTabs tab={inspTab} onTab={setInspTab} />
+              {T('furn') && (<>
+              {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
+                <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}
+                  onStyle={setFloorStyle} onFurnish={() => furnishPlan()} onClear={() => furnishPlan({ clear: true })} />
+              )}
+              </>)}
 
+              {T('plan') && (<>
               <section className="pf-sec">
                 <h2>Pianta {SHAPE_NAME[plan.shape] || 'rettangolare'}</h2>
                 <label className="pf-field-sm pf-project-name">
@@ -2359,50 +2367,78 @@ export default function App() {
                   </p>
                 )}
               </section>
+              </>)}
 
+              {T('sys') && (<>
               <ElectricPanel config={electricCfg} data={electricPlan} floorId={floor.id} sheet={showElectric ? 'electric' : 'arch'}
                 onStart={startElectric} onSheet={setSheet} onChange={changeElectric} onClear={clearElectric} />
+              </>)}
 
+              {T('sys') && (<>
               <PlumbingPanel config={plumbingCfg} data={plumbingPlan} floorId={floor.id} sheet={showPlumbing ? 'plumbing' : 'arch'}
                 onStart={startPlumbing} onSheet={setSheet} onChange={changePlumbing} onClear={clearPlumbing} />
+              </>)}
 
+              {T('docs') && (<>
               <SchedulePanel schedule={schedule} />
+              </>)}
 
+              {T('furn') && (<>
               <LibraryPanel count={library.length} quote={quote} onOpen={() => setLibraryDialog(true)} />
+              </>)}
 
+              {T('docs') && (<>
               <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
                 onClear={clearEstimate} />
+              </>)}
 
+              {T('sys') && (<>
               <SecurityPanel project={current} floorId={floor.id} onPlan={planAlarm} onClear={clearAlarm}
                 doors={doorState} onDoors={setDoors} onAddSensor={readOnly ? null : addSensor}
                 roomName={plan.rooms.find((r) => r.id === selectedId)?.name} />
+              </>)}
+              {T('sys') && (<>
               {floorDevices?.length > 0 && !showElectric && !showPlumbing && (
                 <CoveragePanel coverage={coverage} shown={!!layers.coverage}
                   onToggle={() => { setLayers((l) => ({ ...l, coverage: !l.coverage, alarm: true })); setCoverHighlight(null); }}
                   highlight={coverHighlight} onHighlight={setCoverHighlight} onReport={exportCoverage} />
               )}
+              </>)}
 
+              {T('furn') && (<>
               {!readOnly && !selectedRoom && (
                 <MaterialsPanel materials={current?.materials}
                   onChange={(mat) => editProject((p) => { const { materials: _m, ...rest } = p; return mat ? { ...rest, materials: mat } : rest; })}
                   onLook={({ materials: mat, palette: pal }) => editProject((p) => ({ ...p, materials: mat, palette: pal }))} />
               )}
+              </>)}
+              {T('furn') && (<>
               {!readOnly && !selectedRoom && (
                 <PalettePanel palette={current?.palette} styleId={floor.meta?.style || form.style}
                   onChange={(pal) => editProject((p) => { const { palette: _p, ...rest } = p; return pal ? { ...rest, palette: pal } : rest; })} />
               )}
+              </>)}
+              {T('plan') && (<>
               <NorthPanel plan={plan} north={current?.north ?? 0}
                 onNorth={readOnly ? () => {} : (v) => editProject((p) => ({ ...p, north: v }))} />
+              </>)}
+              {T('plan') && (<>
               <DesignReport design={plan.design} />
+              </>)}
+              {T('docs') && (<>
               <CompliancePanel plan={plan} type={floor.meta?.type} height={floor.meta?.height} stairs={floorStairs}
                 complex={current?.floors.filter((f) => f.id !== floor.id && typeof f.level === 'number' && f.plan).map((f) => ({ plan: f.plan, type: f.meta?.type }))}
                 onHeight={readOnly ? null : (v) => editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, meta: { ...f.meta, height: v } })))}
                 onSelectRoom={setSelectedId} />
+              </>)}
 
+              {T('plan') && (<>
               {floor.meta?.type === 'apartment' && floor.params?.doubles != null && (
                 <FilterCheck plan={plan} params={floor.params} />
               )}
+              </>)}
 
+              {T('plan') && (<>
               <section className="pf-sec">
                 <h2>Locali (clicca per personalizzare)</h2>
                 <ul className="pf-rooms">
@@ -2424,7 +2460,9 @@ export default function App() {
                   })}
                 </ul>
               </section>
+              </>)}
 
+              {T('plan') && (<>
               {notes.length > 0 && (
                 <section className="pf-sec">
                   <h2>Note e conformità</h2>
@@ -2467,7 +2505,9 @@ export default function App() {
                   )}
                 </section>
               )}
+              </>)}
 
+              {T('plan') && (<>
               <section className="pf-sec">
                 <h2>Legenda</h2>
                 <ul className="pf-legend">
@@ -2478,6 +2518,7 @@ export default function App() {
                   <li><i className="lg-out" /> Esterno</li>
                 </ul>
               </section>
+              </>)}
             </>
           ) : (
             <section className="pf-sec">
@@ -2489,7 +2530,8 @@ export default function App() {
             </section>
           )}
 
-          <HistoryPanel
+          {(!(plan && stats) || T('docs')) && (
+            <HistoryPanel
             entries={history.entries}
             currentId={history.currentId}
             persistent={consent.allowHistory}
@@ -2506,6 +2548,7 @@ export default function App() {
               syncApi.current?.baseline(e);
             }}
           />
+          )}
         </aside>
       </div>
 

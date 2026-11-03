@@ -13,6 +13,13 @@ async function open(page) {
   return errors;
 }
 
+/* Il pannello destro ha quattro schede (Pianta, Arredi, Impianti, Documenti): si apre quella che serve (e il cassetto su iPad e telefono). */
+async function tabTo(page, name) {
+  const details = page.getByRole('button', { name: 'Mostra il pannello dei dettagli' });
+  if (await details.count()) await details.click();
+  await page.getByRole('tab', { name, exact: true }).click();
+}
+
 /* Su iPad e telefono i comandi stanno in un cassetto chiuso: lo apre l'utente dal pulsante in alto. */
 async function controls(page) {
   const toggle = page.getByRole('button', { name: 'Mostra il pannello dei comandi' });
@@ -35,9 +42,9 @@ test('genera una pianta con valutazione e conformità', async ({ page }) => {
   const errors = await open(page);
   await generate(page);
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
-  const details = page.getByRole('button', { name: 'Mostra il pannello dei dettagli' });
-  if (await details.count()) await details.click();   // su iPad e telefono i dettagli stanno in un cassetto
+  await tabTo(page, 'Documenti');   // su iPad e telefono i dettagli stanno in un cassetto
   await expect(page.getByRole('heading', { name: 'Conformità normativa' })).toBeVisible({ timeout: 20_000 });
+  await tabTo(page, 'Pianta');
   await expect(page.getByRole('heading', { name: 'Valutazione del progetto' })).toBeVisible();
   await expect(page.locator('.pf-sheet svg')).toBeVisible();
   expect(errors).toEqual([]);
@@ -126,8 +133,7 @@ test('sensori, impianto e luci compaiono nel 3D quando sono calcolati', async ({
   const errors = await open(page);
   await generate(page);
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
-  const details = page.getByRole('button', { name: 'Mostra il pannello dei dettagli' });
-  if (await details.count()) await details.click();
+  await tabTo(page, 'Impianti');
   await page.getByRole('button', { name: /Disposizione ottimale allarme/ }).click();
   await page.getByRole('button', { name: /Progetta impianto elettrico/ }).click();
   const scrim = page.getByRole('button', { name: 'Chiudi i pannelli' });
