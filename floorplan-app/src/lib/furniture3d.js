@@ -234,14 +234,14 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const pillows = W > 1.7 ? 3 : W > 1.2 ? 2 : 1;
       for (let i = 0; i < pillows; i++) {
         const x = pillows === 1 ? 0 : (i - (pillows - 1) / 2) * ((W - 0.1) / pillows);
-        soft(Math.min(0.58, (W - 0.1) / pillows - 0.04), 0.17, 0.4, x + jit(0.02), baseTop + 0.2, -D / 2 + 0.3 + jit(0.02), white, { pinch: 0.62, rot: jit(0.1), tilt: -0.2 + jit(0.05) });
+        soft(Math.min(0.58, (W - 0.1) / pillows - 0.04), 0.17, 0.4, x + jit(0.02), baseTop + 0.2, -D / 2 + 0.3 + jit(0.02), white, { pinch: 0.62, rot: jit(0.1), tilt: 0.2 + jit(0.05) });
       }
       // cuscini davanti (verde e sabbia, appoggiati, un po' storti) e coperta verde drappeggiata con le frange ai piedi
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
       const sand = m('sand', '#e8dcc3', { roughness: 0.95 });
       const front = [[-0.22, olive, 0.18], [0.2, sand, -0.15]];
       for (const [fx, mt, rot] of front) {
-        soft(Math.min(0.44, W * 0.3), 0.13, 0.3, fx * Math.min(W, 1.8) * 0.9 + jit(0.03), baseTop + 0.235, -D / 2 + 0.6 + jit(0.03), mt, { pinch: 0.6, rot: rot + jit(0.12), tilt: -0.28 + jit(0.06) });
+        soft(Math.min(0.44, W * 0.3), 0.13, 0.3, fx * Math.min(W, 1.8) * 0.9 + jit(0.03), baseTop + 0.235, -D / 2 + 0.6 + jit(0.03), mt, { pinch: 0.6, rot: rot + jit(0.12), tilt: 0.28 + jit(0.06) });
       }
       const tw = Math.min(0.4, W * 0.24);
       const tz0 = -D / 2 + 0.78;
@@ -352,26 +352,39 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const boucle = m('boucle', it.color || '#f1ead9', { roughness: 1, side: THREE.DoubleSide, ...(boucleMap && { map: boucleMap }) });
       const boucleMesh = (geo, x, y, z) => place(new THREE.Mesh(geo, boucle), x, y, z);
       boucleMesh(new RoundedBoxGeometry(W, 0.16, D * 0.96, 6, 0.3), 0, 0.12, 0);                // base
-      boucleMesh(new RoundedBoxGeometry(W - 0.12, 0.17, D * 0.7, 6, 0.26), 0, 0.3, D * 0.1);     // seduta
+      boucleMesh(new RoundedBoxGeometry(W - 0.14, 0.17, D * 0.72, 6, 0.26), 0, 0.3, D * 0.1);    // seduta (sopra a 0,385 m)
+      const seatTop = 0.385;
+      // schienale a mezzaluna che avvolge: due rotoli sovrapposti, con una calotta tonda a ogni estremità (senza, i tubi restano aperti)
+      const Rr = W / 2 - 0.1;
+      const arc = 3.0;
       const wrap = new THREE.Group();
       wrap.scale.z = D / W;
-      for (const [y, tube] of [[0.4, 0.11], [0.53, 0.1]]) {
+      for (const [y, tube] of [[0.42, 0.115], [0.55, 0.1]]) {
         const ring = new THREE.Group();
         ring.rotation.x = -Math.PI / 2;
-        const arc = 2.9;
-        const tor = new THREE.Mesh(new THREE.TorusGeometry(W / 2 - 0.12, tube, 14, 40, arc), boucle);
+        const tor = new THREE.Mesh(new THREE.TorusGeometry(Rr, tube, 16, 48, arc), boucle);
         tor.rotation.z = Math.PI / 2 - arc / 2;
         tor.castShadow = true;
         tor.receiveShadow = true;
         ring.add(tor);
         ring.position.y = y;
         wrap.add(ring);
+        for (const e of [-1, 1]) {
+          const phi = Math.PI / 2 + (e * arc) / 2;
+          const cap = new THREE.Mesh(new THREE.SphereGeometry(tube, 18, 14), boucle);
+          cap.position.set(Rr * Math.cos(phi), y, -Rr * Math.sin(phi));
+          cap.castShadow = true;
+          wrap.add(cap);
+        }
       }
       g.add(wrap);
+      // due cuscini oliva appoggiati allo schienale, un po' storti, e una coperta verde buttata sul bordo davanti
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
-      for (const sx of [-1, 1]) soft(0.34, 0.12, 0.34, sx * W * 0.27, 0.42, -D * 0.12, olive, { pinch: 0.58, rot: sx * 0.2, tilt: -0.95 });
-      const throwM = bx(0.3, 0.035, 0.5, W / 2 - 0.12, 0.62, -D * 0.08, olive);
-      throwM.rotation.z = -0.25;
+      for (const sx of [-1, 1]) soft(0.36, 0.13, 0.34, sx * W * 0.2, seatTop + 0.115, -D * 0.2, olive, { pinch: 0.5, rot: sx * 0.14, tilt: 1.25 });
+      const throwMat = m('throw', '#7d8050', { roughness: 1, side: THREE.DoubleSide });
+      const frontZ = D * 0.1 + D * 0.36;
+      const cloth = place(new THREE.Mesh(drapedThrow(THREE, 0.34, 0.3, 0.2, 1.3), throwMat), W * 0.24, seatTop + 0.018, frontZ - 0.3);   // un velo sopra la seduta (le pieghe salgono e scendono di 1 cm)
+      cloth.rotation.y = -0.12;
       break;
     }
     case 'sofa_curved': {
@@ -397,8 +410,13 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       // cuscini tondi oliva ai lati e coperta verde sul bracciolo
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
-      for (const sx of [-1, 1]) soft(0.34, 0.12, 0.34, sx * W * 0.3, 0.42, zOf(0.5 + sx * 0.3) + 0.3, olive, { pinch: 0.58, rot: sx * 0.2, tilt: -0.95 });
-      bx(0.22, 0.04, 0.5, W / 2 - 0.1, 0.62, zOf(0.97) + 0.3, olive);
+      for (const sx of [-1, 1]) {
+        const tt = 0.5 + sx * 0.3;
+        const slope = (b * 4 * (2 * tt - 1)) / W;
+        soft(0.36, 0.13, 0.34, sx * W * 0.3, 0.4 + 0.115, zOf(tt) + 0.28, olive, { pinch: 0.5, rot: -Math.atan(slope) + sx * 0.14, tilt: 1.25 });
+      }
+      const cloth = place(new THREE.Mesh(drapedThrow(THREE, 0.34, 0.34, 0.16, 2.1), m('throw', '#7d8050', { roughness: 1, side: THREE.DoubleSide })), W * 0.4, 0.418, zOf(0.9) + 0.22);
+      cloth.rotation.y = -0.5;
       break;
     }
     case 'chair_design': {
@@ -768,7 +786,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       const pil = m('pillow', theme.accent || '#c9b79c');
       if (it.type !== 'armchair') {
-        for (const sx of [-1, 1]) soft(0.38, 0.13, 0.36, sx * (W / 2 - arm - 0.28), seatY + 0.16, zb + backT + 0.12, pil, { pinch: 0.58, rot: sx * 0.3, tilt: -1.15 });
+        for (const sx of [-1, 1]) soft(0.38, 0.13, 0.36, sx * (W / 2 - arm - 0.28), seatY + 0.16, zb + backT + 0.12, pil, { pinch: 0.58, rot: sx * 0.3, tilt: 1.15 });
       }
       break;
     }
