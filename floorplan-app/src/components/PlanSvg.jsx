@@ -564,18 +564,25 @@ const BASE_FURNITURE = {
     );
   },
   /* divano tondo: seduta circolare con schienale ad arco sul lato del muro */
-  sofa_round: (w, h, s, t) => {
-    const r = Math.min(w, h) / 2;
-    const cx = w / 2;
-    const cy = h / 2;
+  /* divano piccolo in bouclé: corpo a fagiolo, schienale a mezzaluna, due cuscini tondi oliva e coperta verde sul bracciolo */
+  sofa_round: (w, h) => {
+    const r = Math.min(w, h) * 0.42;
+    const curls = [];
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let k = 0; k < Math.round((w * h) / 70); k++) {
+      const x = w * (0.06 + rnd() * 0.88), y = h * (0.06 + rnd() * 0.88);
+      curls.push(<circle key={k} cx={x} cy={y} r={1 + rnd()} fill="none" stroke="#b8a784" strokeOpacity="0.55" strokeWidth="0.6" />);
+    }
     return (
       <>
-        <circle cx={cx} cy={cy} r={r} fill={t.fabricArm} stroke={F_STROKE} strokeWidth="1.2" />
-        <circle cx={cx} cy={cy + r * 0.08} r={r * 0.74} fill={t.fabricSoft} stroke={F_STROKE} strokeWidth="0.8" />
-        {[-1, 0, 1].map((k) => (
-          <line key={k} x1={cx} y1={cy + r * 0.08} x2={cx + Math.sin((k * Math.PI) / 3) * r * 0.74} y2={cy + r * 0.08 + Math.cos((k * Math.PI) / 3) * r * 0.74} stroke={F_SOFT} />
-        ))}
-        <path d={`M ${cx - r * 0.86} ${cy - r * 0.2} A ${r * 0.9} ${r * 0.9} 0 0 1 ${cx + r * 0.86} ${cy - r * 0.2}`} fill="none" stroke={F_STROKE} strokeWidth="1.6" opacity="0.5" />
+        <rect width={w} height={h} rx={r} fill="#f1ead9" stroke="#8d7f63" strokeWidth="1.2" />
+        <path d={`M ${w * 0.08} ${h * 0.62} Q ${w * 0.06} ${h * 0.08} ${w * 0.5} ${h * 0.08} Q ${w * 0.94} ${h * 0.08} ${w * 0.92} ${h * 0.62}`} fill="none" stroke="#8d7f63" strokeOpacity="0.55" strokeWidth="1.4" />
+        <rect x={w * 0.14} y={h * 0.3} width={w * 0.72} height={h * 0.58} rx={r * 0.7} fill="#f6f0e2" stroke="#b8a784" strokeWidth="0.8" />
+        {curls}
+        <circle cx={w * 0.32} cy={h * 0.38} r={Math.min(w, h) * 0.13} fill="#7d8050" stroke="#5f6240" strokeWidth="0.8" />
+        <circle cx={w * 0.64} cy={h * 0.38} r={Math.min(w, h) * 0.13} fill="#7d8050" stroke="#5f6240" strokeWidth="0.8" />
+        <rect x={w * 0.8} y={h * 0.34} width={w * 0.14} height={h * 0.4} rx="3" fill="#7d8050" fillOpacity="0.92" stroke="#5f6240" strokeWidth="0.7" />
       </>
     );
   },

@@ -144,11 +144,25 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const len = (D - 0.12) * 0.64;
       bx(W + 0.02, 0.09, len, 0, baseTop + 0.15, D / 2 - 0.06 - len / 2, M.duvet);
       bx(W + 0.02, 0.22, 0.05, 0, baseTop - 0.05, D / 2 - 0.08, M.duvet);   // lembo davanti
-      const pillows = W > 1.2 ? 2 : 1;
+      const pillows = W > 1.7 ? 3 : W > 1.2 ? 2 : 1;
       for (let i = 0; i < pillows; i++) {
-        const x = pillows === 2 ? (i ? 1 : -1) * W / 4 : 0;
-        bx(Math.min(0.55, (W - 0.1) / pillows - 0.06), 0.13, 0.36, x, baseTop + 0.2, -D / 2 + 0.34, white);
+        const x = pillows === 1 ? 0 : (i - (pillows - 1) / 2) * ((W - 0.1) / pillows);
+        bx(Math.min(0.55, (W - 0.1) / pillows - 0.06), 0.14, 0.36, x, baseTop + 0.2, -D / 2 + 0.3, white);
       }
+      // cuscini davanti (verde e sabbia, appoggiati) e coperta verde in lungo con le frange ai piedi
+      const olive = m('olive', '#7d8050', { roughness: 0.95 });
+      const sand = m('sand', '#e8dcc3', { roughness: 0.95 });
+      const front = [[-0.22, olive, 0.12], [0.2, sand, -0.1]];
+      for (const [fx, mt, rot] of front) {
+        const c = bx(Math.min(0.42, W * 0.3), 0.12, 0.28, fx * Math.min(W, 1.8) * 0.9, baseTop + 0.22, -D / 2 + 0.58, mt);
+        c.rotation.y = rot;
+        c.rotation.x = -0.25;
+      }
+      const tw = Math.min(0.4, W * 0.24);
+      const tz0 = -D / 2 + 0.75;
+      const tz1 = D / 2 - 0.02;
+      bx(tw, 0.02, tz1 - tz0, 0, baseTop + 0.235, (tz0 + tz1) / 2, olive);
+      for (let k = 0; k < 9; k++) bx(0.012, 0.012, 0.06, -tw / 2 + (tw * (k + 0.5)) / 9, baseTop + 0.2, tz1 + 0.02, olive);
       const hz = -D / 2;
       if (style.tuft) {
         // testiera imbottita e capitonné con bottoni
@@ -220,21 +234,53 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       break;
     }
     case 'sofa_round': {
-      // divano tondo: base e seduta circolari, schienale ad arco (200°) dietro, un cuscino al centro
-      const R = Math.min(W, D) / 2;
-      const back = m('roundback', theme.fabric || '#9aa7b5', { side: THREE.DoubleSide });
-      cy(R - 0.04, R - 0.04, 0.12, 0, 0.06, 0, darkLine, 40);
-      cy(R - 0.06, R - 0.06, 0.2, 0, 0.18, 0, M.fabric, 40);
-      cy(R - 0.2, R - 0.2, 0.06, 0, 0.38, 0.03, M.fabric, 40);
-      const span = (210 * Math.PI) / 180;
-      const arc = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.03, R - 0.03, 0.46, 48, 1, true, Math.PI - span / 2, span), back);
-      place(arc, 0, 0.18 + 0.23 + 0.2, 0);
-      const arc2 = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.19, R - 0.19, 0.4, 48, 1, true, Math.PI - span / 2, span), back);
-      place(arc2, 0, 0.62, 0);
-      // cuscini tondi oliva e coperta verde appoggiata sul bordo
+      // divano piccolo e morbido in bouclé: corpo a fagiolo (quasi un rettangolo molto arrotondato), schienale a mezzaluna
+      // che avvolge, seduta e due cuscini tondi oliva, coperta verde sul bracciolo
+      let boucleMap = null;
+      if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = 128;
+        const c2 = cv.getContext('2d');
+        c2.fillStyle = '#efe7d6';
+        c2.fillRect(0, 0, 128, 128);
+        let seed = 7;
+        const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+        for (let k = 0; k < 520; k++) {
+          const x = rnd() * 128, y = rnd() * 128;
+          c2.strokeStyle = rnd() < 0.5 ? 'rgba(160,140,110,0.35)' : 'rgba(255,255,255,0.7)';
+          c2.lineWidth = 1.4;
+          c2.beginPath();
+          c2.arc(x, y, 2 + rnd() * 2, rnd() * 6, rnd() * 6 + 3.6);
+          c2.stroke();
+        }
+        boucleMap = new THREE.CanvasTexture(cv);
+        boucleMap.wrapS = boucleMap.wrapT = THREE.RepeatWrapping;
+        boucleMap.repeat.set(3, 3);
+        boucleMap.colorSpace = THREE.SRGBColorSpace;
+      }
+      const boucle = m('boucle', '#f1ead9', { roughness: 1, side: THREE.DoubleSide, ...(boucleMap && { map: boucleMap }) });
+      const soft = (geo, x, y, z) => place(new THREE.Mesh(geo, boucle), x, y, z);
+      soft(new RoundedBoxGeometry(W, 0.16, D * 0.96, 6, 0.3), 0, 0.12, 0);                // base
+      soft(new RoundedBoxGeometry(W - 0.12, 0.17, D * 0.7, 6, 0.26), 0, 0.3, D * 0.1);     // seduta
+      const wrap = new THREE.Group();
+      wrap.scale.z = D / W;
+      for (const [y, tube] of [[0.4, 0.11], [0.53, 0.1]]) {
+        const ring = new THREE.Group();
+        ring.rotation.x = -Math.PI / 2;
+        const arc = 2.9;
+        const tor = new THREE.Mesh(new THREE.TorusGeometry(W / 2 - 0.12, tube, 14, 40, arc), boucle);
+        tor.rotation.z = Math.PI / 2 - arc / 2;
+        tor.castShadow = true;
+        tor.receiveShadow = true;
+        ring.add(tor);
+        ring.position.y = y;
+        wrap.add(ring);
+      }
+      g.add(wrap);
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
-      for (const sx of [-1, 1]) cy(0.13, 0.13, 0.08, sx * R * 0.42, 0.44, -R * 0.2, olive, 24).rotation.x = 0.35;
-      bx(0.34, 0.03, 0.2, R * 0.55, 0.62, -R * 0.62, olive).rotation.y = 0.6;
+      for (const sx of [-1, 1]) cy(0.13, 0.13, 0.08, sx * W * 0.27, 0.43, -D * 0.12, olive, 24).rotation.x = 0.35;
+      const throwM = bx(0.3, 0.035, 0.5, W / 2 - 0.12, 0.62, -D * 0.08, olive);
+      throwM.rotation.z = -0.25;
       break;
     }
     case 'sofa_curved': {
