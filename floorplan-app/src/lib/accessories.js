@@ -108,10 +108,11 @@ function decorationsFor(item, rngSeed) {
   return out;
 }
 
-function shelfForRoom(plan, room) {
+function shelfForRoom(plan, room, furniture = []) {
   const length = 0.72;
   const depth = 0.18;
   const b = roomInside(plan, room);
+  const margin = 0.03;
   const gap = 0.005;
   const candidates = [
     { side: 'N', x: room.x + (room.w - length) / 2, y: b.y0 + gap, w: length, h: depth, facing: 'S', vertical: false },
@@ -132,7 +133,29 @@ function shelfForRoom(plan, room) {
     const itemEnd = itemStart + (isVertical ? c.h : c.w);
     return end + 0.12 <= itemStart || start - 0.12 >= itemEnd;
   });
-  const placement = candidates.find(clear);
+  const seats = furniture.filter((it) => it.room === room.id && SEATS.has(it.type));
+  const anchored = candidates.map((candidate) => {
+    const alongX = !candidate.vertical;
+    const nearest = seats
+      .map((it) => ({ it, distance: alongX ? Math.abs(center(it).y - (candidate.side === 'N' ? room.y : room.y + room.h)) : Math.abs(center(it).x - (candidate.side === 'W' ? room.x : room.x + room.w)) }))
+      .sort((a, b) => a.distance - b.distance)[0]?.it;
+    const target = nearest ? (alongX ? center(nearest).x : center(nearest).y) : (alongX ? room.x + room.w / 2 : room.y + room.h / 2);
+    const min = alongX ? room.x + length / 2 + margin : room.y + length / 2 + margin;
+    const max = alongX ? room.x + room.w - length / 2 - margin : room.y + room.h - length / 2 - margin;
+    const along = Math.max(min, Math.min(max, target));
+    const placed = { ...candidate, ...(alongX ? { x: along - length / 2 } : { y: along - length / 2 }) };
+    const anchorDistance = nearest ? Math.hypot(center(nearest).x - (placed.x + placed.w / 2), center(nearest).y - (placed.y + placed.h / 2)) : 0;
+    return { ...placed, anchorDistance };
+  });
+  const clearTallFurniture = (c) => furniture.every((it) => {
+    if (it.room !== room.id || it.decor) return true;
+    const top = it.z?.[1] ?? furnitureZ(it.type)[1];
+    if (top <= 1.48) return true;
+    const pad = 0.025;
+    return c.x + c.w + pad <= it.x || it.x + it.w + pad <= c.x || c.y + c.h + pad <= it.y || it.y + it.h + pad <= c.y;
+  });
+  const wallOptions = anchored.filter(clear).filter(clearTallFurniture);
+  const placement = wallOptions.sort((a, b) => a.anchorDistance - b.anchorDistance)[0];
   if (!placement) return null;
   return {
     id: idFor('decor-shelf', `${plan.seed || ''}:${room.id}`), type: 'wall_shelf',
@@ -174,10 +197,13 @@ function addShelfDetails(plan, shelf, list) {
   const length = shelf.mountSize?.w ?? (shelf.facing === 'E' || shelf.facing === 'W' ? shelf.h : shelf.w);
   const depth = shelf.mountSize?.h ?? (shelf.facing === 'E' || shelf.facing === 'W' ? shelf.w : shelf.h);
   if (!attached.some((it) => it.type === 'book_stack')) {
-    list.push(makeAttached(shelf, 'book_stack', 'shelf-books', -length * 0.22, 0, 0.28, 0.17, supportSurface(shelf) + 0.008, '#596c78'));
+    const booksWidth = Math.min(0.38, length * 0.52);
+    const books = makeAttached(shelf, 'book_stack', 'shelf-books', -length * 0.22, 0, booksWidth, depth * 0.94, supportSurface(shelf) + 0.002, '#596c78');
+    books.bookOrientation = 'upright';
+    list.push(books);
   }
   if (!attached.some((it) => it.type === 'led_strip')) {
-    list.push(makeAttached(shelf, 'led_strip', 'shelf-led', 0, depth * 0.32, length * 0.88, 0.025, shelf.mountHeight - 0.012, '#f1cf9d'));
+    list.push(makeAttached(shelf, 'led_strip', 'shelf-led', 0, depth * 0.32, length * 0.88, 0.025, shelf.mountHeight - 0.018, '#f1cf9d'));
   }
   return list.length !== before;
 }
@@ -216,7 +242,7 @@ export function autoDecoratePlan(plan) {
     const hasStorage = parents.some((it) => it.room === room.id && ['bookcase', 'shelving', 'shelving_heavy', 'wall_shelf'].includes(it.type));
     const hasFurniture = parents.some((it) => it.room === room.id && SEATS.has(it.type));
     if (!hasFurniture || hasStorage) continue;
-    const shelf = shelfForRoom(plan, room);
+    const shelf = shelfForRoom(plan, room, parents);
     if (!shelf) continue;
     if (!existingIds.has(shelf.id)) { list.push(shelf); existingIds.add(shelf.id); }
     addShelfDetails(plan, shelf, list);
