@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import RenderPanel from './components/RenderPanel';
 import {
   AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
-  Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
+  Cloud as CloudIcon, Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Camera, Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
@@ -44,6 +44,8 @@ import SchedulePanel from './components/SchedulePanel';
 import { buildEstimate } from './lib/estimate';
 import { scheduleFor } from './lib/schedule';
 import { readSharedProject, shareUrl } from './lib/share';
+import { cloud, cloudTokenFrom } from './lib/cloud';
+import CloudDialog from './components/CloudDialog';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
@@ -158,11 +160,18 @@ export default function App() {
 
   const consent = useConsent();
   const [cookieDialog, setCookieDialog] = useState(false);
+  const [cloudDialog, setCloudDialog] = useState(false);
   const history = usePlanHistory(consent.decided ? (consent.allowHistory ? 'on' : 'off') : 'pending');
   // progetto condiviso aperto da un link (#progetto=…): si guarda in sola lettura, finché non se ne salva una copia
   const [shared, setShared] = useState(null);
   useEffect(() => {
-    const load = () => readSharedProject().then((p) => setShared(p));
+    const load = async () => {
+      const p = await readSharedProject();
+      if (p) { setShared(p); return; }
+      const token = cloudTokenFrom();   // link in sola lettura del cloud (#cloud=…)
+      if (!token) { setShared(null); return; }
+      try { setShared(await (await cloud())?.shared(token) ?? null); } catch { setShared(null); }
+    };
     load();
     window.addEventListener('hashchange', load);
     return () => window.removeEventListener('hashchange', load);
@@ -460,7 +469,7 @@ export default function App() {
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   };
   const copyShared = () => {
-    const { id: _id, ...copy } = shared;
+    const { id: _id, cloudToken: _token, ...copy } = shared;
     closeShared();
     history.add({ ...copy, name: copy.name || 'Progetto condiviso' });
     say('Copia salvata nei tuoi progetti: ora puoi modificarla');
@@ -1613,6 +1622,9 @@ export default function App() {
           {engine.status === 'error' && (
             <button type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</button>
           )}
+          <button type="button" className="pf-mini" onClick={() => setCloudDialog(true)} title="Account e progetti sul cloud">
+            <CloudIcon size={14} /> <span className="pf-tl-mobile">Cloud</span>
+          </button>
           <button type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
             <Cookie size={14} /> <span className="pf-tl-mobile">Cookie</span>
           </button>
@@ -2411,6 +2423,11 @@ export default function App() {
           onNecessaryOnly={() => saveConsent({ history: false, analytics: false })}
           onCustomize={() => setCookieDialog(true)}
         />
+      )}
+      {cloudDialog && (
+        <CloudDialog project={current} readOnly={readOnly} onClose={() => setCloudDialog(false)} say={say}
+          onSaved={(patch) => current && history.update(current.id, (p) => ({ ...p, ...patch }))}
+          onOpen={(p) => { closeShared(); history.add(p); }} />
       )}
       {cookieDialog && (
         <CookieDialog consent={consent.consent} onSave={saveConsent} onClose={() => setCookieDialog(false)} />

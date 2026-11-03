@@ -144,3 +144,13 @@ test('sensori, impianto e luci compaiono nel 3D quando sono calcolati', async ({
   await expect(sensors).toHaveAttribute('aria-pressed', 'false');
   expect(errors).toEqual([]);
 });
+
+test('il pannello Cloud si apre e dice che non è collegato', async ({ page }) => {
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Cloud/ }).click();
+  const dialog = page.getByRole('dialog', { name: /Cloud/ });
+  await expect(dialog).toContainText('non è ancora collegato');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  expect(errors.filter((e) => !/ERR_CONNECTION|Failed to load resource/.test(e))).toEqual([]);
+});

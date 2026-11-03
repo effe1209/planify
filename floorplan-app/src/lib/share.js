@@ -19,8 +19,8 @@ async function pipe(bytes, stream) {
 }
 
 /* Solo ciò che serve a vedere il progetto: piani con piante e impostazioni di impianti e preventivo. */
-export async function shareUrl(project) {
-  const data = {
+export function sharePayload(project) {
+  return {
     v: 1,
     name: project.name || '',
     activeFloor: project.activeFloor,
@@ -30,6 +30,18 @@ export async function shareUrl(project) {
     ...(project.plumbing && { plumbing: project.plumbing }),
     ...(project.estimate && { estimate: project.estimate }),
   };
+}
+
+/* Il progetto da un payload (null se non ha piani); `id` di chi lo apre, di serie 'shared'. */
+export function projectFromPayload(data, id = 'shared') {
+  if (!data || !Array.isArray(data.floors) || !data.floors.length) return null;
+  return { id, name: data.name, floors: data.floors, activeFloor: data.activeFloor || data.floors[0].id,
+    ...(data.security && { security: data.security }), ...(data.electric && { electric: data.electric }),
+    ...(data.plumbing && { plumbing: data.plumbing }), ...(data.estimate && { estimate: data.estimate }) };
+}
+
+export async function shareUrl(project) {
+  const data = sharePayload(project);
   const packed = await pipe(new TextEncoder().encode(JSON.stringify(data)), new CompressionStream('deflate-raw'));
   const url = new URL(window.location.href);
   url.hash = `${SHARE_KEY}=${toB64url(packed)}`;
@@ -43,10 +55,7 @@ export async function readSharedProject(hash = window.location.hash) {
   try {
     const raw = await pipe(fromB64url(m[1]), new DecompressionStream('deflate-raw'));
     const data = JSON.parse(new TextDecoder().decode(raw));
-    if (!Array.isArray(data.floors) || !data.floors.length) return null;
-    return { id: 'shared', name: data.name, floors: data.floors, activeFloor: data.activeFloor || data.floors[0].id,
-      ...(data.security && { security: data.security }), ...(data.electric && { electric: data.electric }),
-      ...(data.plumbing && { plumbing: data.plumbing }), ...(data.estimate && { estimate: data.estimate }) };
+    return projectFromPayload(data);
   } catch {
     return null;
   }
