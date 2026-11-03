@@ -73,17 +73,15 @@ export function themeWithPalette(theme, palette, materials = null) {
 /* Il kit dei materiali 3D dello stile con la palette (pareti, facciata, pavimenti dei locali asciutti). */
 export function kitWithPalette(kit, palette) {
   const p = cleanPalette(palette);
+  if (!p) return kit;
   const out = { ...kit };
-  if (p?.walls) out.wallIn = { ...kit.wallIn, color: p.walls, tone: shade(p.walls, 0.07) };
-  if (p?.facade) {
+  if (p.walls) out.wallIn = { ...kit.wallIn, color: p.walls, tone: shade(p.walls, 0.07) };
+  if (p.facade) {
     // mattoni, doghe e travertino hanno la loro seconda tinta (malta, fughe): si cambia solo il colore principale
     const flat = ['stucco', 'concrete', 'woodlap', 'logwall', 'cladding'].includes(kit.facade.tex);
     out.facade = { ...kit.facade, color: p.facade, ...(flat && { tone: shade(p.facade, 0.1) }) };
   }
-  if (p?.floor) out.floor = { ...kit.floor, a: p.floor, b: shade(p.floor, 0.07), joint: shade(p.floor, 0.3) };
-  // Il tetto conserva il materiale dello stile, ma ne riprende una parte del sottotono del pavimento.
-  const floorTone = p?.floor || kit.floor?.a;
-  if (floorTone && kit.roof) out.roof = { ...kit.roof, color: mix(kit.roof.color, floorTone, 0.4), tone: mix(kit.roof.tone, floorTone, 0.3) };
+  if (p.floor) out.floor = { ...kit.floor, a: p.floor, b: shade(p.floor, 0.07), joint: shade(p.floor, 0.3) };
   return out;
 }
 

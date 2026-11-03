@@ -326,26 +326,21 @@ function paint(kind, a, b, c) {
       speckle(700, '#000000', '#ffffff', 1.4, 0.08);
       break;
     }
-    case 'shingleroof': {   // scandole di legno: file ampie, sfalsate e con ombre morbide
-      const rh = 26;
-      const rw = 38;
+    case 'shingleroof': {   // scandole di legno: file sfalsate, giunti scuri, venature e ombra sotto ogni fila
+      const rh = 24;
+      const rw = 40;
+      g.fillStyle = css(hex(b), 0.9);
+      g.fillRect(0, 0, N, N);
       for (let r = 0; r * rh < N + rh; r++) {
-        for (let q = -1; q * rw < N; q++) {
+        for (let q = -1; q * rw < N + rw; q++) {
           const x = q * rw + (r % 2 ? rw / 2 : 0);
-          g.fillStyle = css(mix(a, b, 0.18 + rnd() * 0.3));
-          g.beginPath();
-          g.roundRect(x + 0.7, r * rh - 8, rw - 1.4, rh + 8, [0, 0, 8, 8]);
-          g.fill();
-          g.fillStyle = css(hex('#ffffff'), 0.12);
-          g.fillRect(x + 1, r * rh - 7, rw - 2, 1);
-          g.fillStyle = css(hex(b), 0.24);
-          g.fillRect(x + 0.7, r * rh + rh - 2, rw - 1.4, 1.5);
-          g.strokeStyle = css(hex(b), 0.12);
-          g.lineWidth = 0.7;
-          g.beginPath();
-          g.moveTo(x + 5, r * rh + rh * (0.35 + rnd() * 0.2));
-          g.lineTo(x + rw - 5, r * rh + rh * (0.35 + rnd() * 0.2));
-          g.stroke();
+          const y = r * rh;
+          g.fillStyle = css(mix(a, b, rnd() * 0.6));
+          g.fillRect(x + 1.2, y, rw - 2.4, rh - 1.5);
+          g.fillStyle = css(hex(b), 0.16);
+          for (let k = 0; k < 4; k++) g.fillRect(x + 3 + rnd() * (rw - 7), y, 0.9, rh - 2);
+          g.fillStyle = css(hex('#000000'), 0.28);
+          g.fillRect(x + 1.2, y + rh - 4.5, rw - 2.4, 3);
         }
       }
       break;

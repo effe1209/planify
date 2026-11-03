@@ -706,7 +706,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   }
   // casa in legno: pilastri, travi a vista e portico (nella casa intera li mette buildHouse, una volta sola)
   if (timber && theme.materials?.structure === 'wood') {
-    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beamColor: kit.wallIn.color, postColor: kit.wallIn.color, beams: timberBeams, porch: theme.materials.porch !== false }));
+    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, roofMaterial: K.roof, beamColor: kit.wallIn.color, postColor: kit.wallIn.color, beams: timberBeams, porch: theme.materials.porch !== false }));
   }
   return root;
 }
@@ -870,7 +870,8 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
       const floorKit = styleKit(floorTheme.id, floorTheme.palette, floorTheme.materials);
       return { plan: f.plan, y: quota(f.level), beamColor: floorKit.wallIn.color, postColor: floorKit.wallIn.color };
     });
-    house.add(buildTimber(THREE, timberFloors, { roofColor: homeKit.roof.color, beamColor: homeKit.wallIn.color, postColor: homeKit.wallIn.color, beams: timberBeams, porch: homeTheme.materials.porch !== false }));
+    const roofMaterial = kitMaterials(THREE, (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra }), homeKit).roof;
+    house.add(buildTimber(THREE, timberFloors, { roofColor: homeKit.roof.color, roofMaterial, beamColor: homeKit.wallIn.color, postColor: homeKit.wallIn.color, beams: timberBeams, porch: homeTheme.materials.porch !== false }));
   }
   // soffitto del piano più alto (render): senza, da dentro si vedrebbe il tetto da sotto o il cielo; i piani sotto hanno già il solaio sopra
   if (ceiling) {
@@ -987,7 +988,9 @@ export function buildRoof(THREE, plan, y, opts = {}) {
   const { type, slope, overhang, style, palette = null, materials = null } = { ...ROOF_DEFAULTS, ...opts };
   const g = new THREE.Group();
   g.name = 'tetto';
-  g.position.y = y;
+  // i muri sono centrati sul perimetro: la loro metà esterna resterebbe sotto la falda e la cima spunterebbe; si alza il tetto di quanto basta
+  const lift = (plan.wallThickness || 10) / (plan.scale || 50) / 2 * Math.tan((slope * Math.PI) / 180) + 0.01;
+  g.position.y = y + (type === 'flat' ? 0 : lift);
   const kit = styleKit(style, palette, materials);
   const mk = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
   const roofMaterials = kitMaterials(THREE, mk, kit);
@@ -1038,7 +1041,14 @@ export function buildRoof(THREE, plan, y, opts = {}) {
     // Coordinate metriche sul piano inclinato: evita texture stirate e giunte diagonali tra le due falde.
     makeMesh(tris.slice(0, 4), roofMaterials.roof, (x, _y, z) => alongX ? [x, Math.abs(z - ridge) / slopeCos] : [z, Math.abs(x - ridge) / slopeCos]);
     const capEdges = alongX ? ['x0', 'x1'] : ['y0', 'y1'];
-    const caps = tris.slice(4).filter((_, i) => !shared[capEdges[i]]);
+    // il timpano scende fino alla cima del muro (sotto la falda alzata): niente fessura tra muro e tetto
+    const caps = tris.slice(4).filter((_, i) => !shared[capEdges[i]]).flatMap((tri) => {
+      const k = tri.findIndex((p) => p[1] > 0);   // il vertice del colmo; la rotazione ciclica conserva il verso della faccia
+      const [a, b, c] = [tri[(k + 1) % 3], tri[(k + 2) % 3], tri[k]];
+      const lo = (p) => [p[0], -lift - 0.01, p[2]];
+      const up = (p) => [p[0], 0, p[2]];
+      return [[lo(a), lo(b), up(b)], [lo(a), up(b), c], [lo(a), c, up(a)]];
+    });
     // I timpani sono parete esterna, non scandole; i lati condivisi con un'altra ala restano aperti.
     makeMesh(caps, roofMaterials.facade, (x, y, z) => alongX ? [z, y] : [x, y]);
   }

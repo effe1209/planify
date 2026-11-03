@@ -4,6 +4,7 @@
  * (lib/scene3d.js, rafterTails). Misure in metri, coordinate della pianta (x, quota, z = y della pianta).
  */
 import { roofWings } from './roof';
+import { uvMeters } from './style3d';
 
 const WALL_T = 0.2;
 const BEAM_ROOMS = new Set(['living', 'living_kitchen', 'open', 'kitchen', 'dining', 'bed', 'master', 'study']);
@@ -44,12 +45,12 @@ function cornerPosts(THREE, group, mat, plan, y0, H) {
   }
 }
 
-/* Travi a vista: una ogni ~1,2 m lungo il lato maggiore del locale, appena sotto il soffitto, dentro i muri interni (non li attraversano).
+/* Travi a vista: una ogni ~1,5 m lungo il lato maggiore del locale, appena sotto il soffitto, dentro i muri interni (non li attraversano).
    Layer TRAVI: nella pianta 3D dall'alto si tolgono con il tetto. I locali sotto il soppalco restano senza (il suo solaio è già il soffitto). */
 function ceilingBeams(THREE, group, mat, plan, y0, H) {
   const mz = plan.mezzanine;
   const half = (plan.wallThickness || 10) / (plan.scale || 50) / 2;   // metà spessore dei muri
-  const bh = 0.2;
+  const bh = 0.14;
   for (const r of plan.rooms) {
     if (r.kind === 'garden' || r.poly || !BEAM_ROOMS.has(r.kind) || r.w * r.h < 8) continue;
     const cx = r.x + r.w / 2;
@@ -58,18 +59,18 @@ function ceilingBeams(THREE, group, mat, plan, y0, H) {
     const alongX = r.w >= r.h;                    // le travi attraversano il lato corto
     const long = alongX ? r.w : r.h;
     const span = (alongX ? r.h : r.w) - 2 * half - 0.03;
-    const n = Math.max(2, Math.round(long / 1.2) - 1);
+    const n = Math.max(2, Math.round(long / 1.5) - 1);
     for (let i = 1; i <= n; i++) {
       const t = (long * i) / (n + 1);
       const y = y0 + H - bh - 0.03;
-      if (alongX) add(THREE, group, mat, [0.16, bh, span], [r.x + t, y, cy], 'TRAVI');
-      else add(THREE, group, mat, [span, bh, 0.16], [cx, y, r.y + t], 'TRAVI');
+      if (alongX) add(THREE, group, mat, [0.1, bh, span], [r.x + t, y, cy], 'TRAVI');
+      else add(THREE, group, mat, [span, bh, 0.1], [cx, y, r.y + t], 'TRAVI');
     }
   }
 }
 
 /* Portico davanti al portoncino: deck, due pilastri, trave e tettoia a una falda. */
-function porch(THREE, group, wood, roofColor, plan, y0) {
+function porch(THREE, group, wood, roofColor, roofMaterial, plan, y0) {
   const door = plan.doors.find((d) => d.entrance && !d.kind);
   if (!door || !plan.rooms.some((r) => r.kind !== 'garden')) return;
   const { width: W, length: L } = plan.dimensions;
@@ -84,17 +85,18 @@ function porch(THREE, group, wood, roofColor, plan, y0) {
   const g = new THREE.Group();                    // locale: fuori = +z, lungo il muro = x
   const post = woodMat(THREE, '#6b4a2e');
   const deck = woodMat(THREE, '#9a7650', 0.85);
-  const H = 2.55;
+  const H = 2.1;
   add(THREE, g, deck, [pw, 0.1, D], [0, 0, D / 2], 'STRUTTURA');
   for (const sx of [-1, 1]) add(THREE, g, post, [0.16, H, 0.16], [sx * (pw / 2 - 0.12), 0.1, D - 0.14], 'STRUTTURA');
-  add(THREE, g, post, [pw, 0.2, 0.2], [0, 0.1 + H, D - 0.14], 'STRUTTURA');
-  // tettoia: scende dal muro (2,95 m) verso l'esterno
-  const rise = 0.4;
-  const len = Math.hypot(D + 0.3, rise);
-  const roofMat = new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.85 });
-  const slab = add(THREE, g, roofMat, [pw + 0.3, 0.08, len], [0, 0, 0], 'TETTO');
-  slab.position.set(0, 0.1 + H + 0.2 + rise / 2, (D + 0.15) / 2 - 0.1);
-  slab.rotation.x = Math.atan2(rise, D + 0.3);
+  add(THREE, g, post, [pw, 0.16, 0.2], [0, 0.1 + H, D - 0.14], 'STRUTTURA');
+  // tettoia: sta sotto la gronda del tetto (che sporge di 0,4 m e resta a circa 2,5 m), quasi piana e con un filo di pendenza verso l'esterno
+  const rise = 0.08;
+  const reach = D + 0.15;
+  const roofMat = roofMaterial || new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.85 });
+  const slab = add(THREE, g, roofMat, [pw + 0.3, 0.06, Math.hypot(reach, rise)], [0, 0, 0], 'TETTO');
+  uvMeters(slab.geometry, pw + 0.3, 0.06, Math.hypot(reach, rise));
+  slab.position.set(0, 0.1 + H + 0.19 + (D - 0.14 - reach / 2) * (rise / reach), reach / 2);
+  slab.rotation.x = Math.atan2(rise, reach);
   for (const sx of [-1, 1]) {                      // due saette
     add(THREE, g, post, [0.09, 0.09, 0.9], [sx * (pw / 2 - 0.12), 0.1 + H - 0.5, D - 0.6], 'STRUTTURA', [Math.PI / 4, 0, 0]);
   }
@@ -110,7 +112,7 @@ function porch(THREE, group, wood, roofColor, plan, y0) {
  * Tutta la struttura in legno: `floors` = [{ plan, y }] (y = quota del piano). Il portico va sul piano più basso con un portoncino
  * al livello della strada. Ritorna un gruppo (vuoto se non c'è niente da fare).
  */
-export function buildTimber(THREE, floors, { roofColor = '#a98558', beamColor = '#8a6540', postColor = '#6b4a2e', beams = true, porch: withPorch = true } = {}) {
+export function buildTimber(THREE, floors, { roofColor = '#a98558', roofMaterial = null, beamColor = '#8a6540', postColor = '#6b4a2e', beams = true, porch: withPorch = true } = {}) {
   const g = new THREE.Group();
   g.name = 'STRUTTURA_LEGNO';
   for (const f of floors) {
@@ -122,7 +124,7 @@ export function buildTimber(THREE, floors, { roofColor = '#a98558', beamColor = 
   }
   const ground = [...floors].sort((a, b) => a.y - b.y).find((f) => f.plan.doors?.some((d) => d.entrance && !d.kind));
   const groundPost = ground ? woodMat(THREE, ground.postColor || postColor) : woodMat(THREE, postColor);
-  if (ground && withPorch) porch(THREE, g, groundPost, roofColor, ground.plan, ground.y);
+  if (ground && withPorch) porch(THREE, g, groundPost, roofColor, roofMaterial, ground.plan, ground.y);
   return g;
 }
 
