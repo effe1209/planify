@@ -110,7 +110,7 @@ function porch(THREE, group, wood, roofColor, plan, y0) {
  * Tutta la struttura in legno: `floors` = [{ plan, y }] (y = quota del piano). Il portico va sul piano più basso con un portoncino
  * al livello della strada. Ritorna un gruppo (vuoto se non c'è niente da fare).
  */
-export function buildTimber(THREE, floors, { roofColor = '#a98558', beams = true } = {}) {
+export function buildTimber(THREE, floors, { roofColor = '#a98558', beams = true, porch: withPorch = true } = {}) {
   const g = new THREE.Group();
   g.name = 'STRUTTURA_LEGNO';
   const beam = woodMat(THREE, '#8a6540');
@@ -121,7 +121,7 @@ export function buildTimber(THREE, floors, { roofColor = '#a98558', beams = true
     if (beams) ceilingBeams(THREE, g, beam, f.plan, f.y, H);
   }
   const ground = [...floors].sort((a, b) => a.y - b.y).find((f) => f.plan.doors?.some((d) => d.entrance && !d.kind));
-  if (ground) porch(THREE, g, post, roofColor, ground.plan, ground.y);
+  if (ground && withPorch) porch(THREE, g, post, roofColor, ground.plan, ground.y);
   return g;
 }
 

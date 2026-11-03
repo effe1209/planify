@@ -16,6 +16,18 @@ export function rugsFor(plan) {
     const room = rooms.get(it.room);
     if (!room || it.elev) continue;
     let rug = null;
+    if (it.type === 'sofa_round' || it.type === 'sofa_curved') {
+      // tappeto tondo di juta sotto il divano piccolo, spostato verso la parte aperta
+      const d = Math.max(it.w, it.h) * 1.4;
+      const f = it.facing || 'S';
+      const cx = it.x + it.w / 2 + (f === 'E' ? 0.3 : f === 'W' ? -0.3 : 0);
+      const cy = it.y + it.h / 2 + (f === 'S' ? 0.3 : f === 'N' ? -0.3 : 0);
+      const r = { x: cx - d / 2, y: cy - d / 2, w: d, h: d, round: true };
+      const fits = r.x >= room.x + 0.1 && r.y >= room.y + 0.1 && r.x + d <= room.x + room.w - 0.1 && r.y + d <= room.y + room.h - 0.1;
+      const inPoly = !room.poly || [[r.x, r.y], [r.x + d, r.y], [r.x + d, r.y + d], [r.x, r.y + d]].every((p) => pointInPolygon(p, room.poly));
+      if (fits && inPoly) out.push(r);
+      continue;
+    }
     if (it.type === 'rug') {
       rug = { x: it.x, y: it.y, w: it.w, h: it.h };
     } else if (it.type === 'coffee_table') {

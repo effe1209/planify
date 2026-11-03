@@ -1,7 +1,21 @@
 /* Tappeti disegnati con la trama dello stile (lib/themes.js: rug, rugLine, accent). */
 
 /* Tappeto con la trama dello stile e le frange sui lati corti. */
-export default function Rug({ x, y, w, h, t }) {
+export default function Rug({ x, y, w, h, t, round }) {
+  if (round) {
+    // tappeto tondo di juta: cerchi concentrici intrecciati, bordo scuro
+    const r = Math.min(w, h) / 2;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={r} fill="#d9c7a1" stroke="#a48f66" strokeWidth="1" />
+        {[0.86, 0.7, 0.54, 0.38, 0.22].map((k) => (
+          <circle key={k} cx={cx} cy={cy} r={r * k} fill="none" stroke="#a48f66" strokeOpacity="0.45" strokeWidth="0.8" />
+        ))}
+      </g>
+    );
+  }
   const horiz = w >= h;
   const fr = [];
   const n = Math.round((horiz ? h : w) / 3);

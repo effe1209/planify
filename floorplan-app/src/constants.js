@@ -123,6 +123,8 @@ export const FURNITURE = [
   { id: 'table', type: 'table', label: 'Tavolo rettangolare', w: 1.6, h: 0.9, group: 'Giorno' },
   { id: 'chair_design', type: 'chair_design', label: 'Sedia di design (interno)', w: 0.5, h: 0.5, group: 'Giorno' },
   { id: 'chair_outdoor', type: 'chair_outdoor', label: 'Sedia di design da esterno', w: 0.6, h: 0.6, group: 'Giorno' },
+  { id: 'armchair_rattan', type: 'armchair_rattan', label: 'Poltrona in rattan da esterno', w: 0.75, h: 0.75, group: 'Giorno' },
+  { id: 'table_rattan', type: 'table_rattan', label: 'Tavolino in rattan con piano in marmo', w: 0.6, h: 0.6, group: 'Giorno' },
   { id: 'table_round', type: 'table_round', label: 'Tavolo tondo', w: 1.1, h: 1.1, group: 'Giorno' },
   { id: 'table_round_small', type: 'table_round', label: 'Tavolino tondo', w: 0.8, h: 0.8, group: 'Giorno' },
   { id: 'kitchen_counter', type: 'kitchen_counter', label: 'Piano cucina', w: 2.4, h: 0.6, group: 'Cucina' },
@@ -162,7 +164,7 @@ export const FURNITURE = [
 ];
 export const FURNITURE_LABEL = {
   rug: 'Tappeto', bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', office_chair: 'Sedia da ufficio', sofa: 'Divano',
-  sofa_corner: 'Divano angolare', sofa_round: 'Divano tondo', sofa_curved: 'Divano ad arco', chair_design: 'Sedia di design', chair_outdoor: 'Sedia da esterno',
+  sofa_corner: 'Divano angolare', sofa_round: 'Divano tondo', sofa_curved: 'Divano ad arco', chair_design: 'Sedia di design', chair_outdoor: 'Sedia da esterno', armchair_rattan: 'Poltrona in rattan', table_rattan: 'Tavolino in rattan',
   wardrobe_corner: 'Armadio ad angolo', wardrobe_open: 'Armadio aperto', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
   table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola',
   shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',

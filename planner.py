@@ -1526,27 +1526,27 @@ def furnish_service(P: Placer, room: Room):
 
 
 def furnish_balcony(P: Placer, room: Room):
-    """Balcone: un tavolino tondo con due sedie da esterno di design, una pianta in un angolo se resta posto."""
+    """Balcone: un tavolino tondo in rattan con due poltrone in rattan, una pianta in un angolo se resta posto."""
     inn = P.inner(room)
     if inn.w < 1.2 or inn.h < 0.9:
         return
-    tw = 0.7 if inn.h >= 1.3 else 0.6
+    tw = 0.6
     along_x = inn.w >= inn.h
     cx, cy = inn.cx, inn.cy
     table = Rect(snap(cx - tw / 2), snap(cy - tw / 2), tw, tw)
-    P._put(room, "table_round", table, 0.0, None, "S")
-    chair = 0.55
+    P._put(room, "table_rattan", table, 0.0, None, "S")
+    chair = 0.7
     if along_x:
         # sedie ai due lati del tavolino, rivolte verso di lui
         for dx, face in ((-(tw / 2 + chair + 0.05), "E"), (tw / 2 + 0.05, "W")):
             r = Rect(snap(cx + dx), snap(cy - chair / 2), chair, chair)
             if inn.x - EPS <= r.x and r.x2 <= inn.x2 + EPS and inn.y - EPS <= r.y and r.y2 <= inn.y2 + EPS:
-                P._put(room, "chair_outdoor", r, 0.0, None, face)
+                P._put(room, "armchair_rattan", r, 0.0, None, face)
     else:
         for dy, face in ((-(tw / 2 + chair + 0.05), "S"), (tw / 2 + 0.05, "N")):
             r = Rect(snap(cx - chair / 2), snap(cy + dy), chair, chair)
             if inn.x - EPS <= r.x and r.x2 <= inn.x2 + EPS and inn.y - EPS <= r.y and r.y2 <= inn.y2 + EPS:
-                P._put(room, "chair_outdoor", r, 0.0, None, face)
+                P._put(room, "armchair_rattan", r, 0.0, None, face)
     P.place_free(room, "plant", 0.45, 0.45, near=(inn.x2 - 0.3, inn.y + 0.3), gap=0.1, step=0.1)
 
 

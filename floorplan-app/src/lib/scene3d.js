@@ -20,7 +20,7 @@ const SLAB_T = 0.3;   // solaio tra un piano e l'altro
 const SHAPES = {
   sofa: [0.8, 'fabric'], sofa_corner: [0.8, 'fabric'], armchair: [0.8, 'fabric'], bed: [0.55, 'duvet'],
   nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], wardrobe_corner: [2.2, 'cabinet'], wardrobe_open: [2.1, 'cabinet'],
-  sofa_round: [0.8, 'fabric'], sofa_curved: [0.8, 'fabric'], chair_design: [0.82, 'wood'], chair_outdoor: [0.85, 'wood'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
+  sofa_round: [0.8, 'fabric'], sofa_curved: [0.8, 'fabric'], chair_design: [0.82, 'wood'], chair_outdoor: [0.85, 'wood'], armchair_rattan: [0.8, 'wood'], table_rattan: [0.5, 'wood'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
   kitchen_peninsula: [0.9, 'counter'], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
   shoe_cabinet: [1.0, 'cabinet'], console: [0.8, 'wood'], floor_lamp: [1.6, 'lamp'], plant: [1.0, 'plant'],
@@ -108,7 +108,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     }
     const color = r.kind === 'garden' ? '#b9d6a8' : r.kind === 'garage' ? '#c9ccd1' : r.color || '#f5f5f5';
     // pavimento dello stile: listoni, spina di pesce o cemento nelle zone abitate, piastrelle o marmo nei bagni
-    const floorMat = r.kind === 'garden' || r.kind === 'garage' ? mat(color) : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color);
+    const floorMat = r.kind === 'garden' || r.kind === 'garage' ? mat(color) : r.kind === 'balcony' ? K.deck : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color);
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.002;
@@ -445,6 +445,15 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   // tappeti: sotto il tavolino, ai piedi del letto e quelli messi a mano, bassi e col colore dello stile
   const rugMat = mat(theme.rug || '#e6ebf2', { roughness: 1 });
   for (const r of rugsFor(plan)) {
+    if (r.round) {
+      const jute = mat('#d9c7a1', { roughness: 1 });
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(r.w / 2, r.w / 2, 0.012, 48), jute);
+      disc.position.set(r.x + r.w / 2, 0.01, r.y + r.h / 2);
+      disc.receiveShadow = true;
+      disc.userData.layer = 'ARREDI';
+      root.add(disc);
+      continue;
+    }
     const m = box(r.x, r.y, r.w, r.h, 0.004, 0.012, rugMat);
     if (m) m.userData.layer = 'ARREDI';
   }
@@ -613,7 +622,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   }
   // casa in legno: pilastri, travi a vista e portico (nella casa intera li mette buildHouse, una volta sola)
   if (timber && theme.materials?.structure === 'wood') {
-    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beams: false }));
+    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beams: false, porch: theme.materials.porch !== false }));
   }
   return root;
 }
@@ -771,7 +780,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   // casa in legno: pilastri d'angolo, travi a vista e portico, una volta per tutta la casa
   const homeTheme = themeFor(floors.find((f) => f.level === 0) || floors[0]);
   if (homeTheme.materials?.structure === 'wood') {
-    house.add(buildTimber(THREE, floors.map((f) => ({ plan: f.plan, y: quota(f.level) })), { roofColor: styleKit(homeTheme.id, homeTheme.palette, homeTheme.materials).roof.color, beams: ceiling }));
+    house.add(buildTimber(THREE, floors.map((f) => ({ plan: f.plan, y: quota(f.level) })), { roofColor: styleKit(homeTheme.id, homeTheme.palette, homeTheme.materials).roof.color, beams: ceiling, porch: homeTheme.materials.porch !== false }));
   }
   // soffitto del piano più alto (render): senza, da dentro si vedrebbe il tetto da sotto o il cielo; i piani sotto hanno già il solaio sopra
   if (ceiling) {
