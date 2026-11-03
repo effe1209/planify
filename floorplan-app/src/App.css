@@ -804,3 +804,8 @@
 .pf-dxflayers-name em { font-style: normal; color: var(--text-muted); font-size: 11px; margin-left: 4px; }
 .pf-dxflayers-list select { font: inherit; font-size: 12px; max-width: 150px; }
 @media (max-width: 720px) { .pf-dxflayers-body { grid-template-columns: 1fr; } }
+
+/* arredo selezionato: colore */
+.pf-item-color { display: grid; gap: 6px; margin: 8px 0; }
+.pf-item-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pf-item-swatches input[type="color"] { width: 28px; height: 28px; padding: 0; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: none; }

@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, DoorOpen, FlipHorizontal2, Merge, PanelTop, RectangleHorizontal, Scissors, Trash2, Unlink, X } from 'lucide-react';
+import { useState } from 'react';
+import { Spline, Undo2, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, DoorOpen, FlipHorizontal2, Merge, PanelTop, RectangleHorizontal, Scissors, Trash2, Unlink, X } from 'lucide-react';
 import { canMerge, checkStair, openingLine, runOf, stairRoom } from '../lib/walls';
 import { PANORAMIC_MAX, isPanoramic } from '../lib/openings';
 
@@ -39,7 +40,7 @@ export function EditTools({ addMode, splitDir, onAdd, onSplitDir }) {
 /* Comandi della modifica diretta (compare con la modifica attiva): aggiungere, dividere, e regolare l'elemento selezionato. */
 export default function EditPlanPanel({
   plan, selected, selectedWall, selectedStair, stairsHere, warning,
-  onResize, onFlip, onRemove, onClose, onMerge, onOpenWall, onStair, onCloseWall, onCloseStair, onType,
+  onResize, onFlip, onRemove, onClose, onMerge, onOpenWall, onStair, onCloseWall, onCloseStair, onType, onColor, onCurve, onStraighten, curving,
 }) {
   const o = selected ? (selected.kind === 'door' ? plan.doors : plan.windows)[selected.index] : null;
   const run = o ? runOf(plan, o) : null;
@@ -56,6 +57,7 @@ export default function EditPlanPanel({
       <h2>Modifica pianta</h2>
       {idle && <p className="pf-tip">Trascina un muro (in verde) per cambiare la misura dei locali, anche quelli esterni. Un clic lo seleziona. Annulla con Ctrl/Cmd+Z.</p>}
       {warning && <p className="pf-warn" role="alert">{warning}</p>}
+      {idle && onCurve && <CurveCard plan={plan} onCurve={onCurve} onStraighten={onStraighten} busy={curving} />}
 
       {selectedWall && (
         <div className="pf-editcard">
@@ -122,6 +124,16 @@ export default function EditPlanPanel({
               ))}
             </div>
           )}
+          {onColor && (
+            <div className="pf-minirow">
+              <label className="pf-miniinput">
+                <span>Colore</span>
+                <input type="color" value={/^#[0-9a-f]{6}$/i.test(o.color || '') ? o.color : '#ffffff'} aria-label="Colore dell'infisso o della porta"
+                  onChange={(e) => onColor(e.target.value)} />
+              </label>
+              {o.color && <button type="button" className="pf-minibtn" onClick={() => onColor(null)} title="Torna al colore dello stile">Stile</button>}
+            </div>
+          )}
           <div className="pf-minirow">
             <label className="pf-miniinput">
               <span>Larghezza</span>
@@ -137,5 +149,66 @@ export default function EditPlanPanel({
         </div>
       )}
     </section>
+  );
+}
+
+const SIDES = [['N', 'Alto'], ['S', 'Basso'], ['W', 'Sinistra'], ['E', 'Destra']];
+
+/* Facciata curva: lato (come sulla pianta), freccia dell'arco e, se serve, solo un tratto del lato. */
+function CurveCard({ plan, onCurve, onStraighten, busy }) {
+  const [side, setSide] = useState('S');
+  const [bulge, setBulge] = useState(1.2);
+  const [partial, setPartial] = useState(false);
+  const full = side === 'N' || side === 'S' ? plan.dimensions.width : plan.dimensions.length;
+  const [from, setFrom] = useState(0);
+  const [to, setTo] = useState(null);
+  const hi = to ?? full;
+  const curved = !!plan.curve;
+  return (
+    <div className="pf-editcard">
+      <header><span>{curved ? `Facciata curva · ${SIDES.find(([v]) => v === plan.curve.side)?.[1] || ''}` : 'Curva una facciata'}</span></header>
+      {curved ? (
+        <div className="pf-minirow">
+          <button type="button" className="pf-minibtn" disabled={!onStraighten} onClick={onStraighten}
+            title="Torna alla pianta dritta com'era prima della curva (le modifiche fatte dopo si perdono; Annulla le recupera)">
+            <Undo2 size={12} /> Raddrizza
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="pf-seg pf-seg-small" role="radiogroup" aria-label="Lato da curvare">
+            {SIDES.map(([v, text]) => (
+              <button key={v} type="button" role="radio" aria-checked={side === v} className={side === v ? 'is-on' : ''}
+                onClick={() => { setSide(v); setTo(null); setFrom(0); }}>{text}</button>
+            ))}
+          </div>
+          <div className="pf-minirow">
+            <label className="pf-miniinput">
+              <span>Freccia</span>
+              <input type="number" min="0.2" max="3" step="0.1" value={bulge} aria-label="Freccia dell'arco in metri"
+                onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) setBulge(v); }} />
+              <em>m</em>
+            </label>
+            <label className="pf-check"><input type="checkbox" checked={partial} onChange={(e) => setPartial(e.target.checked)} /><span>Solo un tratto</span></label>
+          </div>
+          {partial && (
+            <div className="pf-minirow">
+              <label className="pf-miniinput"><span>Da</span>
+                <input type="number" min="0" max={full} step="0.1" value={from} aria-label="Inizio del tratto in metri"
+                  onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) setFrom(v); }} /><em>m</em></label>
+              <label className="pf-miniinput"><span>A</span>
+                <input type="number" min="0" max={full} step="0.1" value={+hi.toFixed(2)} aria-label="Fine del tratto in metri"
+                  onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) setTo(v); }} /><em>m</em></label>
+            </div>
+          )}
+          <div className="pf-minirow">
+            <button type="button" className="pf-minibtn" disabled={busy} onClick={() => onCurve({ side, bulge, ...(partial && { a0: from, a1: hi }) })}>
+              <Spline size={12} /> {busy ? 'Curvo…' : 'Curva'}
+            </button>
+          </div>
+          <p className="pf-tip">Muri, stanze, porte e finestre seguono l'arco; la pianta cresce della freccia. Una sola facciata per piano.</p>
+        </>
+      )}
+    </div>
   );
 }

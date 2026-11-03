@@ -35,7 +35,7 @@ app = FastAPI(
 # Aggiungerne una qui quando il motore impara a gestire un nuovo filtro.
 FEATURES = ["room_program", "kitchen_mode", "peninsula", "furniture_v2", "dxf_import", "dxf_export", "dxf_layers", "curved_facade",
             "needs", "design_review", "garage", "garden", "laundry", "stairs", "floor_program", "house", "garage_stairs", "wet_align",
-            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "open_stairs", "loft_type"]
+            "garden_house", "street_garage", "pdf_import", "catasto_import", "loft_mezzanine", "furnish_plan", "curve_plan", "open_stairs", "loft_type"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -400,6 +400,25 @@ def dxf_layers_endpoint(req: DxfLayersRequest):
         return layer_info(req.dxf_content)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Errore nella lettura dei layer: {e}")
+
+
+class CurveRequest(BaseModel):
+    plan: Dict[str, Any]
+    side: str                                   # facciata: N, S, E, W
+    bulge: float                                # freccia dell'arco in metri
+    a0: Optional[float] = None                  # tratto da incurvare (m lungo il lato); vuoto = tutta la facciata
+    a1: Optional[float] = None
+
+
+@app.post("/curve-plan")
+def curve_plan_endpoint(req: CurveRequest):
+    """Incurva una facciata di una pianta già fatta (muri, stanze, porte e finestre seguono l'arco)."""
+    try:
+        return planner.curve_plan(req.plan, req.side, req.bulge, req.a0, req.a1)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Errore nella curva: {e}")
 
 
 @app.post("/furnish-plan")

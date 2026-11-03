@@ -5,6 +5,7 @@
  */
 import { frontOf } from './project';
 import { rugsFor } from './rugs';
+import { tintMaterials, tintTheme, validColor } from './furnitureColor';
 import { decorFor } from './decor';
 import { slideDoor } from './mezz';
 import { balconyRailings } from './balcony';
@@ -269,6 +270,22 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       root.add(g);
     }
   }
+  // colore proprio di una porta o finestra (o.color): copie del materiale dello stile, una per colore
+  const tinted = new Map();
+  const tint = (base, color) => {
+    const c = validColor(color);
+    if (!c) return base;
+    const key = `${base.uuid}${c}`;
+    if (!tinted.has(key)) {
+      const m = base.clone();
+      m.color.set(c);
+      m.userData = { ...base.userData, pbrTint: c };
+      tinted.set(key, m);
+    }
+    return tinted.get(key);
+  };
+  const frameOf = (o) => tint(K.frame, o.color);
+  const doorOf = (o) => tint(K.door, o.color);
   // aperture oblique: sopra e sotto il vano il muro continua; finestra con vetro e telaio, porta con stipiti, architrave e anta
   for (const o of oblique) {
     const a = ((o.rot || 0) * Math.PI) / 180;
@@ -294,7 +311,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       if (wallH > g.top) lintel(g.top);
       piece(0.02, o.w - 0.02, t / 2 - 0.01, t / 2 + 0.01, g.sill, g.top - g.sill, M.glass);
       for (const [p0, p1, y0, h] of [[0, 0.05, g.sill, g.top - g.sill], [o.w - 0.05, o.w, g.sill, g.top - g.sill], [0, o.w, g.top - 0.05, 0.05], [0, o.w, g.sill, 0.06]]) {
-        piece(p0, p1, -0.01, t + 0.01, y0, h, K.frame);
+        piece(p0, p1, -0.01, t + 0.01, y0, h, frameOf(o));
       }
       continue;
     }
@@ -306,20 +323,20 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       if (wallH > top) lintel(top);
       piece(fr, o.w - fr, t / 2 - 0.01, t / 2 + 0.01, SILL, top - SILL, M.glass);
       for (const [p0, p1, y0, h] of [[0, fr, SILL, top - SILL], [o.w - fr, o.w, SILL, top - SILL], [0, o.w, SILL, fr], [0, o.w, top - fr, fr]]) {
-        piece(p0, p1, -0.01, t + 0.01, y0, h, K.frame);
+        piece(p0, p1, -0.01, t + 0.01, y0, h, frameOf(o));
       }
       const panes = o.w > 2.2 ? 3 : o.w > 1.2 ? 2 : 1;
-      for (let k = 1; k < panes; k++) piece((o.w * k) / panes - fr / 2, (o.w * k) / panes + fr / 2, -0.01, t + 0.01, SILL, top - SILL, K.frame);
+      for (let k = 1; k < panes; k++) piece((o.w * k) / panes - fr / 2, (o.w * k) / panes + fr / 2, -0.01, t + 0.01, SILL, top - SILL, frameOf(o));
       continue;
     }
     if (wallH <= DOOR_H) continue;
     lintel(DOOR_H);
-    piece(0, fr, -0.01, t + 0.01, 0, DOOR_H, K.frame);
-    piece(o.w - fr, o.w, -0.01, t + 0.01, 0, DOOR_H, K.frame);
-    piece(0, o.w, -0.01, t + 0.01, DOOR_H - fr, fr, K.frame);
+    piece(0, fr, -0.01, t + 0.01, 0, DOOR_H, frameOf(o));
+    piece(o.w - fr, o.w, -0.01, t + 0.01, 0, DOOR_H, frameOf(o));
+    piece(0, o.w, -0.01, t + 0.01, DOOR_H - fr, fr, frameOf(o));
     const leaf = new THREE.Group();
     const lw = o.w - 2 * fr;
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? K.frame : K.door);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? frameOf(o) : doorOf(o));
     slab.position.set(lw / 2, (DOOR_H - fr - 0.01) / 2 + 0.005, 0);
     slab.castShadow = true;
     leaf.add(slab);
@@ -341,7 +358,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     const a1 = horiz ? q.x1 : q.z1;
     if (isPanoramic(o)) {
       // vetrata panoramica: telaio sottile, montanti ogni 1,3 m circa; scorrevole: due ante su binari paralleli e maniglia
-      const Fm = K.frame;
+      const Fm = frameOf(o);
       const pf = 0.05;
       const g = glassSpan(o, wallH);
       const barOff = (aa, bb, y0, h, m, off, thick) => (horiz
@@ -372,7 +389,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     if (!o.door) {
       const top = Math.min(DOOR_H, wallH);
       if (wallH <= SILL) return;
-      const Fm = K.frame;
+      const Fm = frameOf(o);
       bar(a0, a0 + fr, SILL, top - SILL, Fm);
       bar(a1 - fr, a1, SILL, top - SILL, Fm);
       bar(a0, a1, SILL, fr, Fm);
@@ -387,18 +404,18 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     if (o.kind === 'garage') {
       // basculante a pannelli: cinque doghe con la fuga tra l'una e l'altra
       const hh = Math.min(DOOR_H, wallH) - 0.03;
-      for (let k = 0; k < 5; k++) bar(a0 + 0.02, a1 - 0.02, 0.02 + (k * hh) / 5, hh / 5 - 0.012, K.door);
+      for (let k = 0; k < 5; k++) bar(a0 + 0.02, a1 - 0.02, 0.02 + (k * hh) / 5, hh / 5 - 0.012, doorOf(o));
       return;
     }
     if (wallH <= DOOR_H) return;
     // stipiti e architrave
-    bar(a0, a0 + fr, 0, DOOR_H, K.frame);
-    bar(a1 - fr, a1, 0, DOOR_H, K.frame);
-    bar(a0, a1, DOOR_H - fr, fr, K.frame);
+    bar(a0, a0 + fr, 0, DOOR_H, frameOf(o));
+    bar(a1 - fr, a1, 0, DOOR_H, frameOf(o));
+    bar(a0, a1, DOOR_H - fr, fr, frameOf(o));
     // anta socchiusa di 65°, incernierata all'inizio del vano
     const leaf = new THREE.Group();
     const lw = len - 2 * fr;
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? K.frame : K.door);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? frameOf(o) : doorOf(o));
     slab.position.set(lw / 2, (DOOR_H - fr - 0.01) / 2 + 0.005, 0);
     slab.castShadow = true;
     const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.1, 10), K.handle);
@@ -548,7 +565,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     if (it.type === 'table' || it.type === 'table_round') chairsAround(it);
     const from = root.children.length;
     // gli arredi con un modello (letto, auto, sanitari…) sono oggetti veri: gruppi di pezzi, un blocco nel DXF
-    const obj = buildObject(THREE, it, M, mat, theme);
+    const obj = it.color ? buildObject(THREE, it, tintMaterials(M, it.type, it.color), mat, { ...theme, ...tintTheme(theme, it.type, it.color) }) : buildObject(THREE, it, M, mat, theme);
     if (obj) {
       obj.name = obj.name || `ARREDO_${it.type.toUpperCase()}`;
       root.add(obj);

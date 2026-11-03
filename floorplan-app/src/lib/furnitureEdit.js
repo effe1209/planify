@@ -64,6 +64,37 @@ export function snapItem(plan, item, x, y) {
   return { x: +nx.toFixed(3), y: +ny.toFixed(3), room: room?.id ?? item.room };
 }
 
+/*
+ * Arredo con nuove misure (m): resta centrato dov'è, dentro 0,1–6 m e dentro il locale (a filo muro se sporge).
+ * `lock` mantiene le proporzioni: si passa solo il lato che cambia (w o h) e l'altro lo segue.
+ */
+export const SIZE_MIN = 0.1;
+export const SIZE_MAX = 6;
+export function resizeItem(plan, item, { w, h }, lock = false) {
+  const ratio = item.w / item.h;
+  let nw = w ?? item.w;
+  let nh = h ?? item.h;
+  if (lock) {
+    if (w != null) nh = nw / ratio;
+    else nw = nh * ratio;
+  }
+  const clamp = (v) => Math.min(SIZE_MAX, Math.max(SIZE_MIN, round2(v)));
+  nw = clamp(nw);
+  nh = clamp(nh);
+  let x = item.x + item.w / 2 - nw / 2;
+  let y = item.y + item.h / 2 - nh / 2;
+  const room = plan.rooms.find((r) => r.id === item.room);
+  if (room && room.kind !== 'garden' && !room.poly && !item.elev) {
+    const b = innerBox(plan, room);
+    nw = Math.min(nw, b.x1 - b.x0);
+    nh = Math.min(nh, b.y1 - b.y0);
+    x = Math.max(b.x0, Math.min(b.x1 - nw, x));
+    y = Math.max(b.y0, Math.min(b.y1 - nh, y));
+  }
+  return { ...item, w: +nw.toFixed(3), h: +nh.toFixed(3), x: +x.toFixed(3), y: +y.toFixed(3) };
+}
+const round2 = (v) => Math.round(v * 100) / 100;
+
 /* Arredo ruotato di 90°: larghezza e profondità si scambiano attorno al centro, il fronte gira in senso orario. */
 const NEXT = { S: 'W', W: 'N', N: 'E', E: 'S' };
 export function rotateItem(item) {

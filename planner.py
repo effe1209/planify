@@ -3797,6 +3797,22 @@ def apply_curve(plan: dict, curve: Optional[dict], flat: bool = False) -> dict:
     return plan
 
 
+def curve_plan(plan: dict, side: str, bulge: float, a0: Optional[float] = None, a1: Optional[float] = None) -> dict:
+    """Incurva una facciata (N/S/E/W) di una pianta già fatta, anche importata o modificata a mano: tutta o solo il tratto a0..a1
+    (m lungo il lato). Ritorna una copia; se non si può (già curva, giardino, misura impossibile) alza ValueError con la ragione."""
+    import copy
+    from curves import bow_facade
+    p = copy.deepcopy(plan)
+    if p.get("curve"):
+        raise ValueError("La pianta ha già una facciata curva: raddrizzala prima di curvarne un'altra.")
+    if p.get("house") or any(r.get("kind") == "garden" for r in p.get("rooms", [])):
+        raise ValueError("Il giardino non ha facciate da curvare.")
+    bow_facade(p, side, float(bulge or 0), a0=a0, a1=a1)
+    if not p.get("curve"):
+        raise ValueError("La curva non ci sta: serve un tratto di almeno 2 m e una freccia da 0,2 m in su.")
+    return p
+
+
 def entrance_side(plan: dict) -> Optional[str]:
     """Facciata (N/E/S/W) del portoncino di una pianta finita: la prima porta d'ingresso senza basculante."""
     W, L = plan["dimensions"]["width"], plan["dimensions"]["length"]

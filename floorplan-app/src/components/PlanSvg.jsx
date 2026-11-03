@@ -19,6 +19,7 @@ import { slideDoor } from '../lib/mezz';
 import { dimensionChains, tierIndex } from '../lib/dimensions';
 import { itemProblems, snapItem } from '../lib/furnitureEdit';
 import { rugsFor } from '../lib/rugs';
+import { tintTheme } from '../lib/furnitureColor';
 import { mezzAxis, mezzLimits, resizeMezz } from '../lib/mezz';
 import PlumbingLayer from './PlumbingLayer';
 import CoverageLayer from './CoverageLayer';
@@ -565,7 +566,8 @@ const BASE_FURNITURE = {
   },
   /* divano tondo: seduta circolare con schienale ad arco sul lato del muro */
   /* divano piccolo in bouclé: corpo a fagiolo, schienale a mezzaluna, due cuscini tondi oliva e coperta verde sul bracciolo */
-  sofa_round: (w, h) => {
+  sofa_round: (w, h, s, t, item) => {
+    const body = item?.color ? t.fabric : '#f1ead9';
     const r = Math.min(w, h) * 0.42;
     const curls = [];
     let seed = 11;
@@ -576,7 +578,7 @@ const BASE_FURNITURE = {
     }
     return (
       <>
-        <rect width={w} height={h} rx={r} fill="#f1ead9" stroke="#8d7f63" strokeWidth="1.2" />
+        <rect width={w} height={h} rx={r} fill={body} stroke="#8d7f63" strokeWidth="1.2" />
         <path d={`M ${w * 0.08} ${h * 0.62} Q ${w * 0.06} ${h * 0.08} ${w * 0.5} ${h * 0.08} Q ${w * 0.94} ${h * 0.08} ${w * 0.92} ${h * 0.62}`} fill="none" stroke="#8d7f63" strokeOpacity="0.55" strokeWidth="1.4" />
         <rect x={w * 0.14} y={h * 0.3} width={w * 0.72} height={h * 0.58} rx={r * 0.7} fill="#f6f0e2" stroke="#b8a784" strokeWidth="0.8" />
         {curls}
@@ -670,7 +672,8 @@ function Furn({ item, scale, theme }) {
         fill="#f1f3f6" stroke={F_STROKE} strokeWidth="1" />
     );
   }
-  return <Oriented item={item} scale={scale}>{(w, h) => draw(w, h, scale, theme, item)}</Oriented>;
+  const t = item.color ? tintTheme(theme, item.type, item.color) : theme;
+  return <Oriented item={item} scale={scale}>{(w, h) => draw(w, h, scale, t, item)}</Oriented>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
