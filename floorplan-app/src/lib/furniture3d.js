@@ -571,7 +571,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
             const bw = widths[Math.floor(rng() * widths.length)];
             const bh = heights[Math.floor(rng() * heights.length)];
             if (x + bw > end) break;
-            const book = bx(bw, bh, D - 0.12, x + bw / 2, baseY, 0, books[Math.floor(rng() * books.length)]);
+            const book = bx(bw, bh, D - 0.12, x + bw / 2, baseY, 0, books[Math.floor(rng() * books.length)], 0);
             book.rotation.y = (rng() - 0.5) * 0.08;
             book.rotation.z = (rng() - 0.5) * 0.08;
             if (rng() < 0.28) bx(bw * 0.72, 0.006, 0.003, x + bw / 2, baseY + bh * 0.16, (D - 0.12) / 2 + 0.001, band);
