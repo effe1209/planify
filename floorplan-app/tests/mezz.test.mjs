@@ -63,7 +63,8 @@ assert.equal(rugsFor({ ...plan, furniture: plan.furniture.filter((f) => f.type !
 const g = buildScene(THREE, { ...withCoffee, furniture: [...withCoffee.furniture] }, THEMES.modern);
 const flat = g.children.filter((c) => c.geometry?.parameters?.height === 0.012);
 assert.equal(flat.length, 2, `tappeti ${flat.length}`);
-const chairSeats = g.children.filter((c) => c.geometry?.parameters?.height === 0.04 && Math.abs(c.position.y - 0.45) < 0.01);
+// ogni sedia è un gruppo (seduta morbida a 45 cm, gambe, montanti e schienale curvo)
+const chairSeats = g.children.filter((c) => c.isGroup && c.children.length === 9 && Math.abs(c.children[0].position.y - 0.45) < 0.01);   // seduta + 4 gambe + 2 montanti + fascia + traversa
 assert.ok(chairSeats.length >= 6, `sedute ${chairSeats.length}`);
 const bathWalls = g.children.filter((c) => c.userData.layer === 'MURI' && Math.abs(c.geometry.parameters.height - 2.2) < 1e-6);
 assert.equal(bathWalls.length, 2);

@@ -7,12 +7,18 @@
  *   withCornerWindows(plan)  → la pianta con le finestre unite prolungate fino al montante (per disegnarle); la stessa pianta se non ce ne sono
  */
 import { opening } from './ajax';
+import { isPanoramic } from './openings';
 
-export const CORNER_NEAR = 0.3;   // distanza massima dei bordi dall'angolo (m)
+export const CORNER_NEAR = 0.5;   // distanza massima dei bordi dall'angolo (m)
 export const CORNER_POST = 0.1;   // lato del montante d'angolo (m)
 
+/*
+ * Anche una vetrata scorrevole (porta verso il balcone) e una finestra panoramica che si incontrano nell'angolo formano un'apertura sola:
+ * il pezzo di muro tra le due diventa il montante da 10 cm. Le coppie portano gli indici in plan.windows (a, b) e, se l'apertura è una
+ * porta scorrevole, aDoor / bDoor = true e l'indice in plan.doors.
+ */
 export function cornerPairs(plan) {
-  if (!plan?.windows?.length || plan.wallLines?.length || plan.rooms?.some((r) => r.poly)) return [];
+  if ((!plan?.windows?.length && !plan?.doors?.length) || plan.wallLines?.length || plan.rooms?.some((r) => r.poly)) return [];
   const { width: W, length: L } = plan.dimensions;
   const t = plan.wallThickness / plan.scale;
   const eps = 0.02;
@@ -23,24 +29,31 @@ export function cornerPairs(plan) {
     return null;
   };
   const room = (o) => opening(plan, o).room?.id ?? null;
+  const items = [
+    ...plan.windows.map((o, i) => ({ o, i, door: false, key: `w${i}` })),
+    ...plan.doors.map((o, i) => ({ o, i, door: true, key: `d${i}` })).filter((x) => x.o.type === 'sliding' && x.o.kind !== 'gate'),
+  ];
+  const sameKind = (a, b) => (a.type || '') === (b.type || '') || (isPanoramic(a) && isPanoramic(b));
   const out = [];
   const used = new Set();
-  plan.windows.forEach((a, i) => {
-    if (a.rot || used.has(i) || !side(a)) return;
-    plan.windows.forEach((b, j) => {
-      if (used.has(i) || used.has(j) || i === j || b.rot !== 90 || !side(b)) return;
-      if ((a.type || '') !== (b.type || '') || room(a) == null || room(a) !== room(b)) return;
+  for (const A of items) {
+    const a = A.o;
+    if (a.rot || used.has(A.key) || !side(a)) continue;
+    for (const B of items) {
+      const b = B.o;
+      if (used.has(A.key) || used.has(B.key) || A.key === B.key || b.rot !== 90 || !side(b)) continue;
+      if (!sameKind(a, b) || room(a) == null || room(a) !== room(b)) continue;
       const ns = side(a);
       const ew = side(b);
-      // distanza del bordo di ciascuna finestra dal muro d'angolo
+      // distanza del bordo di ciascuna apertura dal muro d'angolo
       const dA = ew === 'W' ? a.x - t : W - t - (a.x + a.w);
       const dB = ns === 'N' ? b.y - t : L - t - (b.y + b.w);
-      if (dA < -eps || dB < -eps || dA > CORNER_NEAR || dB > CORNER_NEAR) return;
-      used.add(i);
-      used.add(j);
-      out.push({ a: i, b: j, corner: `${ns}${ew}` });
-    });
-  });
+      if (dA < -eps || dB < -eps || dA > CORNER_NEAR || dB > CORNER_NEAR) continue;
+      used.add(A.key);
+      used.add(B.key);
+      out.push({ a: A.i, b: B.i, corner: `${ns}${ew}`, ...(A.door && { aDoor: true }), ...(B.door && { bDoor: true }) });
+    }
+  }
   return out;
 }
 
@@ -49,16 +62,17 @@ export function withCornerWindows(plan) {
   if (!pairs.length) return plan;
   const { width: W, length: L } = plan.dimensions;
   const windows = plan.windows.map((w) => ({ ...w }));
-  for (const { a, b, corner } of pairs) {
-    const wa = windows[a];
-    const wb = windows[b];
+  const doors = plan.doors.map((d) => ({ ...d }));
+  for (const { a, b, corner, aDoor, bDoor } of pairs) {
+    const wa = (aDoor ? doors : windows)[a];
+    const wb = (bDoor ? doors : windows)[b];
     if (corner[1] === 'W') { const end = wa.x + wa.w; wa.x = CORNER_POST; wa.w = round(end - CORNER_POST); }
     else wa.w = round(W - CORNER_POST - wa.x);
     if (corner[0] === 'N') { const end = wb.y + wb.w; wb.y = CORNER_POST; wb.w = round(end - CORNER_POST); }
     else wb.w = round(L - CORNER_POST - wb.y);
     wa.corner = wb.corner = true;
   }
-  return { ...plan, windows };
+  return { ...plan, windows, doors };
 }
 
 const round = (v) => Math.round(v * 1000) / 1000;
