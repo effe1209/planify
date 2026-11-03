@@ -38,6 +38,14 @@ export function materialCategory(key) {
 
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
+/* parallelepipedo con spigoli smussati; le geometrie uguali si riusano (un arredo ne ha decine di identiche) */
+const boxCache = new Map();
+export function roundedBox(w, h, d, r) {
+  const key = [w, h, d, r].map((v) => v.toFixed(4)).join('|');
+  if (!boxCache.has(key)) boxCache.set(key, new RoundedBoxGeometry(w, h, d, 2, r));
+  return boxCache.get(key);
+}
+
 /* Numeri pseudo-casuali ripetibili (stesso seme, stessa sequenza): ogni letto ha le sue piccole variazioni, sempre le stesse. */
 export function seeded(seed) {
   let h = 2166136261;
@@ -150,12 +158,13 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
   };
   /* scatola con la base a quota y */
   const SOFT = new Set([M.fabric, M.duvet]);
-  const bx = (w, h, d, x, y, z, mt) => {
-    // tessuti e imbottiti: spigoli smussati (cuscini, materassi, divani non sono mai spigolosi)
+  const bx = (w, h, d, x, y, z, mt, radius) => {
+    // tessuti e imbottiti: spigoli molto smussati (cuscini, materassi, divani non sono mai spigolosi); legno, laccato e il resto: un
+    // piccolo smusso che prende la luce, così i bordi non sembrano tagliati con l'accetta. Le lastre sottili restano nette.
     const soft = SOFT.has(mt) || mt?.userData?.cat === 'TESSUTO';
-    const r = soft ? Math.min(0.04, Math.min(w, h, d) * 0.4) : 0;
-    const geo = r > 0.006 ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d);
-    return place(new THREE.Mesh(geo, mt), x, y + h / 2, z);
+    const small = Math.min(w, h, d);
+    const r = radius ?? (soft ? Math.min(0.04, small * 0.4) : small >= 0.02 ? Math.min(0.011, small * 0.3) : 0);
+    return place(new THREE.Mesh(r > 0.004 ? roundedBox(w, h, d, r) : new THREE.BoxGeometry(w, h, d), mt), x, y + h / 2, z);
   };
   /* cuscino morbido con la base a quota y (vedi pillowGeometry); rot = rotazione attorno a y, tilt = inclinazione in avanti */
   const soft = (w, h, d, x, y, z, mt, { pinch = 0.5, rot = 0, tilt = 0 } = {}) => {
@@ -264,8 +273,8 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         bx(W + 0.04, 0.05, 0.05, 0, 0.12, hz + 0.03, wood);
         for (let i = 0; i < slats; i++) bx(0.07, 0.8, 0.03, -W / 2 + (W * (i + 0.5)) / slats, 0.17, hz + 0.03, wood);
       } else {
-        bx(W, low ? 0.55 : 0.95, 0.07, 0, low ? 0.06 : 0.1, hz + 0.035, wood);
-        bx(W + 0.06, 0.05, 0.1, 0, low ? 0.61 : 1.05, hz + 0.05, wood);
+        bx(W, low ? 0.55 : 0.95, 0.07, 0, low ? 0.06 : 0.1, hz + 0.035, wood, 0.03);
+        bx(W + 0.06, 0.05, 0.1, 0, low ? 0.61 : 1.05, hz + 0.05, wood, 0.022);
       }
       break;
     }
@@ -396,8 +405,8 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       // sedia di design: guscio chiaro (seduta e schienale curvo) su quattro gambe di legno svasate
       const shell = m('shell', '#e9e4dc', { roughness: 0.4 });
       const s = Math.min(W, D);
-      bx(s * 0.92, 0.045, s * 0.86, 0, 0.44, 0.03, shell);
-      const bk = bx(s * 0.92, 0.4, 0.045, 0, 0.47, -s / 2 + 0.07, shell);
+      soft(s * 0.92, 0.055, s * 0.86, 0, 0.43, 0.03, shell, { pinch: 0.2 });
+      const bk = bx(s * 0.92, 0.4, 0.045, 0, 0.47, -s / 2 + 0.07, shell, 0.02);
       bk.rotation.x = -0.18;
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
         const lg = cy(0.011, 0.016, 0.45, sx * s * 0.34, 0, sz * s * 0.3, wood, 12);
@@ -457,6 +466,10 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         const o = -span / 2 + (span * i) / doors;
         if (front) bx(0.008, H - 0.16, 0.012, o, 0.08, D / 2 + 0.004, darkLine);
         else bx(0.012, H - 0.16, 0.008, W / 2 + 0.004, 0.08, o, darkLine);
+      }
+      if (front) {
+        // ante vere, appena in rilievo e smussate (non un blocco unico con le righe disegnate)
+        for (let i = 0; i < doors; i++) bx(span / doors - 0.01, H - 0.19, 0.02, -span / 2 + (span * (i + 0.5)) / doors, 0.09, D / 2 + 0.008, M.cabinet, 0.007);
       }
       if (style.tuft && front) {
         // specchiature in rilievo sulle ante
@@ -788,6 +801,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       cy(r * 0.56, r * 0.56, 0.02, 0, 0.33, 0, m('soil', '#3d2f24'), 20);
       const leaf = M.plant;
       const dark = m('leaf2', '#4f7d48');
+      const rnd = seeded(`${it.x}|${it.y}|plant`);
       for (let i = 0; i < 7; i++) {
         const a = (i * 2 * Math.PI) / 7;
         const rr = r * (0.25 + 0.2 * (i % 2));
@@ -795,9 +809,24 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         const stem = cy(0.01, 0.015, h, Math.cos(a) * rr * 0.4, 0.34, Math.sin(a) * rr * 0.4, dark, 6);
         stem.rotation.z = Math.cos(a) * 0.25;
         stem.rotation.x = -Math.sin(a) * 0.25;
-        ball(0.14 + 0.03 * (i % 3), Math.cos(a) * rr, 0.34 + h, Math.sin(a) * rr, i % 2 ? leaf : dark, 1.3, 0.45, 1);
+        // un ciuffo di foglie lanceolate che si aprono verso l'esterno e ricadono (non dischi impilati)
+        const tx = Math.cos(a) * rr;
+        const tz = Math.sin(a) * rr;
+        for (let k = 0; k < 5; k++) {
+          const a2 = a + (k / 5) * 2 * Math.PI + rnd() * 0.5;
+          const pitch = 0.45 + rnd() * 0.5;
+          const dir = new THREE.Vector3(Math.sin(a2) * Math.cos(pitch), 0.18 - Math.sin(pitch) * 0.75, Math.cos(a2) * Math.cos(pitch)).normalize();
+          const len = 0.22 + rnd() * 0.08;
+          const lf = ball(0.5, tx + dir.x * len * 0.5, 0.34 + h + dir.y * len * 0.5 + 0.02, tz + dir.z * len * 0.5, (i + k) % 2 ? leaf : dark, 0.09, 0.016, len);
+          lf.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+        }
       }
-      ball(0.17, 0, 0.98, 0, leaf, 1.2, 0.8, 1.2);
+      for (let k = 0; k < 6; k++) {   // foglie al centro, più alte
+        const a2 = (k / 6) * 2 * Math.PI;
+        const dir = new THREE.Vector3(Math.sin(a2) * 0.45, 0.85, Math.cos(a2) * 0.45).normalize();
+        const lf = ball(0.5, dir.x * 0.12, 0.9 + dir.y * 0.12, dir.z * 0.12, k % 2 ? leaf : dark, 0.1, 0.016, 0.3);
+        lf.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+      }
       break;
     }
     case 'tree': {
@@ -927,7 +956,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
     }
     case 'desk': {
       // piano; pannelli o gambe dello stile, cassettiera a lato e schienale basso
-      bx(W, 0.04, D, 0, 0.71, 0, wood);
+      bx(W, 0.04, D, 0, 0.71, 0, wood, 0.018);
       if (style.legs === 'metal' || style.legs === 'turned') {
         for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.71, 0.06);
         bx(W - 0.1, 0.06, D - 0.1, 0, 0.64, 0, wood);
@@ -982,7 +1011,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       break;
     }
     case 'table': {
-      bx(W, 0.04, D, 0, 0.71, 0, wood);
+      bx(W, 0.04, D, 0, 0.71, 0, wood, 0.018);
       bx(W - 0.12, 0.07, D - 0.12, 0, 0.64, 0, wood);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.64, 0.06);
       break;
@@ -1001,7 +1030,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       break;
     }
     case 'coffee_table': {
-      bx(W, 0.04, D, 0, 0.36, 0, wood);
+      bx(W, 0.04, D, 0, 0.36, 0, wood, 0.018);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.05), sz * (D / 2 - 0.05), 0.36);
       bx(W - 0.1, 0.02, D - 0.1, 0, 0.14, 0, wood);
       break;

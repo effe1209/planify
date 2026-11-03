@@ -31,3 +31,21 @@ console.log('balcony ok');
   assert.ok(rugs[0].round, 'il tappeto sotto il divano tondo è tondo');
   console.log('balcony rattan/rug ok');
 }
+
+// il balcone è all'aperto: nessun punto luce sospeso al soffitto (il lampadario non può stare fuori)
+{
+  const { planElectric } = await import('../src/lib/electric.js');
+  const rooms = [
+    { id: 1, name: 'Soggiorno', kind: 'living', x: 0, y: 0, w: 5, h: 4, color: '#fff', zone: 1 },
+    { id: 2, name: 'Balcone', kind: 'balcony', x: 0, y: 4, w: 5, h: 1.6, color: '#eee', zone: 2 },
+  ];
+  const walls = [{ x: 0, y: 0, w: 5, h: 0.2 }, { x: 0, y: 0, w: 0.2, h: 5.6 }, { x: 4.8, y: 0, w: 0.2, h: 5.6 }];
+  const pl = { dimensions: { width: 5, length: 5.6 }, scale: 50, wallThickness: 10, rooms, walls, windows: [],
+    doors: [{ x: 1, y: 3.9, w: 2, rot: 0, type: 'sliding' }],
+    furniture: [{ room: 2, type: 'table_rattan', x: 2.2, y: 4.5, w: 0.6, h: 0.6, facing: 'S' }, { room: 1, type: 'table', x: 1, y: 1, w: 1.6, h: 0.9, facing: 'S' }], stairs: [] };
+  const el = planElectric({ floors: [{ id: 'f', name: 'T', level: 0, plan: pl, meta: {} }] }, { level: 2 });
+  const pts = Object.values(el.floors).flatMap((f) => f.points);
+  assert.equal(pts.filter((p) => p.kind === 'light' && p.room === 2).length, 0, 'niente luce sospesa sul balcone');
+  assert.ok(pts.filter((p) => p.kind === 'light' && p.room === 1).length >= 1, 'il soggiorno ha le sue luci');
+  console.log('balcony luci ok');
+}

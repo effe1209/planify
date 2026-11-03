@@ -407,7 +407,8 @@ function planFloor(project, floor, level, stairRole, main) {
 
     // punti luce: sopra il tavolo, poi distribuiti lungo il lato lungo
     const z = zoneOf(r);
-    const ceiling = req.lights - got.lights;   // l'applique del bagno conta già
+    const open = r.kind === 'balcony';   // all'aperto non c'è un soffitto: niente punti luce sospesi (ci pensano le luci esterne a parete)
+    const ceiling = open ? 0 : req.lights - got.lights;   // l'applique del bagno conta già
     const spots = [];
     const table = its.find((f) => ['table', 'table_round', 'kitchen_peninsula'].includes(f.type));
     if (table && ceiling > 0) spots.push(center(table));
@@ -419,7 +420,7 @@ function planFloor(project, floor, level, stairRole, main) {
       const p = r.w >= r.h ? { x: r.x + r.w * f, y: r.y + r.h / 2 } : { x: r.x + r.w / 2, y: r.y + r.h * f };
       spots.push(contains(r, p.x, p.y) ? p : center(r));
     }
-    for (const p of spots.slice(0, Math.max(1, ceiling))) {
+    for (const p of spots.slice(0, open ? 0 : Math.max(1, ceiling))) {
       z.lights.push(add('light', r, p));
       got.lights += 1;
     }

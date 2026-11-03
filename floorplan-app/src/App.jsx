@@ -2228,6 +2228,7 @@ export default function App() {
 
         {/* ───────── Dettagli, personalizzazione e cronologia ───────── */}
         <aside className="pf-inspector" aria-hidden={!panels.right} inert={!panels.right}>
+          {plan && stats && <InspectorTabs tab={inspTab} onTab={setInspTab} />}
           {editable && (
             <div className="pf-editbar">
               <button type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
@@ -2309,7 +2310,6 @@ export default function App() {
                   onClose={() => setSelectedId(null)}
                 />
               )}
-              <InspectorTabs tab={inspTab} onTab={setInspTab} />
               {T('furn') && (<>
               {!readOnly && engineHas('furnish_plan') && !['garden', 'garage'].includes(floor.meta?.type) && !selectedRoom && (
                 <FurnishPanel plan={plan} style={floor.meta?.style || form.style} busy={furnishing}

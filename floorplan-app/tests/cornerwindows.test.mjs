@@ -27,7 +27,8 @@ assert.equal(p.windows[0].x, 0.4, 'la pianta salvata non cambia');
 // lontane (oltre 30 cm) o su pareti non perpendicolari o di tipo diverso: restano due finestre
 assert.deepEqual(cornerPairs(plan([{ ...A, x: 1.0 }, B])), []);
 assert.deepEqual(cornerPairs(plan([A, { ...B, y: 1.0 }])), []);
-assert.deepEqual(cornerPairs(plan([A, { ...B, type: 'panoramic' }])), []);
+assert.deepEqual(cornerPairs(plan([A, { ...B, type: 'panoramic' }])), [], 'finestra comune + panoramica: due aperture diverse');
+assert.deepEqual(cornerPairs(plan([{ ...A, x: 0.75 }, B])), [], 'a 55 cm dall\'angolo non è più «vicina»');
 assert.deepEqual(cornerPairs(plan([A, { x: 3, y: 0, w: 1.4, rot: 0 }])), []);
 // tutti e quattro gli angoli
 const four = plan([
@@ -86,3 +87,18 @@ for (const d of pano) {
   assert.ok(ex >= 1 - 1e-6 && ex <= 4 + 1e-6 && d.x >= 1 - 0.05 && d.x <= 4 + 0.05, `pannello fuori dal vetro: ${JSON.stringify(d)}`);
 }
 console.log('cornerwindows ok');
+
+// vetrata scorrevole (porta sul balcone) + finestra panoramica nell'angolo: un'apertura sola con il montante piccolo
+{
+  const door = { x: 0.6, y: 0, w: 1.8, rot: 0, type: 'sliding' };
+  const pano = { x: 0.2, y: 0.55, w: 1.6, rot: 90, type: 'panoramic' };
+  const pl = plan([pano], [door]);
+  assert.deepEqual(cornerPairs(pl), [{ a: 0, b: 0, corner: 'NW', aDoor: true }]);
+  const m = withCornerWindows(pl);
+  assert.equal(m.doors[0].x, 0.1, 'la vetrata scorrevole arriva al montante');
+  assert.equal(m.windows[0].y, 0.1, 'la panoramica arriva al montante');
+  assert.ok(m.doors[0].corner && m.windows[0].corner);
+  assert.equal(pl.doors[0].x, 0.6, 'la pianta salvata non cambia');
+  assert.ok(cornerPosts(pl).length >= 1 && cornerPosts(pl).every((bb) => Math.min(bb.max.x, bb.max.z) <= 0.11), 'in 3D resta il montante da 10 cm');
+}
+console.log('cornerwindows vetrata + panoramica ok');

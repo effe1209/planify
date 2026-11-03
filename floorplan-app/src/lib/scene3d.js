@@ -46,7 +46,7 @@ const TILE_FLOORS = new Set(['bath', 'wc', 'kitchen', 'laundry', 'storage']);
 import { ROOF_DEFAULTS, gableTriangles, roofWings } from './roof';
 import { buildTimber, rafterTails } from './timber';
 import { stairHoles, stairSteps } from './stairs3d';
-import { buildObject } from './furniture3d';
+import { buildObject, pillowGeometry, roundedBox } from './furniture3d';
 import { projectStairs } from './stairs';
 import { kitMaterials, styleKit, texture as kitTexture, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
@@ -536,19 +536,27 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
 
   // sedie attorno ai tavoli (come nel disegno in pianta): seduta, gambe e schienale sul lato esterno
   const chair = (cx, cz, side, chairMat) => {
-    const cl = 0.42;
-    const cd = 0.4;
-    const x0 = cx - (side === 'W' || side === 'E' ? cd : cl) / 2;
-    const z0 = cz - (side === 'W' || side === 'E' ? cl : cd) / 2;
-    const w = side === 'W' || side === 'E' ? cd : cl;
-    const d = side === 'W' || side === 'E' ? cl : cd;
-    box(x0, z0, w, d, 0.43, 0.04, chairMat);
-    for (const [lx, lz] of [[x0, z0], [x0 + w - 0.035, z0], [x0, z0 + d - 0.035], [x0 + w - 0.035, z0 + d - 0.035]]) box(lx, lz, 0.035, 0.035, 0, 0.43, chairMat);
-    const b = 0.04;
-    if (side === 'N') box(x0, z0, w, b, 0.47, 0.42, chairMat);
-    else if (side === 'S') box(x0, z0 + d - b, w, b, 0.47, 0.42, chairMat);
-    else if (side === 'W') box(x0, z0, b, d, 0.47, 0.42, chairMat);
-    else box(x0 + w - b, z0, b, d, 0.47, 0.42, chairMat);
+    // sedia: seduta imbottita e tondeggiante, quattro gambe svasate, due montanti e uno schienale curvo (lo schienale sta sul lato `side`)
+    const grp = new THREE.Group();
+    const add = (mesh, x, y, z) => { mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; grp.add(mesh); return mesh; };
+    add(new THREE.Mesh(pillowGeometry(0.42, 0.06, 0.4, 0.22), chairMat), 0, 0.45, 0);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const leg = add(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.011, 0.43, 10), chairMat), sx * 0.165, 0.215, sz * 0.155);
+      leg.rotation.z = -sx * 0.05;
+      leg.rotation.x = sz * 0.05;
+    }
+    const backMat = chairMat.clone();
+    backMat.side = THREE.DoubleSide;
+    for (const sx of [-1, 1]) {
+      const post = add(new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.015, 0.4, 10), chairMat), sx * 0.185, 0.66, -0.185);
+      post.rotation.x = -0.12;
+    }
+    const arc = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.17, 28, 1, true, Math.PI - 0.34, 0.68), backMat);   // fascia curva
+    add(arc, 0, 0.76, 0.62 - 0.2);
+    add(new THREE.Mesh(roundedBox(0.4, 0.035, 0.03, 0.012), chairMat), 0, 0.86, -0.205).rotation.x = -0.12;
+    grp.position.set(cx, 0, cz);
+    grp.rotation.y = { N: 0, S: Math.PI, W: Math.PI / 2, E: -Math.PI / 2 }[side] ?? 0;
+    root.add(grp);
   };
   const chairsAround = (it) => {
     const chairMat = mat(theme.chair || '#eadfca');
