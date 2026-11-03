@@ -794,6 +794,38 @@ export default function App() {
     setWallEdit((on) => !on);
     setAddMode(null); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); setSelectedId(null);
   };
+  /* Clic nella vista 3D: arredo, locale, porta o finestra diventano la selezione, con lo stesso pannello di dettaglio della pianta. */
+  const [pendingPick, setPendingPick] = useState(null);
+  const applyPick = (hit) => {
+    if (!hit) { setSelectedItem(null); setSelectedId(null); setSelectedOpening(null); return; }
+    if (hit.kind === 'item') { setSelectedId(null); setSelectedOpening(null); setSelectedItem(hit.index); }
+    else if (hit.kind === 'room') { setSelectedItem(null); setSelectedOpening(null); setSelectedId(hit.roomId); }
+    else if (editable) {   // porte e finestre si modificano nella modalità «Modifica pianta»
+      setSelectedItem(null); setSelectedId(null);
+      if (!wallEdit) setWallEdit(true);
+      setSelectedOpening({ kind: hit.kind, index: hit.index });
+    } else return;
+    setPanels((pp) => (pp.right ? pp : { ...pp, right: true, ...(narrow() && { left: false }) }));   // il pannello con i dettagli deve vedersi
+  };
+  const pick3d = (hit) => {
+    // casa a più piani: se l'oggetto è su un altro piano, quel piano diventa quello aperto e la selezione segue
+    if (hit?.floorId && hit.floorId !== floor?.id && current?.floors.some((f) => f.id === hit.floorId)) {
+      setPendingPick(hit);
+      editProject((p) => ({ ...p, activeFloor: hit.floorId }));
+      return;
+    }
+    applyPick(hit);
+  };
+  useEffect(() => {
+    if (pendingPick && floor?.id === pendingPick.floorId) { applyPick(pendingPick); setPendingPick(null); }
+  }, [pendingPick, floor?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selection3d = useMemo(() => {
+    if (!view3d || !floor) return null;
+    if (selectedItem != null) return { kind: 'item', index: selectedItem, floorId: floor.id };
+    if (selectedOpening) return { kind: selectedOpening.kind, index: selectedOpening.index, floorId: floor.id };
+    if (selectedId != null && selectedId !== 'mezz') return { kind: 'room', roomId: selectedId, floorId: floor.id };
+    return null;
+  }, [view3d, floor?.id, selectedItem, selectedOpening, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
   /* Registra la modifica come un passo di annulla; i locali che hanno cambiato misura si riarredano con il motore (un solo passo). */
   const applyPlanEdit = async (res) => {
     const edited = res.plan;
@@ -2109,7 +2141,7 @@ export default function App() {
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
                 <div className="pf-3d-wrap">
-                  <Plan3D plan={plan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                  <Plan3D onPick={pick3d} selection={selection3d} plan={plan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
                     spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
                   {view3d.render && (
                     <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}

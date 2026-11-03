@@ -7,7 +7,7 @@ import { themeFor, themeWithPalette } from '../lib/palette';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
-export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady }) {
+export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady, onPick = null, selection = null }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);   // «Riprova» ricrea il contesto WebGL
@@ -22,6 +22,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
   const propsRef = useRef(null);   // proprietà correnti: la scena resta viva e legge sempre le ultime (esportazioni e ricostruzione del modello)
   propsRef.current = { plan, project, palette, materials, style, lowWalls, spread, north };
   const attachRef = useRef(null);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
 
   /* Mostra o nasconde sensori, impianto, cavi, coni e luci; a luci accese la scena si abbassa come di sera. */
   const applyShow = (st, built, show, on) => {
@@ -121,7 +123,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             if (moving && !raf) raf = requestAnimationFrame(loop);   // (un 'change' di update() può averlo già pianificato)
           }
         }
-        sceneRef.current = { THREE, model: null, ground: null, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null, invalidate };
+        sceneRef.current = { THREE, scene, model: null, ground: null, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null, invalidate };
         const hemi = new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3);
         scene.add(hemi);
         const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
@@ -139,6 +141,45 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
         controls.minDistance = 2;
         controls.addEventListener('change', () => invalidate());
+
+        /*
+         * Clic sulla scena (non un trascinamento per ruotare): un raggio dalla telecamera trova cosa c'è sotto il cursore.
+         * Le parti costruite da scene3d portano un'etichetta (arredo, porta o finestra di origine, locale); tetto e vetri si saltano.
+         */
+        const raycaster = new THREE.Raycaster();
+        const ndc = new THREE.Vector2();
+        const visible = (o) => { for (let n = o; n; n = n.parent) if (n.visible === false) return false; return true; };
+        const pick = (e) => {
+          const st = sceneRef.current;
+          if (!st?.model) return null;
+          const r = renderer.domElement.getBoundingClientRect();
+          ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+          raycaster.setFromCamera(ndc, camera);
+          for (const h of raycaster.intersectObject(st.model, true)) {
+            if (!visible(h.object) || h.object.isLine || h.object.isPoints) continue;
+            let tag = null;
+            let floorId = null;
+            for (let n = h.object; n; n = n.parent) {
+              const u = n.userData;
+              if (u.layer === 'TETTO' || u.layer === 'VETRI') { tag = 'skip'; break; }
+              if (!tag && u.itemIndex !== undefined) tag = { kind: 'item', index: u.itemIndex };
+              else if (!tag && u.openingKind) tag = { kind: u.openingKind, index: u.openingIndex };
+              else if (!tag && u.roomId !== undefined) tag = { kind: 'room', roomId: u.roomId };
+              if (u.floor?.id !== undefined) floorId = u.floor.id;
+            }
+            if (tag === 'skip') continue;
+            return tag ? { ...tag, floorId } : null;   // un muro o altro senza etichetta: nessuna selezione
+          }
+          return null;
+        };
+        let down = null;
+        renderer.domElement.addEventListener('pointerdown', (e) => { down = e.button === 0 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null; });
+        renderer.domElement.addEventListener('pointerup', (e) => {
+          const d = down;
+          down = null;
+          if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || performance.now() - d.t > 600) return;
+          onPickRef.current?.(pick(e));
+        });
         // mentre si ruota la risoluzione scende (fluido), a mano ferma torna piena
         controls.addEventListener('start', () => { if (basePixelRatio > 1) renderer.setPixelRatio(1); });
         controls.addEventListener('end', () => { if (basePixelRatio > 1) { renderer.setPixelRatio(basePixelRatio); invalidate(); } });
@@ -359,6 +400,43 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     const roofStyle = project ? (top?.floor.meta?.style || style) : style;
     if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle, palette: project?.palette || palette, materials: project?.materials || materials }));
   }, [roof, ready, plan, project, palette, materials, spread, style]);
+
+  // selezione: un riquadro colorato attorno all'oggetto scelto (arredo, porta, finestra o locale)
+  const selKey = selection ? `${selection.kind}|${selection.index ?? ''}|${selection.roomId ?? ''}|${selection.floorId ?? ''}` : '';
+  useEffect(() => {
+    const st = sceneRef.current;
+    if (!st?.model) return undefined;
+    const THREE = st.THREE;
+    const old = st.scene.getObjectByName('selezione');
+    if (old) { st.scene.remove(old); old.geometry.dispose(); old.material.dispose(); }
+    if (selection) {
+      const box = new THREE.Box3();
+      st.model.traverse((o) => {
+        const u = o.userData;
+        const mine = selection.kind === 'item' ? u.itemIndex === selection.index
+          : selection.kind === 'room' ? u.roomId === selection.roomId
+            : u.openingKind === selection.kind && u.openingIndex === selection.index;
+        if (!mine || !(o.isMesh || o.isGroup)) return;
+        if (selection.floorId != null) { // nella casa a più piani vale solo quello giusto
+          let fid = null;
+          for (let n = o; n; n = n.parent) if (n.userData.floor?.id !== undefined) { fid = n.userData.floor.id; break; }
+          if (fid != null && fid !== selection.floorId) return;
+        }
+        box.expandByObject(o);
+      });
+      if (!box.isEmpty()) {
+        const helper = new THREE.Box3Helper(box.expandByScalar(0.03), '#58760a');
+        helper.name = 'selezione';
+        helper.material.depthTest = false;
+        helper.material.transparent = true;
+        helper.renderOrder = 999;
+        st.scene.add(helper);
+      }
+    }
+    st.invalidate?.();
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selKey, ready]);
 
   // sensori, impianto e luci: si ricostruiscono quando cambiano i dati e si accendono con gli interruttori
   const overlayKey = overlay ? `${overlay.devices?.length || 0}|${overlay.electric ? 1 : 0}|${overlay.floorId}` : '';
