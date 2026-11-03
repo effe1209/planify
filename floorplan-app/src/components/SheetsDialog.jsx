@@ -3,6 +3,34 @@ import { FileText, Ruler, Save, Trash2, X } from 'lucide-react';
 import { SHEET_FORMATS, SHEET_SCALES } from '../lib/techSheet';
 import { DEFAULT_TEMPLATE, FONTS, LINE_WEIGHTS, cleanTemplate, templateOptions } from '../lib/sheetTemplates';
 
+/* Anteprima schematica dell'impaginazione: foglio, disegno, colonna e cartiglio come li ha scelti l'utente. */
+function LayoutPreview({ d }) {
+  const portrait = d.orientation === 'portrait';
+  const W = portrait ? 90 : 126;
+  const H = portrait ? 126 : 90;
+  const m = 4 + d.margin * 0.25;
+  const colW = W * 0.25;
+  const left = d.side === 'left';
+  const cx = left ? m : W - m - colW;
+  const dx = left ? m + colW + 3 : m;
+  const dw = W - 2 * m - colW - 3;
+  const ch = H * 0.2;
+  const top = d.cartouche === 'top';
+  const accent = d.accent || '#14181f';
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Anteprima dell'impaginazione" className="pf-sheet-preview">
+      <rect width={W} height={H} fill="#fff" stroke="#9aa" />
+      {d.frame && <rect x={m} y={m} width={W - 2 * m} height={H - 2 * m} fill="none" stroke={accent} strokeWidth="0.8" />}
+      <rect x={dx + 2} y={d.align === 'start' ? m + 2 : H / 2 - (H - 2 * m) * 0.3} width={dw - 4} height={(H - 2 * m) * 0.6} fill="#e8edd8" stroke={accent} strokeWidth="0.5" />
+      <line x1={left ? cx + colW : cx} y1={m} x2={left ? cx + colW : cx} y2={H - m} stroke={accent} strokeWidth="0.5" />
+      <rect x={cx + 1} y={top ? m + 1 : H - m - ch} width={colW - 2} height={ch - 1} fill="#d6dccb" />
+      {d.northBlock && <circle cx={cx + colW * 0.3} cy={(top ? m + ch : m) + 7} r="3.5" fill="none" stroke={accent} strokeWidth="0.5" />}
+      {d.rooms && <rect x={cx + 3} y={(top ? m + ch : m) + 15} width={colW - 6} height="14" fill="#eef" />}
+      {d.schedule && <rect x={cx + 3} y={(top ? m + ch : m) + 32} width={colW - 6} height="8" fill="#efe" />}
+    </svg>
+  );
+}
+
 const Seg = ({ label, value, options, onChange }) => (
   <div className="pf-seg pf-seg-small" role="radiogroup" aria-label={label}>
     {options.map(([id, text]) => (
@@ -84,6 +112,24 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
           <label className="pf-field-sm">
             <span>Margine: {draft.margin} mm</span>
             <input type="range" min={5} max={20} step={1} value={draft.margin} aria-label="Margine del foglio" onChange={(e) => set({ margin: Number(e.target.value) })} />
+          </label>
+        </div>
+
+        <div className="pf-cloud-block">
+          <h3>Impaginazione</h3>
+          <LayoutPreview d={draft} />
+          <Seg label="Colonna di legenda" value={draft.side} options={[['right', 'A destra'], ['left', 'A sinistra']]} onChange={(side) => set({ side })} />
+          <Seg label="Cartiglio" value={draft.cartouche} options={[['bottom', 'In basso'], ['top', 'In alto']]} onChange={(cartouche) => set({ cartouche })} />
+          <Seg label="Posizione del disegno" value={draft.align} options={[['center', 'Al centro'], ['start', 'In alto a sinistra']]} onChange={(align) => set({ align })} />
+          <label className="pf-check"><input type="checkbox" checked={draft.northBlock} onChange={(e) => set({ northBlock: e.target.checked })} /><span>Nord e scala grafica</span></label>
+          <label className="pf-check"><input type="checkbox" checked={draft.rooms} onChange={(e) => set({ rooms: e.target.checked })} /><span>Elenco dei locali con le superfici</span></label>
+          <label className="pf-check"><input type="checkbox" checked={draft.schedule} onChange={(e) => set({ schedule: e.target.checked })} /><span>Abaco dei serramenti</span></label>
+          <label className="pf-field-sm">
+            <span>Colore di cornice, linee e titoli</span>
+            <span className="pf-finish-row">
+              <input type="color" value={draft.accent || '#14181f'} aria-label="Colore di cornice e titoli" onChange={(e) => set({ accent: e.target.value })} />
+              <button type="button" className="pf-minibtn" disabled={!draft.accent} onClick={() => set({ accent: '' })}>Nero di serie</button>
+            </span>
           </label>
         </div>
 

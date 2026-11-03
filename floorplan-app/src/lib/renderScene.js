@@ -126,6 +126,8 @@ export async function buildRenderScene(THREE, project, { renderer = null, RoomEn
   const electric = planElectric(project, { level: project.electric?.level || 2 });
   const built = buildOverlays(THREE, { floors: overlayFloors(project), devices, electric, theme: themeWithPalette(THEMES[top?.floor.meta?.style] || THEMES.modern, project.palette, project.materials) });
   scene.add(built.lights);
+  // nella pianta dall'alto i corpi illuminanti non si vedono (sarebbero in aria), ma le luci vere restano e la casa è illuminata come se ci fossero
+  if (view?.id === 'plan3d') built.lights.traverse((o) => { if (o.isMesh) o.visible = false; });
   if (devices.length) scene.add(built.sensors);
   setLights(built, lampsOn(time));
   // le lampade accese illuminano la stanza con calore, senza bruciare l'immagine (setLights è tarato per la vista interattiva)

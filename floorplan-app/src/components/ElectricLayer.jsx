@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { APPLIANCES, CIRCUITS, KINDS } from '../lib/electric';
 
 /*
@@ -140,8 +141,26 @@ function cmdPath([[ax, ay], [bx, by]], s) {
   return `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`;
 }
 
-export default function ElectricLayer({ data, s, showLinks = true }) {
+const GRID = 0.05;
+
+export default function ElectricLayer({ data, s, showLinks = true, toMeters = null, onLightMove = null }) {
+  const [drag, setDrag] = useState(null);   // { key, x, y }: punto luce che si sta trascinando
   if (!data) return null;
+  const canMove = !!(toMeters && onLightMove);
+  const start = (e, p) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({ key: p.moveKey, room: p.room, x: p.x, y: p.y, moved: false });
+  };
+  const move = (e) => {
+    if (!drag) return;
+    const m = toMeters(e);
+    setDrag({ ...drag, x: Math.round(m.x / GRID) * GRID, y: Math.round(m.y / GRID) * GRID, moved: true });
+  };
+  const end = () => {
+    if (drag?.moved) onLightMove(drag.key, { x: +drag.x.toFixed(3), y: +drag.y.toFixed(3) }, drag.room);
+    setDrag(null);
+  };
   return (
     <g fontFamily={FONT}>
       {showLinks && (
@@ -155,7 +174,17 @@ export default function ElectricLayer({ data, s, showLinks = true }) {
           ))}
         </g>
       )}
-      {data.points.map((p) => <Point key={p.id} p={p} s={s} />)}
+      {data.points.map((p) => <Point key={p.id} p={drag && drag.key === p.moveKey ? { ...p, x: drag.x, y: drag.y } : p} s={s} />)}
+      {canMove && data.points.filter((p) => p.moveKey).map((p) => {
+        const cur = drag && drag.key === p.moveKey ? drag : p;
+        return (
+          <circle key={`mv-${p.id}`} cx={cur.x * s} cy={cur.y * s} r={10} fill={drag?.key === p.moveKey ? '#d97706' : 'transparent'} fillOpacity={0.18}
+            style={{ cursor: drag?.key === p.moveKey ? 'grabbing' : 'grab', touchAction: 'none' }}
+            onPointerDown={(e) => start(e, p)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => setDrag(null)}>
+            <title>Trascina per spostare il punto luce</title>
+          </circle>
+        );
+      })}
     </g>
   );
 }

@@ -487,104 +487,112 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   const F = ctx.format || A4;                       // formato del foglio (di serie A4)
   const wanted = ctx.scale && ctx.scale !== 'auto' ? Number(ctx.scale) : null;   // scala chiesta (1:N), altrimenti la migliore che entra
   const plan = floor.plan;
-  const area = drawingArea(F);
   const st = ctx.style || {};
+  const area = drawingArea(F, st.side);
+  const ACC = st.mono ? INK : (st.accent || INK);
+  const cartTop = st.cartouche === 'top';
+  const sh = cartTop ? CARTOUCHE_H : 0;       // la colonna scende sotto il cartiglio quando sta in alto
+  const left = st.side === 'left';
   const lw = st.lineScale || 1;
   const FONT = st.font || 'helvetica';
   const origLW = doc._lw0 || (doc._lw0 = doc.setLineWidth.bind(doc));   // lo spessore scelto vale per tutte le linee della tavola
   doc.setLineWidth = (w) => origLW(w * lw);
-  if (st.frame !== false) doc.setDrawColor(INK).setLineWidth(0.5).rect(F.margin, F.margin, F.w - 2 * F.margin, F.h - 2 * F.margin);
+  if (st.frame !== false) doc.setDrawColor(ACC).setLineWidth(0.5).rect(F.margin, F.margin, F.w - 2 * F.margin, F.h - 2 * F.margin);
   const img = await floorImage(floor, [], { ...extra, codes, bare: true, layers: { ...LAYERS, technical: true, alarm: false } }, 4);
   if (st.mono) img.data = await grayscale(img.data);
   const fit = ctx.format
     ? fitScale(img.w, img.h, plan.scale, area, wanted ? [wanted, ...SHEET_SCALES.filter((n) => n > wanted)] : SHEET_SCALES.slice(1))
     : fitScale(img.w, img.h, plan.scale, area);
-  doc.addImage(img.data, 'PNG', area.x + (area.w - fit.w) / 2, area.y + (area.h - fit.h) / 2, fit.w, fit.h, undefined, 'FAST');
+  doc.addImage(img.data, 'PNG', area.x + (st.align === 'start' ? 0 : (area.w - fit.w) / 2), area.y + (st.align === 'start' ? 0 : (area.h - fit.h) / 2), fit.w, fit.h, undefined, 'FAST');
 
   // colonna di destra
-  const x0 = F.w - F.margin - LEGEND_W;
-  const x1 = F.w - F.margin;
-  doc.setDrawColor(INK).setLineWidth(0.3).line(x0, F.margin, x0, F.h - F.margin);
+  const x0 = left ? F.margin : F.w - F.margin - LEGEND_W;
+  const x1 = x0 + LEGEND_W;
+  doc.setDrawColor(ACC).setLineWidth(0.3).line(left ? x1 : x0, F.margin, left ? x1 : x0, F.h - F.margin);
+  if (st.northBlock !== false) {
   const cx = x0 + 11;
   const north = ((extra.north ?? 0) * Math.PI) / 180;
-  doc.setDrawColor(INK).setLineWidth(0.3).circle(cx, 25, 6.5);
-  const tip = [cx + Math.sin(north) * 5, 25 - Math.cos(north) * 5];
-  doc.setFillColor(INK).triangle(tip[0], tip[1], cx - Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 - Math.sin(north) * 2 + Math.cos(north) * 3.5,
-    cx + Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + Math.sin(north) * 2 + Math.cos(north) * 3.5, 'F');
-  doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(INK).text('N', cx, 14.8, { align: 'center' });
+  doc.setDrawColor(ACC).setLineWidth(0.3).circle(cx, 25 + sh, 6.5);
+  const tip = [cx + Math.sin(north) * 5, 25 + sh - Math.cos(north) * 5];
+  doc.setFillColor(ACC).triangle(tip[0], tip[1], cx - Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + sh - Math.sin(north) * 2 + Math.cos(north) * 3.5,
+    cx + Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + sh + Math.sin(north) * 2 + Math.cos(north) * 3.5, 'F');
+  doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(ACC).text('N', cx, 14.8 + sh, { align: 'center' });
   // scala grafica alla scala di stampa: 0-1-2-5 m, o più corta se la colonna non basta (1:50 e 1:20)
   const mm = 1000 / fit.n;
   const bx = x0 + 17;
   const marks = 5 * mm <= LEGEND_W - 22 ? [0, 1, 2, 5] : 2 * mm <= LEGEND_W - 22 ? [0, 1, 2] : [0, 0.5, 1];
-  doc.setFont(FONT, 'normal').setFontSize(6.5).setTextColor(INK);
+  doc.setFont(FONT, 'normal').setFontSize(6.5).setTextColor(ACC);
   marks.slice(1).forEach((m1, i) => {
-    doc.setFillColor(i % 2 ? '#ffffff' : INK).setDrawColor(INK).setLineWidth(0.2).rect(bx + marks[i] * mm, 22, (m1 - marks[i]) * mm, 2, 'FD');
+    doc.setFillColor(i % 2 ? '#ffffff' : ACC).setDrawColor(ACC).setLineWidth(0.2).rect(bx + marks[i] * mm, 22 + sh, (m1 - marks[i]) * mm, 2, 'FD');
   });
-  marks.forEach((m) => doc.text(m === marks[marks.length - 1] ? `${String(m).replace('.', ',')} m` : String(m).replace('.', ','), bx + m * mm, 28, { align: 'center' }));
-  doc.setFontSize(7).setTextColor(MUTED).text(safe(`Scala 1:${fit.n}${fit.fits ? '' : ' (non unificata)'}`), bx, 16);
+  marks.forEach((m) => doc.text(m === marks[marks.length - 1] ? `${String(m).replace('.', ',')} m` : String(m).replace('.', ','), bx + m * mm, 28 + sh, { align: 'center' }));
+  doc.setFontSize(7).setTextColor(MUTED).text(safe(`Scala 1:${fit.n}${fit.fits ? '' : ' (non unificata)'}`), bx, 16 + sh);
+  }
 
   // legenda locali
-  let y = 38;
+  let y = (st.northBlock === false ? 16 : 38) + sh;
+  const limit = F.h - F.margin - (cartTop ? 0 : CARTOUCHE_H) - 40;
+  if (st.rooms !== false) {
   const { rooms, total } = roomLegend(plan);
-  doc.setFont(FONT, 'bold').setFontSize(8.5).setTextColor(INK).text('LOCALI', x0 + 4, y);
-  doc.setDrawColor(INK).setLineWidth(0.2).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
+  doc.setFont(FONT, 'bold').setFontSize(8.5).setTextColor(ACC).text('LOCALI', x0 + 4, y);
+  doc.setDrawColor(ACC).setLineWidth(0.2).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
   y += 6;
-  const limit = F.h - F.margin - CARTOUCHE_H - 40;
   doc.setFont(FONT, 'normal').setFontSize(7.5);
   for (const r of rooms) {
     if (y > limit) { doc.setTextColor(MUTED).text('...', x0 + 4, y); y += 4; break; }
-    doc.setTextColor(INK).text(safe(r.name), x0 + 4, y);
+    doc.setTextColor(ACC).text(safe(r.name), x0 + 4, y);
     doc.text(`${fmt(r.area)} m²`.replace('²', '2'), x1 - 4, y, { align: 'right' });
     y += 4;
   }
   doc.setFont(FONT, 'bold').text('Totale', x0 + 4, y + 1);
   doc.text(`${fmt(total)} m2`, x1 - 4, y + 1, { align: 'right' });
   y += 8;
+  }
 
   // serramenti di questo piano
   const used = new Set([...(codes?.doors || []), ...(codes?.windows || [])].filter(Boolean));
   const rows = schedule.rows.filter((r) => used.has(r.code));
-  if (rows.length && y < limit + 12) {
-    doc.setFont(FONT, 'bold').setFontSize(8.5).setTextColor(INK).text('SERRAMENTI', x0 + 4, y);
-    doc.setDrawColor(INK).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
+  if (st.schedule !== false && rows.length && y < limit + 12) {
+    doc.setFont(FONT, 'bold').setFontSize(8.5).setTextColor(ACC).text('SERRAMENTI', x0 + 4, y);
+    doc.setDrawColor(ACC).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
     y += 6;
     doc.setFont(FONT, 'normal').setFontSize(7.5);
     for (const r of rows) {
       if (y > limit + 22) break;
-      doc.setTextColor(INK).text(safe(r.code), x0 + 4, y);
-      doc.setTextColor(INK).text(safe(r.type), x0 + 13, y);
+      doc.setTextColor(ACC).text(safe(r.code), x0 + 4, y);
+      doc.setTextColor(ACC).text(safe(r.type), x0 + 13, y);
       doc.text(`${Math.round(r.w * 100)} x ${Math.round(r.h * 100)} cm`, x1 - 4, y, { align: 'right' });
       y += 4;
     }
   }
 
   // cartiglio
-  const cy = F.h - F.margin - CARTOUCHE_H;
-  doc.setDrawColor(INK).setLineWidth(0.5).line(x0, cy, x1, cy);
+  const cy = cartTop ? F.margin : F.h - F.margin - CARTOUCHE_H;
+  doc.setDrawColor(ACC).setLineWidth(0.5).line(x0, cartTop ? cy + CARTOUCHE_H : cy, x1, cartTop ? cy + CARTOUCHE_H : cy);
   doc.setLineWidth(0.2);
   if (logo) {
     const maxH = 11;
     const w = Math.min(34, (maxH * logo.w) / logo.h);
     doc.addImage(logo.data, undefined, x0 + 4, cy + 3, w, (w * logo.h) / logo.w, undefined, 'FAST');
   }
-  doc.setFont(FONT, 'bold').setFontSize(11).setTextColor(INK).text(safe(branding.name), x1 - 4, cy + 9, { align: 'right' });
+  doc.setFont(FONT, 'bold').setFontSize(11).setTextColor(ACC).text(safe(branding.name), x1 - 4, cy + 9, { align: 'right' });
   doc.line(x0, cy + 16, x1, cy + 16);
   const field = (label, value, yy, bold = false) => {
     doc.setFont(FONT, 'normal').setFontSize(6.5).setTextColor(MUTED).text(label, x0 + 4, yy);
-    doc.setFont(FONT, bold ? 'bold' : 'normal').setFontSize(8).setTextColor(INK).text(safe(value) || '', x0 + 24, yy);
+    doc.setFont(FONT, bold ? 'bold' : 'normal').setFontSize(8).setTextColor(ACC).text(safe(value) || '', x0 + 24, yy);
   };
   field('PROGETTO', project.name || 'Progetto', cy + 21, true);
   field('TAVOLA', st.title || `${levelLabel(floor.level)} ${floor.name} - pianta quotata`, cy + 26);
-  if (st.note) doc.setFont(FONT, 'italic').setFontSize(6.5).setTextColor(MUTED).text(safe(st.note), x0 + 4, F.h - F.margin - 2.5, { maxWidth: LEGEND_W - 8 });
+  if (st.note) doc.setFont(FONT, 'italic').setFontSize(6.5).setTextColor(MUTED).text(safe(st.note), x0 + 4, cartTop ? cy + CARTOUCHE_H + 4 : cy - 3, { maxWidth: LEGEND_W - 8 });
   field('COMMITTENTE', branding.client, cy + 31);
   field('PROGETTISTA', branding.designer, cy + 36);
   field('N. PRATICA', branding.ref, cy + 41);
   doc.line(x0, cy + 43.5, x1, cy + 43.5);
-  doc.line(x0 + 25, cy + 43.5, x0 + 25, F.h - F.margin);
-  doc.line(x0 + 50, cy + 43.5, x0 + 50, F.h - F.margin);
+  doc.line(x0 + 25, cy + 43.5, x0 + 25, cy + CARTOUCHE_H);
+  doc.line(x0 + 50, cy + 43.5, x0 + 50, cy + CARTOUCHE_H);
   const cell = (label, value, xx) => {
     doc.setFont(FONT, 'normal').setFontSize(6).setTextColor(MUTED).text(label, xx + 2, cy + 46.5);
-    doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(INK).text(value, xx + 2, cy + 50.5);
+    doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(ACC).text(value, xx + 2, cy + 50.5);
   };
   cell('SCALA', `1:${fit.n}`, x0);
   cell('FORMATO', F.id, x0 + 25);
@@ -710,7 +718,7 @@ export async function exportSheetsPdf(project, opts = {}) {
   let n = 0;
   for (const f of floors) {
     if (n) doc.addPage([F.w, F.h], orient);
-    await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++n, sheets: floors.length, format: F, scale, style: { frame, lineScale, mono, font, title, note } });
+    await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++n, sheets: floors.length, format: F, scale, style: { frame, lineScale, mono, font, title, note, side: opts.side, cartouche: opts.cartouche, northBlock: opts.northBlock, rooms: opts.rooms, schedule: opts.schedule, align: opts.align, accent: opts.accent } });
   }
   if (!n) throw new Error('Nessuna pianta da mettere in tavola.');
   const name = (project.name || 'progetto-planify').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

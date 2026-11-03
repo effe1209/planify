@@ -44,7 +44,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
   onPickRef.current = onPick;
 
   /* Mostra o nasconde sensori, impianto, cavi, coni e luci; a luci accese la scena si abbassa come di sera. */
-  const applyShow = (st, built, show, on, fixtures = !!roofRef.current) => {
+  const applyShow = (st, built, show, on) => {
     if (!built) return;
     const vis = (list, on) => list.forEach((g) => { g.visible = on; });
     vis(built.groups.sensors, !!show?.sensors);
@@ -52,8 +52,6 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     vis(built.groups.cables, !!show?.electric && !!show?.cables);
     vis(built.groups.cones, !!show?.cones);
     vis(built.groups.lights, !!show?.electric || !!show?.lights);
-    // pianta dall'alto (senza tetto): i corpi illuminanti non si vedono, ma restano le luci vere e la scena è illuminata come se ci fossero
-    built.groups.lights.forEach((grp) => grp.traverse((o) => { if (o.isMesh) o.visible = fixtures; }));
     st.setLights(built, !!on);
     if (st.hemi) st.hemi.intensity = on ? HEMI_NIGHT : HEMI_DAY;   // di sera la scena si abbassa ma resta leggibile, con le lampade che spiccano
     if (st.sun) st.sun.intensity = on ? SUN_NIGHT : SUN_DAY;
@@ -74,7 +72,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       : [{ floor: { id: ov.floorId }, y: 0, plan }];
     const built = st.buildOverlays(st.THREE, { floors, devices: ov.devices || [], electric: ov.electric, theme: themeWithPalette(THEMES[style] || THEMES.modern, project?.palette || palette, project?.materials || materials) });
     for (const g of [built.sensors, built.electric, built.cables, built.cones, built.lights]) target.add(g);   // i gruppi dei piani con host stanno già nel loro host
-    applyShow(st, built, ov.show, ov.lightsOn, ov.fixtures ?? !!roofRef.current);
+    applyShow(st, built, ov.show, ov.lightsOn);
     return built;
   };
   attachRef.current = attach;
@@ -418,7 +416,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             // i corpi illuminanti ci sono sempre (anche senza impianto elettrico: se ne ricavano i punti luce)
             const cur = overlayRef.current;
             const lamps = { devices: cur?.devices || [], electric: cur?.electric || extra.electric || null, floorId: cur?.floorId,
-              show: { ...(cur?.show || {}), lights: true }, lightsOn: false, fixtures: true };
+              show: { ...(cur?.show || {}), lights: true }, lightsOn: false };
             const built = attachRef.current(sceneRef.current, fresh, 0, lamps);
             if (built) {
               setLights(built, false);
@@ -594,7 +592,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     const st = sceneRef.current;
     if (st && builtRef.current) applyShow(st, builtRef.current, overlay?.show, overlay?.lightsOn);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlay?.show, overlay?.lightsOn, ready, !!roof]);
+  }, [overlay?.show, overlay?.lightsOn, ready]);
 
   return (
     <div className="pf-3d" ref={host}>

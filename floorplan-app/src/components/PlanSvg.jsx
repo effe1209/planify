@@ -1240,7 +1240,7 @@ export default function PlanSvg({
   thumb = false, svgRef, zoom = 1, typeLabel = '', style = 'modern', palette = null, devices = null, stairs = null, house = null,
   electric = null, electricLinks = true, plumbing = null, plumbingLines = true, generator = 'heatpump',
   editable = false, selectedItem = null, onItemSelect, onItemMove, onItemRotate, codes = null,
-  selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag,
+  selectedDevice = null, onDeviceSelect, onDeviceMove, onDeviceRotate, onDeviceDrag, onLightMove = null,
   coverage = null, coverageHighlight = null, doorStates = null, onDoorToggle, deviceCodes = null, north = 0, bare = false,
   wallEdit = null, level = 'all', onMezzResize = null,
 }) {
@@ -1689,7 +1689,7 @@ export default function PlanSvg({
           ? <SketchEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />
           : <WallEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />)}
 
-        {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
+        {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} toMeters={!thumb ? toMeters : null} onLightMove={onLightMove} />}
         {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}
 
         {!electric && !plumbing && !thumb && layers.alarm !== false && devices?.length > 0 && (

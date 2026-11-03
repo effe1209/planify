@@ -15,9 +15,10 @@ export const LEGEND_W = 74;              // colonna di destra: legenda, abaco, c
 export const CARTOUCHE_H = 52;
 
 /* Riquadro del disegno: tutto il foglio meno cornice, colonna di destra e un filo d'aria. */
-export function drawingArea(F = A4) {
+export function drawingArea(F = A4, side = 'right') {
   const m = F.margin + 4;
-  return { x: m, y: m, w: F.w - m - F.margin - LEGEND_W - 6, h: F.h - 2 * m };
+  const w = F.w - m - F.margin - LEGEND_W - 6;
+  return { x: side === 'left' ? F.margin + LEGEND_W + 6 : m, y: m, w, h: F.h - 2 * m };
 }
 
 /* Scala di stampa (1:N) e dimensioni in mm del disegno che ha `px` × `py` pixel a `pxPerM` px/m. */

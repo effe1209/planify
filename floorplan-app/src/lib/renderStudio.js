@@ -4,7 +4,7 @@
  * x e z come la pianta, y verso l'alto; un piano sta a level × FLOOR_H.
  */
 import { FLOOR_H } from './scene3d';
-import { frontOf } from './project';
+import { doorSide, frontOf } from './project';
 
 export const EYE = 1.6;   // altezza degli occhi nelle viste interne
 
@@ -117,7 +117,9 @@ export function cameraViews(project, { aspect = 16 / 9 } = {}) {
     const d = distFor(r, f, aspect);
     out.push({ id, label, kind: 'outside', fov: f, target: b.center, position: b.center.map((c, i) => c + (dir[i] / n) * d) });
   };
-  outside('three-quarter', 'Tre quarti', [0.55, 0.65, 0.8]);
+  const ds = doorSide(project);
+  const [qx, qz] = { S: [0.55, 0.8], N: [-0.55, -0.8], E: [0.8, -0.55], W: [-0.8, 0.55] }[ds];
+  outside('three-quarter', 'Tre quarti', [qx, 0.65, qz]);
   // pianta 3D: dritta sopra la casa, perpendicolare al terreno, con la stessa orientazione della pianta (nord/alto del foglio in alto) e a tutto
   // schermo: ortografica (nessuna prospettiva) nel render; la vista viva e il path tracing usano un campo molto stretto da lontano, quasi uguale
   {
@@ -129,7 +131,8 @@ export function cameraViews(project, { aspect = 16 / 9 } = {}) {
     out.push({ id: 'plan3d', label: 'Pianta 3D dall\'alto', kind: 'outside', fov: pf, ortho: { height: viewH, width: b.W * m, length: b.L * m },
       target: [b.center[0], 0, b.center[2]], position: [b.center[0], dist, b.center[2] + off] });
   }
-  outside('front', 'Fronte', [0, 0.22, 1]);
+  // il fronte è la facciata del portoncino (non per forza il sud)
+  outside('front', 'Fronte', { S: [0, 0.22, 1], N: [0, 0.22, -1], E: [1, 0.22, 0], W: [-1, 0.22, 0] }[ds]);
   // il giardino, se c'è: una vista dall'alto che abbraccia casa e giardino, una a quota d'occhi dal cancello verso il portoncino
   const gf = gardenFrame(project);
   const fr0 = gf ? frontOf(project)?.facade?.door : null;

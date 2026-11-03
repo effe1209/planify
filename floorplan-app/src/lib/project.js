@@ -97,6 +97,15 @@ function openingSide(o, W, L) {
   return { side: o.y < L / 2 ? 'N' : 'S', cx: o.x + o.w / 2, cy: o.y };
 }
 
+/* Lato (N/E/S/W) del portoncino: serve ai render, che guardano la casa da lì. Senza portoncino, sud. */
+export function doorSide(project) {
+  const f = homeFloor(project);
+  if (!f) return 'S';
+  const { width: W, length: L } = f.plan.dimensions;
+  const door = f.plan.doors.find((d) => d.entrance && !d.kind) || f.plan.doors.find((d) => d.entrance);
+  return door ? openingSide(door, W, L).side : 'S';
+}
+
 const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' };
 const LEFT_OF = { S: 'W', N: 'E', E: 'S', W: 'N' };   // il fianco sinistro guardando la facciata da fuori
 

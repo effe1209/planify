@@ -502,6 +502,9 @@ export default function App() {
   };
 
   /* ── Piani del progetto ── */
+  /* Punto luce spostato nella tavola elettrica: la posizione resta nel progetto (lightMoves) e vale anche in 3D. */
+  const moveLight = (key, pos) => editProject((p) => ({ ...p, lightMoves: { ...(p.lightMoves || {}), [key]: pos } }));
+  const resetLights = () => editProject((p) => { const { lightMoves: _l, ...rest } = p; return rest; });
   const editProject = (fn) => current && !readOnly && history.update(current.id, fn);
   const closeShared = () => {
     setShared(null);
@@ -2290,6 +2293,7 @@ export default function App() {
                     onSelectStair: setSelectedStair, onApply: applyPlanEdit, onMoveWall: moveWall, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
                   } : null} codes={schedule?.codes[floor.id]}
                   onItemSelect={(i) => { setSelectedItem(i); setSelectedId(null); }} onItemMove={moveFurniture} onItemRotate={(i, deg) => editFurniture((list) => list.map((f, k) => (k === i ? setItemRot(f, deg) : f)))}
+                  onLightMove={readOnly || !showElectric ? null : moveLight}
                   selectedDevice={selectedDevice?.id} onDeviceSelect={setSelectedDevice} onDeviceMove={moveDevice}
                   onDeviceRotate={(id, dir) => changeDevice(id, { dir: ((dir % 360) + 360) % 360 })}
                   onDeviceDrag={setDevicePreview} coverage={coverage} coverageHighlight={coverHighlight}
@@ -2510,7 +2514,8 @@ export default function App() {
 
               {T('sys') && (<>
               <ElectricPanel config={electricCfg} data={electricPlan} floorId={floor.id} sheet={showElectric ? 'electric' : 'arch'}
-                onStart={startElectric} onSheet={setSheet} onChange={changeElectric} onClear={clearElectric} />
+                onStart={startElectric} onSheet={setSheet} onChange={changeElectric} onClear={clearElectric}
+                movedLights={Object.keys(current?.lightMoves || {}).length} onResetLights={resetLights} />
               </>)}
 
               {T('sys') && (<>

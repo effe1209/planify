@@ -11,6 +11,7 @@ export const LINE_WEIGHTS = [['thin', 'Sottili', 0.6], ['normal', 'Normali', 1],
 export const DEFAULT_TEMPLATE = {
   name: 'Standard', format: 'A3', orientation: 'landscape', scale: 'auto', margin: 10, frame: true, lines: 'normal', mono: false, font: 'helvetica',
   studio: '', client: '', designer: '', ref: '', title: '', note: '',
+  side: 'right', cartouche: 'bottom', northBlock: true, rooms: true, schedule: true, align: 'center', accent: '',
 };
 
 const str = (v, max = 120) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -32,6 +33,9 @@ export function cleanTemplate(t) {
     font: FONTS.some(([id]) => id === t?.font) ? t.font : d.font,
     studio: str(t?.studio, 60), client: str(t?.client), designer: str(t?.designer), ref: str(t?.ref, 40),
     title: str(t?.title, 60), note: str(t?.note, 200),
+    side: t?.side === 'left' ? 'left' : 'right', cartouche: t?.cartouche === 'top' ? 'top' : 'bottom',
+    northBlock: t?.northBlock !== false, rooms: t?.rooms !== false, schedule: t?.schedule !== false,
+    align: t?.align === 'start' ? 'start' : 'center', accent: /^#[0-9a-f]{6}$/i.test(t?.accent || '') ? t.accent : '',
   };
 }
 
@@ -66,5 +70,6 @@ export function templateOptions(t) {
   return {
     format: c.format, scale: c.scale, portrait: c.orientation === 'portrait', margin: c.margin, frame: c.frame, lineScale: weight, mono: c.mono, font: c.font,
     branding: { name: c.studio, client: c.client, designer: c.designer, ref: c.ref }, title: c.title, note: c.note,
+    side: c.side, cartouche: c.cartouche, northBlock: c.northBlock, rooms: c.rooms, schedule: c.schedule, align: c.align, accent: c.accent,
   };
 }

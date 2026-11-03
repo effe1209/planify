@@ -6,7 +6,7 @@ import { ElectricGlyph } from './ElectricLayer';
  * Impianto elettrico: livello CEI 64-8, tavola elettrica on/off, verifica delle dotazioni per locale,
  * circuiti del quadro del piano, legenda e distinta di tutto il progetto.
  */
-export default function ElectricPanel({ config, data, floorId, sheet, onStart, onSheet, onChange, onClear }) {
+export default function ElectricPanel({ config, data, floorId, sheet, onStart, onSheet, onChange, onClear, movedLights = 0, onResetLights = null }) {
   if (!config) {
     return (
       <section className="pf-sec pf-electric">
@@ -22,6 +22,12 @@ export default function ElectricPanel({ config, data, floorId, sheet, onStart, o
     );
   }
   const fl = data?.floors[floorId];
+  const lightsHint = (
+    <p className="pf-hint">
+      Nella tavola elettrica i punti luce a soffitto si trascinano (cerchio arancione al passaggio del mouse): restano dove li metti anche in 3D.
+      {movedLights > 0 && onResetLights && <> <button type="button" className="pf-link" onClick={onResetLights}>Rimetti le {movedLights} luci dove le aveva messe il progetto</button></>}
+    </p>
+  );
   const counts = new Map();
   for (const p of fl?.points || []) {
     const key = p.kind === 'dedicated' ? `dedicated:${p.tag}` : p.kind;
@@ -38,6 +44,7 @@ export default function ElectricPanel({ config, data, floorId, sheet, onStart, o
   return (
     <section className="pf-sec pf-electric">
       <h2>Impianto elettrico</h2>
+      {lightsHint}
       <div className="pf-field-sm">
         <span>Livello prestazionale CEI 64-8</span>
         <div className="pf-seg" role="radiogroup" aria-label="Livello CEI 64-8">

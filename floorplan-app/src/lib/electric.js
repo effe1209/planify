@@ -216,9 +216,20 @@ function planFloor(project, floor, level, stairRole, main) {
   const notes = [];
   const rooms = [];
   let n = 0;
-  const add = (kind, r, p, extra = {}) => {
+  // punti luce a soffitto spostati a mano (project.lightMoves[«piano:locale:n»] = { x, y }): restano dove li hai messi anche se l'impianto si ricalcola
+  const lightN = new Map();
+  const add = (kind, r, p0, extra = {}) => {
+    let p = p0;
+    let moveKey;
+    if (kind === 'light' && r) {
+      const k = lightN.get(r.id) ?? 0;
+      lightN.set(r.id, k + 1);
+      moveKey = `${floor.id}:${r.id}:${k}`;
+      const mv = project.lightMoves?.[moveKey];
+      if (mv && Number.isFinite(mv.x) && Number.isFinite(mv.y) && contains(r, mv.x, mv.y)) p = { ...p0, x: mv.x, y: mv.y };
+    }
     const pt = { id: `${floor.id}-e${++n}`, floor: floor.id, room: r?.id ?? null, kind,
-      x: +p.x.toFixed(3), y: +p.y.toFixed(3), nx: p.nx ?? 0, ny: p.ny ?? 0, ...extra };
+      x: +p.x.toFixed(3), y: +p.y.toFixed(3), nx: p.nx ?? 0, ny: p.ny ?? 0, ...extra, ...(moveKey && { moveKey, moved: p !== p0 }) };
     points.push(pt);
     return pt;
   };

@@ -1,7 +1,7 @@
 /* Modelli di tavola (lib/sheetTemplates.js). */
 import assert from 'node:assert/strict';
 import { DEFAULT_TEMPLATE, cleanTemplate, listTemplates, templateOptions } from '../src/lib/sheetTemplates.js';
-import { sheetFormat } from '../src/lib/techSheet.js';
+import { drawingArea, sheetFormat } from '../src/lib/techSheet.js';
 
 const c = cleanTemplate({ name: ' Esecutivo ', format: 'A9', scale: 77, margin: 99, lines: 'x', font: 'comic', orientation: 'portrait', mono: 1, studio: 'Studio X' });
 assert.equal(c.name, 'Esecutivo');
@@ -21,4 +21,12 @@ assert.equal(o.branding.name, 'Studio X');
 const F = sheetFormat('A3', { portrait: true, margin: 12 });
 assert.deepEqual([F.w, F.h, F.margin], [297, 420, 12]);
 assert.deepEqual(listTemplates({ sheetTemplates: [c, { ...c, id: c.id }] }).map((t) => t.id), [c.id, c.id]);
+const lay = cleanTemplate({ side: 'left', cartouche: 'top', northBlock: false, rooms: false, schedule: false, align: 'start', accent: '#336699' });
+assert.deepEqual([lay.side, lay.cartouche, lay.northBlock, lay.rooms, lay.schedule, lay.align, lay.accent], ['left', 'top', false, false, false, 'start', '#336699']);
+assert.equal(cleanTemplate({ accent: 'rosso', side: 'su' }).accent, '');
+assert.equal(cleanTemplate({ side: 'su' }).side, 'right');
+const lo = templateOptions(lay);
+assert.deepEqual([lo.side, lo.cartouche, lo.northBlock, lo.align, lo.accent], ['left', 'top', false, 'start', '#336699']);
+const A = drawingArea(sheetFormat('A3'), 'left');
+assert.ok(A.x > drawingArea(sheetFormat('A3'), 'right').x + 60, 'il disegno si sposta a destra con la colonna a sinistra');
 console.log('sheettemplates ok');
