@@ -23,7 +23,8 @@ create policy "projects_update_own" on public.projects for update to authenticat
 create policy "projects_delete_own" on public.projects for delete to authenticated using (owner = (select auth.uid()));
 
 -- aggiorna updated_at a ogni modifica
-create or replace function public.touch_updated_at() returns trigger language plpgsql as $$
+create or replace function public.touch_updated_at() returns trigger language plpgsql
+set search_path = public as $$
 begin
   new.updated_at = now();
   return new;
