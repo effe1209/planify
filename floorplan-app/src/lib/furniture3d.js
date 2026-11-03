@@ -1138,6 +1138,12 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       for (const [bx0, bz0] of [[-0.13, -0.11], [0.13, -0.11], [-0.13, 0.11], [0.13, 0.11]]) cy(0.07, 0.07, 0.012, hx + bx0, 0.888, bz0, m('burner', '#3a4048'), 18);
       bx(0.62, 0.08, 0.42, hx, 1.52, -D / 2 + 0.22, metalMat);
       bx(0.28, 0.62, 0.22, hx, 1.6, -D / 2 + 0.13, metalMat);
+      const kettle = m('kettle-appliance', '#d9dee5', { metalness: 0.25, roughness: 0.35 });
+      ball(0.5, 0, 0.99, 0.02, kettle, 0.25, 0.2, 0.22);
+      cy(0.045, 0.055, 0.02, 0, 1.09, 0.02, metalMat, 16);
+      bx(0.02, 0.11, 0.025, -0.13, 0.92, 0.02, chrome, 0.006);
+      const spout = cy(0.014, 0.018, 0.09, 0.12, 1.035, 0.02, kettle, 10);
+      spout.rotation.z = -Math.PI / 2;
       break;
     }
     case 'kitchen_peninsula': {

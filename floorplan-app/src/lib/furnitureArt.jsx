@@ -202,7 +202,12 @@ export const FURNITURE_ART = {
         {t.legs === 'turned' && <rect x={3} y={3} width={w - 6} height={h - 6} rx={Math.max(0, r - 3)} fill="none" stroke={t.woodLine} strokeOpacity="0.5" />}
         <Grain w={w} h={h} t={t} />
         <Feet w={w} h={h} t={t} />
+        <rect x={w * 0.2} y={(h - runnerH) / 2} width={w * 0.6} height={runnerH} rx={runnerH * 0.18}
+          fill={t.rug} fillOpacity="0.9" stroke={t.rugLine} strokeWidth="0.7" />
         <ellipse cx={w / 2} cy={h / 2} rx={Math.min(w, h) * 0.16} ry={Math.min(w, h) * 0.12} fill="#fff" fillOpacity="0.7" stroke={F_SOFT} strokeWidth="0.6" />
+        {['#bd5946', '#d6a644', '#75924d'].map((color, i) => (
+          <circle key={color} cx={w / 2 + (i - 1) * fruitR * 2.1} cy={h / 2 + (i === 1 ? -fruitR * 0.35 : 0)} r={fruitR} fill={color} stroke="#fff" strokeWidth="0.5" />
+        ))}
       </g>
     );
   },
@@ -306,6 +311,7 @@ export const FURNITURE_ART = {
     const sinkX = item?.parts?.sink != null ? item.parts.sink * s - sinkW / 2 : f0 + usable * 0.58;
     const hobW = 0.6 * s;
     const hx = hobC - hobW / 2;
+    const applianceGap = sinkX - (hx + hobW);
     const rr = Math.min(5.5, h * 0.16);
     return (
       <g>
@@ -333,6 +339,21 @@ export const FURNITURE_ART = {
         <rect x={sinkX} y={h * 0.18} width={sinkW} height={h * 0.62} rx={3} fill="#e3eefb" stroke={F_SOFT} />
         <circle cx={sinkX + sinkW / 2} cy={h * 0.62} r={1.4} fill={F_STROKE} />
         <path d={`M ${sinkX + sinkW / 2} ${h * 0.06} L ${sinkX + sinkW / 2} ${h * 0.3}`} stroke="#9aa3b2" strokeWidth="1.8" strokeLinecap="round" />
+        {applianceGap > 0.2 * s && (() => {
+          const cx = hx + hobW + applianceGap / 2;
+          const rx = Math.min(h * 0.17, applianceGap * 0.19);
+          const ry = Math.min(h * 0.17, rx * 0.9);
+          return (
+            <g>
+              <ellipse cx={cx} cy={h * 0.53} rx={rx} ry={ry} fill="#d9dee5" stroke="#7c8793" strokeWidth="0.8" />
+              <path d={`M ${cx - rx * 0.64} ${h * 0.53 - ry * 0.62} C ${cx - rx * 1.55} ${h * 0.53 - ry * 0.8} ${cx - rx * 1.55} ${h * 0.53 + ry * 0.8} ${cx - rx * 0.64} ${h * 0.53 + ry * 0.62}`}
+                fill="none" stroke="#7c8793" strokeWidth="1.2" strokeLinecap="round" />
+              <path d={`M ${cx + rx * 0.65} ${h * 0.53 - ry * 0.25} L ${cx + rx * 1.45} ${h * 0.53 - ry * 0.42} L ${cx + rx * 1.58} ${h * 0.53 - ry * 0.1}`}
+                fill="none" stroke="#7c8793" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx={cx} cy={h * 0.53} r={Math.min(rx * 0.22, 2.3)} fill="#f3f4f5" stroke="#7c8793" strokeWidth="0.6" />
+            </g>
+          );
+        })()}
       </g>
     );
   },
