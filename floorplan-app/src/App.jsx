@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import RenderPanel from './components/RenderPanel';
 import {
   AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
-  Building2, Cloud as CloudIcon, Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
+  Building2, Cloud as CloudIcon, Orbit, Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Camera, Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
@@ -50,6 +50,7 @@ import CloudDialog from './components/CloudDialog';
 import CloudSync from './components/CloudSync';
 import InspectorTabs from './components/InspectorTabs';
 import SheetsDialog from './components/SheetsDialog';
+import TourDialog from './components/TourDialog';
 import LibraryDialog, { LibraryPanel } from './components/LibraryDialog';
 import { getLibrary, purchaseQuote, storeLibrary } from './lib/materialLibrary';
 import { getBranding } from './lib/branding';
@@ -169,6 +170,7 @@ export default function App() {
   const [cookieDialog, setCookieDialog] = useState(false);
   const [cloudDialog, setCloudDialog] = useState(false);
   const [sheetsDialog, setSheetsDialog] = useState(false);
+  const [tourDialog, setTourDialog] = useState(false);
   const [libraryDialog, setLibraryDialog] = useState(false);
   const [sheetsBusy, setSheetsBusy] = useState(false);
   const cx = useCloud();
@@ -1667,6 +1669,8 @@ export default function App() {
     { key: 'dxf', label: 'DXF (CAD)', Icon: Briefcase, onClick: () => exportDxf(), accent: true, title: 'Scarica DXF per il CAD' },
     { key: 'ifc', label: 'IFC (BIM)', Icon: Building2, onClick: exportIfc, accent: true,
       title: 'Scarica IFC per Revit, ArchiCAD e gli altri programmi BIM: muri, solai, locali, porte e finestre di tutti i piani' },
+    { key: 'tour', label: 'Tour 360°', Icon: Orbit, onClick: () => setTourDialog(true), accent: true,
+      title: 'Panorama a 360° di ogni locale e video del giro della casa' },
     { key: 'sheets', label: 'Tavole', Icon: Ruler, onClick: () => setSheetsDialog(true), accent: true,
       title: 'Tavole in scala (A4-A1) con cartiglio, in PDF o DXF' },
     { key: 'json', label: 'JSON', Icon: FileJson, onClick: exportJson, title: 'Scarica JSON' },
@@ -2564,6 +2568,7 @@ export default function App() {
         />
       )}
       {libraryDialog && <LibraryDialog library={library} quote={quote} onLibrary={changeLibrary} onClose={() => setLibraryDialog(false)} say={say} />}
+      {tourDialog && current && <TourDialog project={current} onClose={() => setTourDialog(false)} />}
       {sheetsDialog && (
         <SheetsDialog busy={sheetsBusy} onClose={() => setSheetsDialog(false)} onPdf={exportSheets}
           onDxf={(opts) => { exportDxf(opts); setSheetsDialog(false); }} />
