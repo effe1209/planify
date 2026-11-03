@@ -160,3 +160,22 @@ test('il pannello Cloud si apre e dice che non è collegato', async ({ page }) =
   await expect(dialog).toBeHidden();
   expect(errors.filter((e) => !/ERR_CONNECTION|Failed to load resource/.test(e))).toEqual([]);
 });
+
+test('il tour 3D crea il panorama a 360° di un locale e lo mostra nel visore', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(90_000);
+  const errors = await open(page);
+  await generate(page);
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  const share = page.getByRole('button', { name: 'Esporta e condividi' });   // con poco spazio le esportazioni stanno in un menu
+  if (await share.count()) await share.click();
+  await page.locator('button, [role="menuitem"]', { hasText: 'Tour 360' }).locator('visible=true').first().click();
+  const dialog = page.getByRole('dialog', { name: /Tour 3D/ });
+  await expect(dialog).toBeVisible();
+  const row = dialog.locator('.pf-tour-list li').first();
+  await row.getByRole('button', { name: /Crea panorama/ }).click();
+  await expect(row.locator('img.pf-tour-thumb')).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.locator('.pf-pano canvas')).toBeVisible();
+  await expect(row.getByRole('link', { name: /JPG/ })).toBeVisible();
+  expect(errors.filter((e) => !/ERR_CONNECTION|Failed to load resource/.test(e))).toEqual([]);
+});

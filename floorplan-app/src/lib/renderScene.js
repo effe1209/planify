@@ -135,7 +135,7 @@ export function buildRenderScene(THREE, project, { renderer = null, RoomEnvironm
 
 /* Luce d'area vera alle finestre più vicine alla telecamera (di giorno): la luce del cielo entra morbida e gli interni non restano
    «spenti» dove il sole non arriva. Il pannello è nel vano, rivolto verso l'interno (verso il centro della casa). */
-function windowAreaLights(THREE, model, bounds, view, t, night, enabled) {
+export function windowAreaLights(THREE, model, bounds, view, t, night, enabled) {
   if (!enabled || night || !view) return [];
   const cam = new THREE.Vector3(...view.position);
   const cands = [];
