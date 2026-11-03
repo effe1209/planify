@@ -7,6 +7,12 @@ import { themeFor, themeWithPalette } from '../lib/palette';
  * trascina per ruotare, rotellina per lo zoom, tasto destro (o due dita) per spostarti. three.js si carica solo qui.
  * onReady({ png, dxf }) dà all'app le esportazioni della vista: immagine PNG e DXF 3D (lib/dxf3d.js).
  */
+// luci della vista: con la tonalità cinematografica e la luce del cielo (ambiente) servono meno luce diretta e più sole
+const HEMI_DAY = 0.4;
+const HEMI_NIGHT = 0.35;
+const SUN_DAY = 2.0;
+const SUN_NIGHT = 0.7;
+
 export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady, onPick = null, selection = null }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
@@ -35,8 +41,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     vis(built.groups.cones, !!show?.cones);
     vis(built.groups.lights, !!show?.electric || !!show?.lights);
     st.setLights(built, !!on);
-    if (st.hemi) st.hemi.intensity = on ? 0.85 : 1.3;   // di sera la scena si abbassa ma resta leggibile, con le lampade che spiccano
-    if (st.sun) st.sun.intensity = on ? 0.5 : 1.6;
+    if (st.hemi) st.hemi.intensity = on ? HEMI_NIGHT : HEMI_DAY;   // di sera la scena si abbassa ma resta leggibile, con le lampade che spiccano
+    if (st.sun) st.sun.intensity = on ? SUN_NIGHT : SUN_DAY;
     st.invalidate?.(true);
   };
   /* Costruisce i gruppi del progetto e li aggiunge a `target` (la scena o una copia per il DXF). */
@@ -66,6 +72,11 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       try {
         const THREE = await import('three');
         const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
+        const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+        const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+        const { GTAOPass } = await import('three/examples/jsm/postprocessing/GTAOPass.js');
+        const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
+        const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
         const { buildScene, buildHouse, addGround, buildRoof, roofFloor, WALL_H, FLOOR_H } = await import('../lib/scene3d');
         const { buildOverlays, setLights } = await import('../lib/overlays3d');
         const { sunDirection } = await import('../lib/orientation');
@@ -97,9 +108,31 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.setClearColor('#eef1f5');
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;   // tonalità cinematografica: luci morbide, niente bianchi bruciati
+        renderer.toneMappingExposure = 0.85;
         el.appendChild(renderer.domElement);
 
         const scene = new THREE.Scene();
+        // cielo sfumato (caldo all'orizzonte) e luce d'ambiente: riflessi e rimbalzi morbidi dallo studio neutro
+        {
+          const cv = document.createElement('canvas');
+          cv.width = 2;
+          cv.height = 256;
+          const g2 = cv.getContext('2d');
+          const grad = g2.createLinearGradient(0, 0, 0, 256);
+          grad.addColorStop(0, '#cfdcec');
+          grad.addColorStop(0.55, '#eceae6');
+          grad.addColorStop(1, '#f2ece2');
+          g2.fillStyle = grad;
+          g2.fillRect(0, 0, 2, 256);
+          const sky = new THREE.CanvasTexture(cv);
+          sky.colorSpace = THREE.SRGBColorSpace;
+          scene.background = sky;
+          const pm = new THREE.PMREMGenerator(renderer);
+          scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+          scene.environmentIntensity = 0.4;
+          pm.dispose();
+        }
         // disegno solo quando serve: a riposo la scheda grafica non lavora. Le ombre (luce e geometria fisse) si ricalcolano solo
         // quando la scena cambia, non a ogni movimento della telecamera.
         renderer.shadowMap.autoUpdate = false;
@@ -107,30 +140,59 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         let dirty = true;
         let raf = 0;
         let controls = null;
+        let composer = null;   // disegno finale (a vista ferma): occlusione ambientale e tonalità; mentre ci si muove si disegna diretto
+        let aoOn = false;
+        let slowFrames = 0;
+        let fast = false;
+        let settle = 0;
         const basePixelRatio = Math.min(2, window.devicePixelRatio || 1);
         const invalidate = (sceneChanged = false) => {
           if (sceneChanged) renderer.shadowMap.needsUpdate = true;
           dirty = true;
           if (!raf && !disposed) raf = requestAnimationFrame(loop);
         };
+        const draw = (final) => {
+          if (final && composer && aoOn) {
+            const t0 = performance.now();
+            try {
+              composer.render();
+            } catch {
+              composer = null;   // il disegno finale non riesce su questa scheda grafica: da qui in poi diretto
+              renderer.render(scene, camera);
+              return;
+            }
+            renderer.getContext().finish();   // misura vera: se il disegno finale è lento su questo computer, l'occlusione si spegne da sola
+            if (performance.now() - t0 > 160) slowFrames += 1; else slowFrames = 0;
+            if (slowFrames >= 3) {
+              aoOn = false;
+              try { localStorage.setItem('planify.ao', 'off'); } catch { /* niente memoria: vale per questa sessione */ }
+            }
+          } else renderer.render(scene, camera);
+        };
         function loop() {
           raf = 0;
           if (disposed) return;
           const moving = controls ? controls.update() : false;   // true finché la telecamera si muove (anche per l'inerzia)
+          if (moving) {
+            fast = true;
+            clearTimeout(settle);
+            settle = setTimeout(() => { fast = false; invalidate(); }, 220);   // a vista ferma si rifà il disegno completo
+          }
           if (moving || dirty) {
             dirty = false;
-            renderer.render(scene, camera);
+            draw(!moving && !fast);
             if (moving && !raf) raf = requestAnimationFrame(loop);   // (un 'change' di update() può averlo già pianificato)
           }
         }
         sceneRef.current = { THREE, scene, model: null, ground: null, renderer, buildRoof, roofFloor, WALL_H, FLOOR_H, buildOverlays, setLights, hemi: null, sun: null, invalidate };
-        const hemi = new THREE.HemisphereLight('#ffffff', '#cfd6e0', 1.3);
+        const hemi = new THREE.HemisphereLight('#fff6ea', '#d8d2c8', HEMI_DAY);
         scene.add(hemi);
-        const sun = new THREE.DirectionalLight('#fff7ea', 1.6);
+        const sun = new THREE.DirectionalLight('#fff3e0', SUN_DAY);
         sun.castShadow = true;
         sun.shadow.bias = -0.0004;        // niente righe sfarfallanti sui muri esposti al sole (shadow acne)
         sun.shadow.normalBias = 0.03;
         sun.shadow.mapSize.set(2048, 2048);
+        sun.shadow.radius = 3;              // ombre dai bordi morbidi
         scene.add(sun, sun.target);
         sceneRef.current.hemi = hemi;
         sceneRef.current.sun = sun;
@@ -141,6 +203,21 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
         controls.maxPolarAngle = Math.PI / 2.05;   // mai sotto il pavimento
         controls.minDistance = 2;
         controls.addEventListener('change', () => invalidate());
+        try {
+          const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+          composer = new EffectComposer(renderer, rt);
+          composer.setPixelRatio(basePixelRatio);
+          composer.addPass(new RenderPass(scene, camera));
+          const gtao = new GTAOPass(scene, camera, 1, 1);
+          gtao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.2, thickness: 1.2, scale: 1, samples: 12 });
+          composer.addPass(gtao);
+          composer.addPass(new OutputPass());
+          let off = false;
+          try { off = localStorage.getItem('planify.ao') === 'off'; } catch { /* niente memoria */ }
+          aoOn = !off;
+        } catch {
+          composer = null;   // scheda grafica senza i formati necessari: resta il disegno diretto
+        }
 
         /*
          * Clic sulla scena (non un trascinamento per ruotare): un raggio dalla telecamera trova cosa c'è sotto il cursore.
@@ -181,8 +258,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           onPickRef.current?.(pick(e));
         });
         // mentre si ruota la risoluzione scende (fluido), a mano ferma torna piena
-        controls.addEventListener('start', () => { if (basePixelRatio > 1) renderer.setPixelRatio(1); });
-        controls.addEventListener('end', () => { if (basePixelRatio > 1) { renderer.setPixelRatio(basePixelRatio); invalidate(); } });
+        controls.addEventListener('start', () => { if (basePixelRatio > 1) { renderer.setPixelRatio(1); composer?.setPixelRatio(1); } });
+        controls.addEventListener('end', () => { if (basePixelRatio > 1) { renderer.setPixelRatio(basePixelRatio); composer?.setPixelRatio(basePixelRatio); invalidate(); } });
         sceneRef.current.camera = camera;
         sceneRef.current.controls = controls;
 
@@ -197,6 +274,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           controls.update();
         };
         let lastSphere = null;
+        let fadeTex = null;
         /*
          * (Ri)costruisce il modello dalle proprietà correnti senza toccare renderer, luci, telecamera e comandi: così una modifica
          * del progetto (o un salvataggio sul cloud) non fa lampeggiare la vista né riporta l'inquadratura all'inizio.
@@ -223,6 +301,30 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           }
           // ingombro reale (con i piani impilati) per terreno, luce e inquadratura
           const { bb, center, size, ground } = addGround(THREE, scene, model);
+          // terreno più grande che sfuma nel cielo (non un riquadro tagliato netto), in un colore caldo
+          {
+            const R = Math.max(size.x, size.z) * 2.2 + 30;
+            ground.geometry.dispose();
+            ground.geometry = new THREE.CircleGeometry(R, 64);
+            if (!fadeTex) {
+              const cv = document.createElement('canvas');
+              cv.width = cv.height = 256;
+              const g2 = cv.getContext('2d');
+              const rg = g2.createRadialGradient(128, 128, 0, 128, 128, 128);
+              rg.addColorStop(0, '#fff');
+              rg.addColorStop(0.45, '#fff');
+              rg.addColorStop(1, '#000');
+              g2.fillStyle = rg;
+              g2.fillRect(0, 0, 256, 256);
+              fadeTex = new THREE.CanvasTexture(cv);
+            }
+            ground.material.alphaMap = fadeTex;
+            ground.material.transparent = true;
+            ground.material.depthWrite = false;
+            ground.material.color.set('#d9d2c6');
+            ground.material.needsUpdate = true;
+            ground.renderOrder = -1;
+          }
           const W = Math.max(1, size.x), L = Math.max(1, size.z), Ht = Math.max(1, bb.max.y);
           const dir = sunDirection(P.north);   // il sole segue il nord del progetto (pomeriggio, a sud-ovest)
           const reach = Math.max(W, L) * 0.6 + 8;
@@ -249,6 +351,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           const w = el.clientWidth || 600;
           const h = el.clientHeight || 400;
           renderer.setSize(w, h);
+          composer?.setSize(w, h);
           camera.aspect = w / h;
           camera.updateProjectionMatrix();
           invalidate();
@@ -274,7 +377,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             invalidate();
           },
           png: () => {
-            renderer.render(scene, camera);
+            draw(true);
             return renderer.domElement.toDataURL('image/png');
           },
           // GLB per Blender: la scena com'è (tetto, impianto e sensori visibili), con tutte le luci vere e il sole
