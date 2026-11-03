@@ -8,6 +8,8 @@ import { rugsFor } from './rugs';
 import { decorFor } from './decor';
 import { slideDoor } from './mezz';
 import { balconyRailings } from './balcony';
+import { glassSpan, isPanoramic, isSliding } from './openings';
+import { withCornerWindows } from './cornerWindows';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -17,7 +19,8 @@ const SLAB_T = 0.3;   // solaio tra un piano e l'altro
 /* Altezza (m) e materiale di ogni arredo; `lift` = quota da terra (TV appesa, pensili…). */
 const SHAPES = {
   sofa: [0.8, 'fabric'], sofa_corner: [0.8, 'fabric'], armchair: [0.8, 'fabric'], bed: [0.55, 'duvet'],
-  nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
+  nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], wardrobe_corner: [2.2, 'cabinet'], wardrobe_open: [2.1, 'cabinet'],
+  sofa_round: [0.8, 'fabric'], sofa_curved: [0.8, 'fabric'], chair_design: [0.82, 'wood'], chair_outdoor: [0.85, 'wood'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
   kitchen_peninsula: [0.9, 'counter'], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
   shoe_cabinet: [1.0, 'cabinet'], console: [0.8, 'wood'], floor_lamp: [1.6, 'lamp'], plant: [1.0, 'plant'],
@@ -47,7 +50,8 @@ import { projectStairs } from './stairs';
 import { kitMaterials, styleKit, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
 
-export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
+export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
+  const plan = withCornerWindows(plan0);   // due finestre vicine in un angolo sono una sola, con il montante
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
@@ -114,13 +118,28 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   }
 
   // vani di porte e finestre come rettangoli in pianta (come li disegna PlanSvg)
-  const list = [
+  const allOpenings = [
     ...plan.doors.filter((d) => d.kind !== 'gate').map((d) => ({ ...d, door: true })),
     ...plan.windows.map((w) => ({ ...w, door: false })),
   ];
-  const openings = list.map((o) => (o.rot === 0 || !o.rot
-    ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door }
-    : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door }));
+  // sui muri dritti le aperture sono orizzontali o verticali; su muri curvi o obliqui (forme libere, facciata ad arco) hanno un angolo qualsiasi
+  const axisAligned = (o) => {
+    const r = (((o.rot || 0) % 180) + 180) % 180;
+    if (!(r < 0.01 || Math.abs(r - 90) < 0.01)) return false;
+    if (!plan.wallLines?.length) return true;
+    // orizzontale o verticale ma su un muro curvo (ai punti cardinali di un cerchio): non c'è un muro rettangolare da forare
+    const q = r < 0.01 ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t } : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w };
+    return plan.walls.some((w) => q.x1 > w.x - 0.02 && q.x0 < w.x + w.w + 0.02 && q.z1 > w.y - 0.02 && q.z0 < w.y + w.h + 0.02);
+  };
+  const list = allOpenings.filter(axisAligned);
+  const oblique = allOpenings.filter((o) => !axisAligned(o));
+  const openings = list.map((o) => {
+    const gs = glassSpan(o, wallH);
+    const extra = { pano: isPanoramic(o), sill: gs.sill, top: gs.top, corner: !!o.corner, vert: !(o.rot === 0 || !o.rot) };
+    return o.rot === 0 || !o.rot
+      ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door, ...extra }
+      : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door, ...extra };
+  });
 
   // muro intero: faccia interna chiara, faccia esterna nel colore e nel materiale della facciata dello stile
   const wallPiece = (horiz, w, a, b, y0, h) => {
@@ -176,16 +195,22 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       && w.y + w.h / 2 >= mz.y - 0.15 && w.y + w.h / 2 <= mz.y + mz.h + 0.15 ? mz.elev - mz.slab : wallH;
     const a0 = horiz ? w.x : w.y;
     const a1 = horiz ? w.x + w.w : w.y + w.h;
-    const cuts = openings.filter((o) => (horiz
+    // una finestra d'angolo buca solo il suo muro: al vertice resta il montante dell'altro muro
+    const cuts = openings.filter((o) => !(o.corner && o.vert === horiz)).filter((o) => (horiz
       ? o.x1 > w.x + 0.01 && o.x0 < w.x + w.w - 0.01 && o.z1 > w.y - 0.01 && o.z0 < w.y + w.h + 0.01
       : o.z1 > w.y + 0.01 && o.z0 < w.y + w.h - 0.01 && o.x1 > w.x - 0.01 && o.x0 < w.x + w.w + 0.01))
-      .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door }))
+      .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door, pano: o.pano, sill: o.sill, top: o.top }))
       .sort((p, q) => p.a - q.a);
     let cur = a0;
     const seg = (a, b, y0, h, m = null) => (m ? (horiz ? box(a, w.y, b - a, w.h, y0, h, m) : box(w.x, a, w.w, b - a, y0, h, m)) : wallPiece(horiz, w, a, b, y0, h));
     for (const c of cuts) {
       if (c.a > cur) seg(cur, c.a, 0, wh);
-      if (c.door) {
+      if (c.pano) {
+        // vetrata a tutta altezza (fissa o scorrevole): il vetro arriva quasi al pavimento, sopra resta l'architrave
+        if (c.sill > 0.001) seg(c.a, c.b, 0, Math.min(c.sill, wh));
+        seg(c.a + 0.02, c.b - 0.02, c.sill, Math.min(c.top, wh) - c.sill, M.glass);
+        if (wh > c.top) seg(c.a, c.b, c.top, wh - c.top);
+      } else if (c.door) {
         if (wh > DOOR_H) seg(c.a, c.b, DOOR_H, wh - DOOR_H);
       } else {
         seg(c.a, c.b, 0, Math.min(SILL, wh));
@@ -213,6 +238,97 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     }
   }
 
+  // muri curvi e obliqui: polilinee (già interrotte dove c'è un'apertura), un parallelepipedo per tratto, con la faccia esterna dello stile
+  for (const wl of plan.wallLines || []) {
+    const pts = wl.pts;
+    const n = wl.closed ? pts.length : pts.length - 1;
+    for (let i = 0; i < n; i++) {
+      const [x0, z0] = pts[i];
+      const [x1, z1] = pts[(i + 1) % pts.length];
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      if (len < 0.004) continue;
+      const a = Math.atan2(z1 - z0, x1 - x0);
+      const nx = -Math.sin(a);
+      const nz = Math.cos(a);
+      const mx = (x0 + x1) / 2;
+      const mz = (z0 + z1) / 2;
+      const off = t / 2 + 0.12;
+      const left = inside(mx + nx * off, mz + nz * off);
+      const right = inside(mx - nx * off, mz - nz * off);
+      const out = right && !left ? 1 : left && !right ? -1 : 0;   // +1: l'esterno è dalla parte della normale sinistra
+      const mats = [K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn];
+      if (out) mats[out > 0 ? 4 : 5] = KF.facade;
+      const L = len + Math.min(0.06, t * 0.35);   // un po' più lungo: sulle curve i tratti si sovrappongono senza lasciare fessure
+      const g = new THREE.Mesh(new THREE.BoxGeometry(L, wallH, t), mats);
+      uvMeters(g.geometry, L, wallH, t);
+      g.position.set(mx, wallH / 2, mz);
+      g.rotation.y = -a;
+      g.castShadow = true;
+      g.receiveShadow = true;
+      g.userData.layer = 'MURI';
+      root.add(g);
+    }
+  }
+  // aperture oblique: sopra e sotto il vano il muro continua; finestra con vetro e telaio, porta con stipiti, architrave e anta
+  for (const o of oblique) {
+    const a = ((o.rot || 0) * Math.PI) / 180;
+    const ux = Math.cos(a), uz = Math.sin(a);
+    const nx = -uz, nz = ux;
+    const piece = (a0, a1, c0, c1, y0, h, m) => {
+      if (a1 - a0 < 0.002 || c1 - c0 < 0.002 || h < 0.002) return null;
+      const g = new THREE.Mesh(new THREE.BoxGeometry(a1 - a0, h, c1 - c0), m);
+      if (m === M.glass) g.userData.layer = 'VETRI';
+      else if (Array.isArray(m) || m.map) uvMeters(g.geometry, a1 - a0, h, c1 - c0);
+      const am = (a0 + a1) / 2, cm = (c0 + c1) / 2;
+      g.position.set(o.x + ux * am + nx * cm, y0 + h / 2, o.y + uz * am + nz * cm);
+      g.rotation.y = -a;
+      g.castShadow = true;
+      g.receiveShadow = true;
+      root.add(g);
+      return g;
+    };
+    const lintel = (y0) => { const m = piece(0, o.w, 0, t, y0, wallH - y0, K.wallIn); if (m) m.userData.layer = 'MURI'; };
+    const fr = 0.045;
+    if (isPanoramic(o)) {
+      const g = glassSpan(o, wallH);
+      if (wallH > g.top) lintel(g.top);
+      piece(0.02, o.w - 0.02, t / 2 - 0.01, t / 2 + 0.01, g.sill, g.top - g.sill, M.glass);
+      for (const [p0, p1, y0, h] of [[0, 0.05, g.sill, g.top - g.sill], [o.w - 0.05, o.w, g.sill, g.top - g.sill], [0, o.w, g.top - 0.05, 0.05], [0, o.w, g.sill, 0.06]]) {
+        piece(p0, p1, -0.01, t + 0.01, y0, h, K.frame);
+      }
+      continue;
+    }
+    if (!o.door) {
+      const top = Math.min(DOOR_H, wallH);
+      if (wallH <= SILL) continue;
+      const sill = piece(0, o.w, 0, t, 0, SILL, K.wallIn);
+      if (sill) sill.userData.layer = 'MURI';
+      if (wallH > top) lintel(top);
+      piece(fr, o.w - fr, t / 2 - 0.01, t / 2 + 0.01, SILL, top - SILL, M.glass);
+      for (const [p0, p1, y0, h] of [[0, fr, SILL, top - SILL], [o.w - fr, o.w, SILL, top - SILL], [0, o.w, SILL, fr], [0, o.w, top - fr, fr]]) {
+        piece(p0, p1, -0.01, t + 0.01, y0, h, K.frame);
+      }
+      const panes = o.w > 2.2 ? 3 : o.w > 1.2 ? 2 : 1;
+      for (let k = 1; k < panes; k++) piece((o.w * k) / panes - fr / 2, (o.w * k) / panes + fr / 2, -0.01, t + 0.01, SILL, top - SILL, K.frame);
+      continue;
+    }
+    if (wallH <= DOOR_H) continue;
+    lintel(DOOR_H);
+    piece(0, fr, -0.01, t + 0.01, 0, DOOR_H, K.frame);
+    piece(o.w - fr, o.w, -0.01, t + 0.01, 0, DOOR_H, K.frame);
+    piece(0, o.w, -0.01, t + 0.01, DOOR_H - fr, fr, K.frame);
+    const leaf = new THREE.Group();
+    const lw = o.w - 2 * fr;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(lw, DOOR_H - fr - 0.01, 0.04), o.entrance ? K.frame : K.door);
+    slab.position.set(lw / 2, (DOOR_H - fr - 0.01) / 2 + 0.005, 0);
+    slab.castShadow = true;
+    leaf.add(slab);
+    leaf.position.set(o.x + ux * fr + nx * (t / 2), 0, o.y + uz * fr + nz * (t / 2));
+    leaf.rotation.y = -a - (o.openDir || 1) * ((65 * Math.PI) / 180);
+    leaf.traverse((c) => { if (c.isMesh) { c.userData.layer = 'PORTE'; c.receiveShadow = true; } });
+    root.add(leaf);
+  }
+
   // infissi e porte nei colori dello stile: telaio e traversa centrale, davanzale, anta socchiusa con maniglia
   list.forEach((o, i) => {
     const q = openings[i];
@@ -223,6 +339,36 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     const bar = (aa, bb, y0, h, m) => (horiz ? box(aa, q.z0 - 0.01, bb - aa, th, y0, h, m) : box(q.x0 - 0.01, aa, th, bb - aa, y0, h, m));
     const a0 = horiz ? q.x0 : q.z0;
     const a1 = horiz ? q.x1 : q.z1;
+    if (isPanoramic(o)) {
+      // vetrata panoramica: telaio sottile, montanti ogni 1,3 m circa; scorrevole: due ante su binari paralleli e maniglia
+      const Fm = K.frame;
+      const pf = 0.05;
+      const g = glassSpan(o, wallH);
+      const barOff = (aa, bb, y0, h, m, off, thick) => (horiz
+        ? box(aa, q.z0 + t / 2 - thick / 2 + off, bb - aa, thick, y0, h, m)
+        : box(q.x0 + t / 2 - thick / 2 + off, aa, thick, bb - aa, y0, h, m));
+      bar(a0, a0 + pf, g.sill, g.top - g.sill, Fm);
+      bar(a1 - pf, a1, g.sill, g.top - g.sill, Fm);
+      bar(a0, a1, g.top - pf, pf, Fm);
+      bar(a0, a1, g.sill, 0.06, Fm);   // binario in basso
+      if (isSliding(o)) {
+        const leaf = len * 0.54;
+        const lf = 0.04;
+        const stiles = (from, to, off) => {
+          barOff(from, from + lf, g.sill + 0.06, g.top - g.sill - 0.06 - pf, Fm, off, 0.04);
+          barOff(to - lf, to, g.sill + 0.06, g.top - g.sill - 0.06 - pf, Fm, off, 0.04);
+          barOff(from, to, g.sill + 0.06, lf, Fm, off, 0.04);
+          barOff(from, to, g.top - pf - lf, lf, Fm, off, 0.04);
+        };
+        stiles(a0 + pf, a0 + pf + leaf, -0.035);
+        stiles(a1 - pf - leaf, a1 - pf, 0.035);
+        barOff(a0 + pf + leaf - 0.1, a0 + pf + leaf - 0.07, 1.0, 0.18, K.handle, -0.035, 0.03);
+      } else {
+        const panes = Math.max(1, Math.round(len / 1.3));
+        for (let k = 1; k < panes; k++) bar(a0 + (len * k) / panes - 0.02, a0 + (len * k) / panes + 0.02, g.sill, g.top - g.sill, Fm);
+      }
+      return;
+    }
     if (!o.door) {
       const top = Math.min(DOOR_H, wallH);
       if (wallH <= SILL) return;

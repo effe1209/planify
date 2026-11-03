@@ -67,10 +67,11 @@ export function quantities(project) {
       const onEdge = w.w >= w.h ? w.y <= 1e-3 || w.y + w.h >= L - 1e-3 : w.x <= 1e-3 || w.x + w.w >= W - 1e-3;
       if (!onEdge) add('partition', Math.max(w.w, w.h) * H);
     }
-    for (const w of plan.windows) add('window', w.w * 1.4);
+    for (const w of plan.windows) (w.type === 'panoramic' ? add('glass_wall', w.w * 2.4) : add('window', w.w * 1.4));
     for (const d of plan.doors) {
       if (d.kind === 'gate') continue;
-      if (d.kind === 'garage') add('garage_door', 1);
+      if (d.type === 'sliding') add('glass_wall', d.w * 2.4);
+      else if (d.kind === 'garage') add('garage_door', 1);
       else if (d.entrance) add('entrance_door', 1);
       else add('door', 1);
     }
@@ -126,6 +127,7 @@ const ITEMS = [
   ['bath_wall', 'Pavimenti e rivestimenti', 'Rivestimento dei bagni (h 2,2 m)', 'm²'],
   ['splash', 'Pavimenti e rivestimenti', 'Rivestimento della parete cucina', 'm²'],
   ['window', 'Serramenti', 'Finestre e portefinestre (PVC/alluminio, vetrocamera)', 'm²'],
+  ['glass_wall', 'Serramenti', 'Vetrate panoramiche e scorrevoli (alluminio, vetro stratificato)', 'm²'],
   ['door', 'Serramenti', 'Porte interne', 'pz'],
   ['entrance_door', 'Serramenti', "Portoncino d'ingresso blindato", 'pz'],
   ['garage_door', 'Serramenti', 'Porta basculante del garage', 'pz'],

@@ -6,11 +6,12 @@
  * (davanzale a 0,90 m), portefinestre da 2,00 m di larghezza in su 2,40 m.
  */
 import { opening } from './ajax';
+import { PANORAMIC_H } from './openings';
 
-const doorType = (d) => (d.kind === 'garage' ? 'Porta basculante' : d.entrance ? "Portoncino d'ingresso" : 'Porta interna a battente');
-const doorH = (d) => (d.kind === 'garage' ? 2.4 : 2.1);
-const winType = (w) => (w.w >= 2.0 ? 'Portafinestra' : 'Finestra');
-const winH = (w) => (w.w >= 2.0 ? 2.4 : 1.4);
+const doorType = (d) => (d.kind === 'garage' ? 'Porta basculante' : d.type === 'sliding' ? 'Vetrata scorrevole' : d.entrance ? "Portoncino d'ingresso" : 'Porta interna a battente');
+const doorH = (d) => (d.kind === 'garage' ? 2.4 : d.type === 'sliding' ? PANORAMIC_H : 2.1);
+const winType = (w) => (w.type === 'panoramic' ? 'Vetrata panoramica' : w.w >= 2.0 ? 'Portafinestra' : 'Finestra');
+const winH = (w) => (w.type === 'panoramic' || w.w >= 2.0 ? 2.4 : 1.4);
 const r2 = (v) => Math.round(v * 100) / 100;
 
 export function scheduleFor(project) {
@@ -31,14 +32,15 @@ export function scheduleFor(project) {
       const g = groups.get(key) || { prefix: 'P', type, w: r2(d.w), h: doorH(d), qty: 0, places: [], open: new Set() };
       g.qty += 1;
       g.places.push(`${roomName(opening(plan, d))} (${f.name})`);
-      if (d.kind !== 'garage') g.open.add(d.openDir > 0 ? 'destra' : 'sinistra');
+      if (d.type === 'sliding') g.open.add('scorrevole');
+      else if (d.kind !== 'garage') g.open.add(d.openDir > 0 ? 'destra' : 'sinistra');
       groups.set(key, g);
       codes[f.id].doors[i] = key;
     });
     plan.windows.forEach((w, i) => {
       const type = winType(w);
       const key = `F|${type}|${r2(w.w)}`;
-      const g = groups.get(key) || { prefix: 'F', type, w: r2(w.w), h: winH(w), qty: 0, places: [], open: new Set(['anta-ribalta']) };
+      const g = groups.get(key) || { prefix: 'F', type, w: r2(w.w), h: winH(w), qty: 0, places: [], open: new Set([w.type === 'panoramic' ? 'fissa' : 'anta-ribalta']) };
       g.qty += 1;
       g.places.push(`${roomName(opening(plan, w))} (${f.name})`);
       groups.set(key, g);

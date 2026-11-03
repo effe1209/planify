@@ -16,7 +16,7 @@ import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import FurnishPanel from './components/FurnishPanel';
 import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
-import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
+import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setOpeningType, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
 import { itemProblems, rotateItem, snapItem } from './lib/furnitureEdit';
@@ -100,6 +100,12 @@ async function readJson(res) {
   }
 }
 
+/* Facciata ad arco da chiedere al motore ({ curve }), o niente se la facciata è dritta. */
+function curveRequest(f, { allowed = true } = {}) {
+  if (!allowed || (!f.curveSide && !(Number(f.curveCorner) > 0))) return {};
+  return { curve: { ...(f.curveSide && { side: f.curveSide, bulge: Number(f.curveBulge) || 1.2 }), ...(Number(f.curveCorner) > 0 && { corner: Number(f.curveCorner) }) } };
+}
+
 /* Richiesta a /generate-plan dai parametri del modulo (o da quelli salvati con un piano). */
 function planBody(f, width, length, seed) {
   const apartment = f.roomType === 'apartment';
@@ -120,6 +126,7 @@ function planBody(f, width, length, seed) {
       needs: { entry: f.entry, suite: f.suite, study: f.study, storage: f.storage, laundry: f.laundry },
     }),
     ...(f.roomType === 'garage' && { needs: { laundry: f.garageLaundry, storage: f.garageStorage } }),
+    ...curveRequest(f, { allowed: !['garage', 'garden'].includes(f.roomType) }),
   };
 }
 
@@ -139,6 +146,7 @@ export default function App() {
     house: false, housePreset: HOUSE_PRESETS[0].id, houseFloors: HOUSE_PRESETS[0].floors, stairType: 'auto', stairStyle: 'auto',
     houseGarage: false, garageMode: 'basement',
     floorProgram: 'full',
+    curveSide: '', curveBulge: 1.2, curveCorner: 0,   // facciata ad arco (lato N/S/E/W, vuoto = dritta; freccia in m) e raggio degli angoli arrotondati (0 = spigoli)
   });
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [autoSeed, setAutoSeed] = useState(true);
@@ -1099,6 +1107,7 @@ export default function App() {
           width: clamp(w, 3.5, 60), length: clamp(l, 3.5, 60), style: form.style, seed: requestSeed,
           stair_type: form.stairType, ...(engineHas('open_stairs') && { stair_style: form.stairStyle }),
           floors: houseFloorsRequest(form, { street: engineHas('street_garage') }),
+          ...curveRequest(form),
         };
         const house = async () => readJson(await postJson(base, '/generate-house', req, controller.signal));
         let res;
@@ -1699,6 +1708,29 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {engineHas('curved_facade') && !['garage', 'garden'].includes(form.roomType) && (
+                <div className="pf-field-sm">
+                  <span>Facciata ad arco</span>
+                  <div className="pf-seg" role="radiogroup" aria-label="Facciata ad arco">
+                    {[['', 'Dritta'], ['N', 'Nord'], ['S', 'Sud'], ['E', 'Est'], ['W', 'Ovest']].map(([v, text]) => (
+                      <button key={v || 'none'} type="button" role="radio" aria-checked={form.curveSide === v}
+                        className={form.curveSide === v ? 'is-on' : ''} onClick={() => setF('curveSide', v)}>{text}</button>
+                    ))}
+                  </div>
+                  {form.curveSide && (
+                    <label className="pf-field-sm">
+                      <span>Freccia dell&apos;arco: {Number(form.curveBulge).toLocaleString('it-IT', { minimumFractionDigits: 1 })} m</span>
+                      <input type="range" min="0.5" max="3" step="0.1" value={form.curveBulge} aria-label="Freccia dell'arco"
+                        onChange={(e) => setF('curveBulge', Number(e.target.value))} />
+                    </label>
+                  )}
+                  <label className="pf-field-sm">
+                    <span>Angoli arrotondati: {Number(form.curveCorner) > 0 ? `raggio ${Number(form.curveCorner).toLocaleString('it-IT', { minimumFractionDigits: 1 })} m` : 'spigoli vivi'}</span>
+                    <input type="range" min="0" max="2" step="0.1" value={form.curveCorner} aria-label="Raggio degli angoli arrotondati"
+                      onChange={(e) => setF('curveCorner', Number(e.target.value))} />
+                  </label>
+                </div>
+              )}
               <p className="pf-hint">
                 {form.shape === 'auto'
                   ? 'Ogni generazione sceglie una sagoma diversa. Per forme libere (tonde, curve) usa «Disegna schizzo».'
@@ -2108,6 +2140,12 @@ export default function App() {
                   selectedStair={selectedStair} stairsHere={stairFloors().length} warning={editWarning}
                   onResize={(w) => openingEdit((p, o) => resizeOpening(p, o.kind, o.index, w))}
                   onFlip={() => openingEdit((p, o) => flipDoor(p, o.index))}
+                  onType={(type) => {
+                    if (!selectedOpening) return;
+                    const res = setOpeningType(plan, selectedOpening.kind, selectedOpening.index, type);
+                    editPlan(() => res.plan);
+                    setSelectedOpening(res.selected);
+                  }}
                   onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}
                   onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
                   onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />

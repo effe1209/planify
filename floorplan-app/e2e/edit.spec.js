@@ -255,7 +255,7 @@ test('gli strumenti di modifica stanno in cima, piccoli e senza sovrapporsi', as
   await page.locator('.pf-editbtn').click();
   const bar = await page.locator('.pf-editbar').boundingBox();
   const buttons = await page.locator('.pf-segtools button').all();
-  expect(buttons.length).toBe(3);
+  expect(buttons.length).toBe(4);   // porta, finestra, vetrata, muro
   const boxes = [];
   for (const b of buttons) boxes.push(await b.boundingBox());
   for (const b of boxes) {
@@ -915,5 +915,120 @@ test('i layer di un DXF si controllano e si correggono con la scelta del ruolo d
   await dialog.getByRole('button', { name: /Reimporta/ }).click();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
   await expect(page.getByText('Pianta importata con la scelta dei layer')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('una facciata ad arco si sceglie nel modulo e la pianta ha il muro curvo, in 2D e in 3D', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('radiogroup', { name: 'Facciata ad arco' }).getByRole('radio', { name: 'Sud' }).click();
+  await page.getByLabel('Freccia dell\'arco').fill('1.6');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Facciata sud ad arco/)).toBeVisible();
+  // il muro curvo è una polilinea in più nella pianta; una finestra della facciata sta sull'arco (ruotata)
+  const rotated = await page.locator('.pf-sheet svg g[transform*="rotate("]').count();
+  expect(rotated).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const stats = await page.evaluate(() => {
+    let walls = 0; let rotated = 0;
+    window.__planify3d.model.traverse((o) => { if (o.isMesh && o.userData.layer === 'MURI') { walls++; if (Math.abs(o.rotation.y) > 0.02 && Math.abs(Math.abs(o.rotation.y) - Math.PI / 2) > 0.02) rotated++; } });
+    return { walls, rotated };
+  });
+  expect(stats.rotated).toBeGreaterThan(10);   // tratti di muro inclinati: l'arco
+  expect(errors).toEqual([]);
+});
+
+test('gli angoli arrotondati si scelgono nel modulo e la pianta ha i contorni ad arco', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByLabel('Raggio degli angoli arrotondati').fill('1.2');
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/angol[oi] arrotondat/).first()).toBeVisible();
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const rotated = await page.evaluate(() => {
+    let n = 0;
+    window.__planify3d.model.traverse((o) => { if (o.isMesh && o.userData.layer === 'MURI' && Math.abs(o.rotation.y) > 0.02 && Math.abs(Math.abs(o.rotation.y) - Math.PI / 2) > 0.02) n++; });
+    return n;
+  });
+  expect(rotated).toBeGreaterThan(4);
+  expect(errors).toEqual([]);
+});
+
+test('un DXF con la facciata ad arco si importa con il muro curvo, in pianta e in 3D', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.locator('input[type="file"]').first().setInputFiles(path.join(here, '../../tests/fixtures/facciata_curva.dxf'));
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Facciata sud ad arco/)).toBeVisible();
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const tilted = await page.evaluate(() => {
+    let n = 0;
+    window.__planify3d.model.traverse((o) => { if (o.isMesh && o.userData.layer === 'MURI' && Math.abs(o.rotation.y) > 0.02 && Math.abs(Math.abs(o.rotation.y) - Math.PI / 2) > 0.02) n++; });
+    return n;
+  });
+  expect(tilted).toBeGreaterThan(10);
+  expect(errors).toEqual([]);
+});
+
+test('una finestra diventa vetrata panoramica dal pannello di modifica e in 3D il vetro arriva a terra', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.locator('.pf-editbtn').click();
+  const windows = page.locator('.pf-sheet svg g[style*="grab"]');
+  const n = await windows.count();
+  await windows.nth(n - 1).click();
+  const type = page.getByRole('radiogroup', { name: 'Tipo di apertura' });
+  await expect(type).toBeVisible();
+  await type.getByRole('radio', { name: 'Vetrata panoramica' }).click();
+  await expect(page.locator('.pf-editcard header')).toContainText('Vetrata panoramica');
+  await expect(page.getByLabel('Larghezza in metri')).toHaveAttribute('max', /^(\d|\.)+$/);
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const tall = async () => page.evaluate(() => {
+    let n = 0;
+    window.__planify3d.model.traverse((o) => {
+      if (!o.isMesh || o.userData.layer !== 'VETRI') return;
+      const b = new window.__planify3d.THREE.Box3().setFromObject(o);
+      if (b.min.y < 0.1 && b.max.y > 2.2) n++;
+    });
+    return n;
+  });
+  expect(await tall()).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('armadi ad angolo e aperti, divani tondo e ad arco e sedie di design si aggiungono dal catalogo, in pianta e in 3D', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Open space' }).click();
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 30_000 });
+  await page.locator('.pf-sheet svg [class~="pf-hit"]').first().click({ force: true });
+  const room = page.locator('.pf-customizer');
+  const labels = ['Armadio ad angolo', 'Armadio aperto a vista 150', 'Armadio aperto a vista 100', 'Divano tondo piccolo', 'Divano ad arco piccolo',
+    'Sedia di design (interno)', 'Sedia di design da esterno'];
+  for (const label of labels) {
+    await room.locator('.pf-add-furn select').selectOption({ label });
+    await room.getByRole('button', { name: /Aggiungi/ }).click();
+  }
+  for (const word of ['Armadio ad angolo', 'Armadio aperto', 'Divano tondo', 'Divano ad arco', 'Sedia di design']) {
+    await expect(room.locator('.pf-furn-row', { hasText: word }).first()).toBeVisible();
+  }
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const names = await page.evaluate(() => { const n = new Set(); window.__planify3d.model.traverse((o) => { if (o.userData?.furniture) n.add(o.userData.furniture.type); }); return [...n]; });
+  for (const t of ['wardrobe_corner', 'wardrobe_open', 'sofa_round', 'sofa_curved', 'chair_design', 'chair_outdoor']) expect(names).toContain(t);
   expect(errors).toEqual([]);
 });

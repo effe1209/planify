@@ -1,0 +1,340 @@
+"""
+Muri curvi nel motore: facciata ad arco (bow) applicata a una pianta finita.
+
+La pianta generata ha solo stanze rettangolari e muri orizzontali e verticali. Qui una facciata (N, S, E o O) diventa un arco di
+cerchio che sporge verso l'esterno di `bulge` metri (la freccia dell'arco):
+- le stanze che toccano la facciata prendono un contorno libero (`poly`) con l'arco al posto del lato dritto;
+- il muro dritto della facciata sparisce e al suo posto c'è una polilinea (`wallLines`) lungo l'arco, interrotta dove c'è un'apertura;
+- i tramezzi che arrivano alla facciata si allungano fino all'arco;
+- porte e finestre della facciata si spostano sull'arco, ruotate lungo la tangente (`rot` qualsiasi, come negli schizzi);
+- il riquadro cresce di `bulge` (per N e O la pianta intera scorre di `bulge`, così non c'è nulla di negativo).
+Arredi, scale e soppalco non cambiano: l'arco aggiunge spazio, non ne toglie.
+"""
+import math
+from typing import List, Optional, Tuple
+
+EPS = 1e-3
+STEP = 0.12            # lunghezza massima di un tratto dell'arco (m)
+SKIP_KEYS = ("design", "stats", "notes")
+
+
+def _sag(span: float, bulge: float) -> Tuple[float, float]:
+    """Raggio dell'arco e distanza del centro dalla corda."""
+    r = (span * span / 4 + bulge * bulge) / (2 * bulge)
+    return r, r - bulge
+
+
+def arc_h(s: float, span: float, bulge: float) -> float:
+    """Altezza dell'arco sopra la corda alla distanza s dall'inizio (0 agli estremi, `bulge` a metà)."""
+    r, d = _sag(span, bulge)
+    return math.sqrt(max(0.0, r * r - (s - span / 2) ** 2)) - d
+
+
+def arc_slope(s: float, span: float, bulge: float) -> float:
+    r, _ = _sag(span, bulge)
+    q = math.sqrt(max(1e-9, r * r - (s - span / 2) ** 2))
+    return -(s - span / 2) / q
+
+
+def _shift(node, dx: float, dy: float, key: str = ""):
+    """Sposta tutte le coordinate della pianta (rettangoli x/y, punti di contorni e polilinee)."""
+    if isinstance(node, dict):
+        if "x" in node and "y" in node and isinstance(node["x"], (int, float)):
+            node["x"] = round(node["x"] + dx, 3)
+            node["y"] = round(node["y"] + dy, 3)
+        for k, v in node.items():
+            if k in SKIP_KEYS or k in ("x", "y"):
+                continue
+            _shift(v, dx, dy, k)
+    elif isinstance(node, list):
+        if key in ("poly", "pts", "label") and node and isinstance(node[0], (list, tuple)):
+            for i, p in enumerate(node):
+                node[i] = [round(p[0] + dx, 3), round(p[1] + dy, 3)]
+        elif key == "label" and len(node) == 2 and all(isinstance(v, (int, float)) for v in node):
+            node[0], node[1] = round(node[0] + dx, 3), round(node[1] + dy, 3)
+        else:
+            for v in node:
+                _shift(v, dx, dy, key)
+
+
+def _area(poly: List[List[float]]) -> float:
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1]))) / 2
+
+
+def bow_facade(plan: dict, side: str, bulge: float, flat: bool = False, a0: Optional[float] = None, a1: Optional[float] = None) -> dict:
+    """Facciata ad arco: vedi il modulo. `plan` si modifica sul posto e si ritorna. Senza effetto se la misura non è plausibile.
+    flat = solo lo scorrimento e il riquadro più grande, senza arco: per i piani sotto (garage) che devono restare allineati agli altri.
+    a0, a1 = tratto della facciata che si incurva (coordinate lungo il lato, prima dello scorrimento); di serie tutta la facciata."""
+    side = (side or "").upper()
+    dims = plan.get("dimensions") or {}
+    W, L = float(dims.get("width", 0)), float(dims.get("length", 0))
+    t = float(plan.get("wallThickness", 10)) / float(plan.get("scale", 50) or 50)
+    if side not in ("N", "S", "E", "W") or W <= 0 or L <= 0 or plan.get("curve"):
+        return plan
+    full = W if side in "NS" else L
+    a0 = 0.0 if a0 is None else max(0.0, float(a0))
+    a1 = full if a1 is None else min(full, float(a1))
+    span = a1 - a0
+    b = max(0.0, min(float(bulge or 0), 0.4 * span, 3.0))
+    if b < 0.2 or span < 2.0:
+        return plan
+    dir_ = 1 if side in "SE" else -1
+    # il riquadro cresce di b; N e O: tutto scorre di b perché l'arco sporge a coordinate minori
+    dx = b if side == "W" else 0.0
+    dy = b if side == "N" else 0.0
+    if dx or dy:
+        _shift(plan, dx, dy)
+    if side in "NS":
+        plan["dimensions"] = {**dims, "length": round(L + b, 3)}
+        F = L if side == "S" else b                     # facciata (faccia esterna del muro), dopo lo scorrimento
+    else:
+        plan["dimensions"] = {**dims, "width": round(W + b, 3)}
+        F = W if side == "E" else b
+    sc = float(plan.get("scale", 50))
+    plan["svgWidth"], plan["svgHeight"] = plan["dimensions"]["width"] * sc, plan["dimensions"]["length"] * sc
+    if isinstance(plan.get("stats"), dict):
+        plan["stats"]["boundingBox"] = round(plan["dimensions"]["width"] * plan["dimensions"]["length"], 2)
+    if flat:
+        return plan
+    Fc = F - dir_ * t / 2                                # linea centrale del muro curvo, prima dell'arco
+
+    def hh_(s: float) -> float:
+        return arc_h(s - a0, span, b) if a0 - 1e-9 <= s <= a1 + 1e-9 else 0.0
+
+    def point(s: float):
+        h = hh_(s)
+        return [round(s, 3), round(F + dir_ * h, 3)] if side in "NS" else [round(F + dir_ * h, 3), round(s, 3)]
+
+    def centre(s: float):
+        h = hh_(s)
+        return (s, Fc + dir_ * h) if side in "NS" else (Fc + dir_ * h, s)
+
+    def arc_pts(lo: float, hi: float):
+        # da lo a hi: i tratti dritti fuori dall'arco sono segmenti; si campiona fitto dentro [a0, a1] e ai suoi estremi
+        xs = {lo, hi}
+        for brk in (a0, a1):
+            if lo < brk < hi:
+                xs.add(brk)
+        inside = max(lo, a0), min(hi, a1)
+        if inside[1] > inside[0]:
+            n = max(2, int(math.ceil((inside[1] - inside[0]) / STEP)) + 1)
+            xs.update(inside[0] + (inside[1] - inside[0]) * i / (n - 1) for i in range(n))
+        return [point(v) for v in sorted(xs)]
+
+    # stanze che toccano la facciata: contorno con l'arco
+    for r in plan.get("rooms", []):
+        if r.get("poly"):
+            continue
+        x, y, w, h = r["x"], r["y"], r["w"], r["h"]
+        touch = {"S": abs(y + h - F) < EPS, "N": abs(y - F) < EPS, "E": abs(x + w - F) < EPS, "W": abs(x - F) < EPS}[side]
+        if not touch:
+            continue
+        lo, hi = (x, x + w) if side in "NS" else (y, y + h)
+        if hi <= a0 + EPS or lo >= a1 - EPS:
+            continue   # la stanza sta fuori dal tratto che si incurva
+        arc = arc_pts(lo, hi)[::-1]
+        base = {"S": [[x, y], [x + w, y]], "N": [[x, y + h], [x + w, y + h]],
+                "E": [[x, y], [x, y + h]], "W": [[x + w, y], [x + w, y + h]]}[side]
+        poly = [[round(p[0], 3), round(p[1], 3)] for p in base] + arc
+        xs, ys = [p[0] for p in poly], [p[1] for p in poly]
+        r["label"] = [round(x + w / 2, 3), round(y + h / 2, 3)]
+        r.setdefault("base", [x, y, w, h])
+        r["poly"] = poly
+        r["x"], r["y"] = round(min(xs), 3), round(min(ys), 3)
+        r["w"], r["h"] = round(max(xs) - min(xs), 3), round(max(ys) - min(ys), 3)
+        r["area"] = round(_area(poly), 2)
+    if isinstance(plan.get("stats"), dict):
+        plan["stats"]["grossArea"] = round(sum(r.get("area", r["w"] * r["h"]) for r in plan.get("rooms", [])), 2)
+
+    # muri: via quello dritto della facciata, i tramezzi che ci arrivano si allungano fino all'arco
+    walls = []
+    for w in plan.get("walls", []):
+        x, y, ww, hh = w["x"], w["y"], w["w"], w["h"]
+        horiz = ww >= hh
+        if side in "NS" and horiz and abs((y + hh if side == "S" else y) - F) < EPS:
+            # il muro dritto sparisce nel tratto ad arco; resta fuori da quello
+            if x < a0 - EPS:
+                walls.append({**w, "w": round(min(x + ww, a0) - x, 3)})
+            if x + ww > a1 + EPS:
+                nx = max(x, a1)
+                walls.append({**w, "x": round(nx, 3), "w": round(x + ww - nx, 3)})
+            continue
+        if side in "EW" and not horiz and abs((x + ww if side == "E" else x) - F) < EPS:
+            if y < a0 - EPS:
+                walls.append({**w, "h": round(min(y + hh, a0) - y, 3)})
+            if y + hh > a1 + EPS:
+                ny = max(y, a1)
+                walls.append({**w, "y": round(ny, 3), "h": round(y + hh - ny, 3)})
+            continue
+        if side == "S" and not horiz and abs(y + hh - F) < EPS:
+            w = {**w, "h": round(hh + hh_(x + ww / 2), 3)}
+        elif side == "N" and not horiz and abs(y - F) < EPS:
+            ext = hh_(x + ww / 2)
+            w = {**w, "y": round(y - ext, 3), "h": round(hh + ext, 3)}
+        elif side == "E" and horiz and abs(x + ww - F) < EPS:
+            w = {**w, "w": round(ww + hh_(y + hh / 2), 3)}
+        elif side == "W" and horiz and abs(x - F) < EPS:
+            ext = hh_(y + hh / 2)
+            w = {**w, "x": round(x - ext, 3), "w": round(ww + ext, 3)}
+        walls.append(w)
+    plan["walls"] = walls
+
+    # aperture della facciata: sull'arco, lungo la tangente
+    gaps: List[Tuple[float, float]] = []
+
+    def on_facade(o: dict) -> bool:
+        rot = o.get("rot", 0)
+        if side in "NS" and rot == 0:
+            return abs(o["y"] + (t if side == "S" else 0) - F) < 0.05 and o.get("kind") not in ("garage", "gate")
+        if side in "EW" and rot == 90:
+            return abs(o["x"] - (F if side == "E" else F + t)) < 0.05 and o.get("kind") not in ("garage", "gate")
+        return False
+
+    for key in ("doors", "windows"):
+        for o in plan.get(key, []):
+            if not on_facade(o):
+                continue
+            wdt = float(o["w"])
+            s_c = (o["x"] if side in "NS" else o["y"]) + wdt / 2
+            if not a0 + wdt / 2 - 0.05 <= s_c <= a1 - wdt / 2 + 0.05:
+                continue   # fuori dal tratto ad arco: resta sul muro dritto
+            s_c = max(a0 + wdt / 2, min(a1 - wdt / 2, s_c))
+            m = arc_slope(s_c - a0, span, b)
+            tx, ty = {"S": (1.0, m), "N": (1.0, -m), "E": (m, 1.0), "W": (-m, 1.0)}[side]
+            n_ = math.hypot(tx, ty)
+            ux, uy = tx / n_, ty / n_
+            cx, cy = centre(s_c)
+            nx, ny = -uy, ux
+            o["x"] = round(cx - ux * wdt / 2 - nx * t / 2, 3)
+            o["y"] = round(cy - uy * wdt / 2 - ny * t / 2, 3)
+            o["rot"] = round(math.degrees(math.atan2(uy, ux)), 2)
+            half = wdt * abs(ux if side in "NS" else uy) / 2
+            gaps.append((s_c - half, s_c + half))
+
+    # muro curvo: una polilinea per ogni tratto tra due aperture
+    gaps.sort()
+    cuts, cur = [], a0
+    for g0, g1 in gaps:
+        if g0 > cur + 0.02:
+            cuts.append((cur, g0))
+        cur = max(cur, g1)
+    if a1 - cur > 0.02:
+        cuts.append((cur, a1))
+    lines = []
+    for c0, c1 in cuts:
+        n = max(2, int(math.ceil((c1 - c0) / STEP)) + 1)
+        pts = [centre(c0 + (c1 - c0) * i / (n - 1)) for i in range(n)]
+        lines.append({"pts": [[round(px, 3), round(py, 3)] for px, py in pts], "closed": False})
+    plan["wallLines"] = list(plan.get("wallLines") or []) + lines
+    plan["curve"] = {"type": "facade", "side": side, "bulge": round(b, 2), **({"from": round(a0, 2), "to": round(a1, 2)} if (a0 > EPS or a1 < full - EPS) else {})}
+    plan["notes"] = list(plan.get("notes") or []) + [
+        f"Facciata {'nord' if side == 'N' else 'sud' if side == 'S' else 'est' if side == 'E' else 'ovest'} ad arco: "
+        f"freccia di {b:.1f} m sulla corda di {span:.1f} m.".replace(".", ",")]
+    return plan
+
+
+def round_corners(plan: dict, radius: float) -> dict:
+    """Angoli esterni arrotondati: ogni angolo dell'edificio (quelli del riquadro che sono davvero spigoli di una stanza) diventa
+    un quarto di cerchio di raggio `radius`. La stanza prende il contorno libero con l'arco, i due muri che vi arrivano si
+    accorciano e al loro posto c'è una polilinea ad arco. Si salta l'angolo se la stanza è troppo piccola, se un'apertura cade
+    nel tratto da accorciare o se c'è già la facciata ad arco su quel lato."""
+    dims = plan.get("dimensions") or {}
+    W, L = float(dims.get("width", 0)), float(dims.get("length", 0))
+    t = float(plan.get("wallThickness", 10)) / float(plan.get("scale", 50) or 50)
+    r = max(0.0, min(float(radius or 0), 2.5))
+    if r < 0.3 or W <= 0 or L <= 0:
+        return plan
+    bowed = (plan.get("curve") or {}).get("side")
+    done, skipped = 0, 0
+    lines = []
+    corners = {"NW": (0.0, 0.0), "NE": (W, 0.0), "SE": (W, L), "SW": (0.0, L)}
+
+    def room_corner(room, c):
+        pts = room.get("poly") or [[room["x"], room["y"]], [room["x"] + room["w"], room["y"]],
+                                   [room["x"] + room["w"], room["y"] + room["h"]], [room["x"], room["y"] + room["h"]]]
+        for i, p in enumerate(pts):
+            if abs(p[0] - c[0]) < EPS and abs(p[1] - c[1]) < EPS:
+                return pts, i
+        return None
+
+    for name, c in corners.items():
+        if bowed and ((bowed == "N" and name[0] == "N") or (bowed == "S" and name[0] == "S")
+                      or (bowed == "W" and name[1] == "W") or (bowed == "E" and name[1] == "E")):
+            continue
+        room = next((rm for rm in plan.get("rooms", []) if room_corner(rm, c)), None)
+        if not room or min(room["w"], room["h"]) < 2 * r + 0.6:
+            skipped += 1
+            continue
+        # aperture nel tratto da accorciare (lungo i due lati dell'angolo)
+        sx = 1 if c[0] < W / 2 else -1     # verso l'interno
+        sy = 1 if c[1] < L / 2 else -1
+
+        def clash(o):
+            rot = o.get("rot", 0)
+            if rot == 0:      # finestra o porta su un muro orizzontale
+                near_y = abs(o["y"] - c[1]) < t + 0.05 or abs(o["y"] + t - c[1]) < 0.05
+                a0, a1 = o["x"], o["x"] + o["w"]
+                lo, hi = (0, r + 0.1) if sx > 0 else (W - r - 0.1, W)
+                return near_y and a1 > lo and a0 < hi and abs((c[1] - o["y"]) if sy > 0 else (o["y"] + t - c[1])) < t + 0.06
+            if abs(rot - 90) < 0.01:
+                near_x = abs(o["x"] - t - c[0]) < 0.05 or abs(o["x"] - c[0]) < 0.05
+                a0, a1 = o["y"], o["y"] + o["w"]
+                lo, hi = (0, r + 0.1) if sy > 0 else (L - r - 0.1, L)
+                return near_x and a1 > lo and a0 < hi
+            return False
+        if any(clash(o) for o in plan.get("doors", []) + plan.get("windows", [])):
+            skipped += 1
+            continue
+        pts, i = room_corner(room, c)
+        pts = [list(p) for p in pts]
+        prev, nxt = pts[i - 1], pts[(i + 1) % len(pts)]
+        ux, uy = prev[0] - c[0], prev[1] - c[1]
+        vx, vy = nxt[0] - c[0], nxt[1] - c[1]
+        lu, lv = math.hypot(ux, uy), math.hypot(vx, vy)
+        if lu < r + 0.1 or lv < r + 0.1:
+            skipped += 1
+            continue
+        ux, uy, vx, vy = ux / lu, uy / lu, vx / lv, vy / lv
+        O = (c[0] + (ux + vx) * r, c[1] + (uy + vy) * r)
+        a_s = math.atan2(-vy * r, -vx * r)   # direzione dal centro al punto sul lato `prev`: è -v
+        a_e = math.atan2(-uy * r, -ux * r)   # e al punto sul lato `next`: è -u
+        da = (a_e - a_s + math.pi) % (2 * math.pi) - math.pi
+        n = max(4, int(math.ceil(abs(da) * r / STEP)) + 1)
+
+        def arc(rad):
+            return [[round(O[0] + rad * math.cos(a_s + da * k / (n - 1)), 3), round(O[1] + rad * math.sin(a_s + da * k / (n - 1)), 3)]
+                    for k in range(n)]
+        # ordine: dal lato `prev` verso il lato `next`
+        new_pts = pts[:i] + arc(r) + pts[i + 1:]
+        if not room.get("poly"):
+            room["label"] = [round(room["x"] + room["w"] / 2, 3), round(room["y"] + room["h"] / 2, 3)]
+        room.setdefault("base", [room["x"], room["y"], room["w"], room["h"]])
+        room["poly"] = new_pts
+        room["area"] = round(_area(new_pts), 2)
+        # muri che arrivano all'angolo: si accorciano di r
+        walls = []
+        for w in plan.get("walls", []):
+            x, y, ww, hh = w["x"], w["y"], w["w"], w["h"]
+            if ww >= hh and abs((y if c[1] < L / 2 else y + hh) - c[1]) < EPS:
+                if sx > 0 and x <= EPS:
+                    w = {**w, "x": round(x + r, 3), "w": round(ww - r, 3)}
+                elif sx < 0 and x + ww >= W - EPS:
+                    w = {**w, "w": round(ww - r, 3)}
+            elif hh > ww and abs((x if c[0] < W / 2 else x + ww) - c[0]) < EPS:
+                if sy > 0 and y <= EPS:
+                    w = {**w, "y": round(y + r, 3), "h": round(hh - r, 3)}
+                elif sy < 0 and y + hh >= L - EPS:
+                    w = {**w, "h": round(hh - r, 3)}
+            walls.append(w)
+        plan["walls"] = walls
+        lines.append({"pts": arc(max(0.05, r - t / 2)), "closed": False})
+        done += 1
+    if done:
+        plan["wallLines"] = list(plan.get("wallLines") or []) + lines
+        cur = dict(plan.get("curve") or {})
+        cur["corner"] = round(r, 2)
+        plan["curve"] = cur
+        plan["notes"] = list(plan.get("notes") or []) + [
+            f"{done} {'angolo arrotondato' if done == 1 else 'angoli arrotondati'} (raggio {r:.1f} m)".replace(".", ",")
+            + (f"; {skipped} {'saltato' if skipped == 1 else 'saltati'}: stanza piccola o apertura nell'angolo." if skipped else ".")]
+    return plan

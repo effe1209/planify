@@ -145,6 +145,7 @@ class Opening:
     room_b: Optional[int]  # None = esterno
     swing_into: Optional[int] = None
     kind: str = ""         # "" porta | "garage" basculante | "gate" cancello del giardino
+    type: str = ""         # finestre: "" finestra | "panoramic" vetrata panoramica fissa; porte: "sliding" vetrata scorrevole
 
 
 @dataclass
@@ -1516,12 +1517,37 @@ def furnish_service(P: Placer, room: Room):
         for side in sides:
             span = inn.w if side in "NS" else inn.h
             if span >= 0.9:
-                P.place_wall(room, "wardrobe", snap(min(span - 0.05, 2.4) - 0.024), 0.55, side, gap=0.0, front=0.6)
+                P.place_wall(room, "wardrobe_open", snap(min(span - 0.05, 2.4) - 0.024), 0.55, side, gap=0.0, front=0.6)
         if not P.placed[room.id]:
-            P.place_wall(room, "wardrobe", snap(min(max(inn.w, inn.h) - 0.05, 2.0) - 0.024), 0.5, "NSEW", gap=0.0)
+            P.place_wall(room, "wardrobe_open", snap(min(max(inn.w, inn.h) - 0.05, 2.0) - 0.024), 0.5, "NSEW", gap=0.0)
     elif room.kind == "entry":
         # scarpiera bassa con lo specchio sopra (lo specchio lo disegna il frontend)
         P.place_wall(room, "shoe_cabinet", 1.0, 0.35, "NSEW", gap=0.05, zone_gap=0.3, front=0.9)
+
+
+def furnish_balcony(P: Placer, room: Room):
+    """Balcone: un tavolino tondo con due sedie da esterno di design, una pianta in un angolo se resta posto."""
+    inn = P.inner(room)
+    if inn.w < 1.2 or inn.h < 0.9:
+        return
+    tw = 0.7 if inn.h >= 1.3 else 0.6
+    along_x = inn.w >= inn.h
+    cx, cy = inn.cx, inn.cy
+    table = Rect(snap(cx - tw / 2), snap(cy - tw / 2), tw, tw)
+    P._put(room, "table_round", table, 0.0, None, "S")
+    chair = 0.55
+    if along_x:
+        # sedie ai due lati del tavolino, rivolte verso di lui
+        for dx, face in ((-(tw / 2 + chair + 0.05), "E"), (tw / 2 + 0.05, "W")):
+            r = Rect(snap(cx + dx), snap(cy - chair / 2), chair, chair)
+            if inn.x - EPS <= r.x and r.x2 <= inn.x2 + EPS and inn.y - EPS <= r.y and r.y2 <= inn.y2 + EPS:
+                P._put(room, "chair_outdoor", r, 0.0, None, face)
+    else:
+        for dy, face in ((-(tw / 2 + chair + 0.05), "S"), (tw / 2 + 0.05, "N")):
+            r = Rect(snap(cx - chair / 2), snap(cy + dy), chair, chair)
+            if inn.x - EPS <= r.x and r.x2 <= inn.x2 + EPS and inn.y - EPS <= r.y and r.y2 <= inn.y2 + EPS:
+                P._put(room, "chair_outdoor", r, 0.0, None, face)
+    P.place_free(room, "plant", 0.45, 0.45, near=(inn.x2 - 0.3, inn.y + 0.3), gap=0.1, step=0.1)
 
 
 PATH_KINDS = ("living", "living_kitchen", "zone_day", "dining", "kitchen", "bed", "study")
@@ -1634,6 +1660,7 @@ def furnish(lay: Layout, only: Optional[set] = None, access: bool = True):
         elif k == "laundry":        furnish_laundry(P, r)
         elif k == "garage" and r.name: furnish_garage(P, r)   # i pezzi di box attorno alla scala restano liberi
         elif k == "garden":         furnish_garden(P, r)
+        elif k == "balcony":        furnish_balcony(P, r)
 
     for r in lay.rooms:
         if only is not None and r.id not in only:
@@ -3472,6 +3499,8 @@ def _export_opening(lay: Layout, o: Opening, is_door: bool) -> dict:
         d["entrance"] = o.room_b is None
         if o.kind:
             d["kind"] = o.kind
+    if o.type:
+        d["type"] = o.type
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items()}
 
 
@@ -3754,6 +3783,18 @@ def generate(width: float, length: float, room_type: str = "apartment",
 
 
 HOUSE_PROGRAMS = ("full", "day", "night", "garage")
+
+
+def apply_curve(plan: dict, curve: Optional[dict], flat: bool = False) -> dict:
+    """Muri curvi (curves.py) se richiesti: facciata ad arco ({side, bulge}) e angoli arrotondati ({corner}); non per giardini e garage."""
+    if not curve or plan.get("curve") or plan.get("house") or any(r.get("kind") == "garden" for r in plan.get("rooms", [])):
+        return plan
+    from curves import bow_facade, round_corners
+    if curve.get("side"):
+        bow_facade(plan, curve["side"], float(curve.get("bulge") or 0), flat=flat)
+    if curve.get("corner") and not flat:
+        round_corners(plan, float(curve["corner"]))
+    return plan
 
 
 def entrance_side(plan: dict) -> Optional[str]:
@@ -4348,16 +4389,17 @@ def _opening_from_plan(lay: Layout, d: dict, is_door: bool) -> Optional[Opening]
     lo, hi = probe(-0.2), probe(0.2)   # il locale prima e dopo la linea del muro
     if lo is None and hi is None:
         return None
+    typ = d.get("type", "")
     if not is_door:
         room = lo or hi
-        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, None, "")
+        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, None, "", typ)
     if lo is None or hi is None or d.get("entrance"):
         room = lo or hi
-        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, room.id, d.get("kind", ""))
+        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, room.id, d.get("kind", ""), typ)
     dirn = d.get("openDir", 1) if horiz else -d.get("openDir", 1)
     into = hi if dirn > 0 else lo
     other = lo if into is hi else hi
-    return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), other.id, into.id, into.id, d.get("kind", ""))
+    return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), other.id, into.id, into.id, d.get("kind", ""), typ)
 
 
 def layout_from_plan(plan: dict) -> Layout:
@@ -4366,7 +4408,9 @@ def layout_from_plan(plan: dict) -> Layout:
     lay = Layout(dims["width"], dims["length"])
     lay.room_type = plan.get("roomType", "") or ""
     for r in plan["rooms"]:
-        rect = Rect(float(r["x"]), float(r["y"]), float(r["w"]), float(r["h"]))
+        # stanza con un lato ad arco: si arreda la parte rettangolare (`base`), l'arco aggiunge solo spazio libero
+        bx, by, bw, bh = r["base"] if r.get("base") else (r["x"], r["y"], r["w"], r["h"])
+        rect = Rect(float(bx), float(by), float(bw), float(bh))
         room = Room(int(r["id"]), r.get("name", ""), r.get("kind", "living"), rect, int(r.get("zone") or r["id"]),
                     bool(r.get("master")), r.get("size") or "")
         lay.rooms.append(room)
@@ -4377,12 +4421,13 @@ def layout_from_plan(plan: dict) -> Layout:
         if room and c:
             room.stair = {"type": st["type"], "entry": st.get("entry", "S"), "hand": st.get("hand", "W"),
                           "core": Rect(float(c["x"]), float(c["y"]), float(c["w"]), float(c["h"]))}
+    straight = lambda o: abs(o.get("rot", 0)) < 0.01 or abs(o.get("rot", 0) - 90) < 0.01   # le aperture sull'arco non sono su un muro dritto
     for d in plan.get("doors") or []:
-        o = _opening_from_plan(lay, d, True)
+        o = _opening_from_plan(lay, d, True) if straight(d) else None
         if o:
             lay.doors.append(o)
     for w in plan.get("windows") or []:
-        o = _opening_from_plan(lay, w, False)
+        o = _opening_from_plan(lay, w, False) if straight(w) else None
         if o:
             lay.windows.append(o)
     return lay
@@ -4415,6 +4460,30 @@ def furnish_plan(plan: dict, style: str = "modern", room_ids: Optional[List[int]
     }
 
 
+def _import_bows(plan: dict, bows: List[dict]) -> None:
+    """Facciate ad arco di un DXF importato: la pianta è stata ricostruita con la facciata dritta sulla corda, ora si rimette l'arco."""
+    from curves import bow_facade
+    W, L = plan["dimensions"]["width"], plan["dimensions"]["length"]
+    t = plan["wallThickness"] / plan["scale"]
+    done = False
+    for b in bows:
+        near = 0.35 + t
+        if b["axis"] == "h":
+            side = "N" if b["out"] < 0 and abs(b["c"]) <= near else "S" if b["out"] > 0 and abs(b["c"] - L) <= near else None
+            span = W
+        else:
+            side = "W" if b["out"] < 0 and abs(b["c"]) <= near else "E" if b["out"] > 0 and abs(b["c"] - W) <= near else None
+            span = L
+        if not side:
+            plan["notes"] = list(plan.get("notes") or []) + [
+                "Un muro curvo del disegno non sta su un lato esterno della pianta o si incurva verso l'interno: importato dritto."]
+            continue
+        if done:
+            continue   # una facciata ad arco per pianta
+        bow_facade(plan, side, b["bulge"], a0=max(0.0, b["lo"]), a1=min(span, b["hi"]))
+        done = bool(plan.get("curve"))
+
+
 class DxfNotRecognised(ValueError):
     """Il DXF non contiene muri né locali riconoscibili."""
 
@@ -4441,6 +4510,7 @@ def import_dxf_data(dxf_content: str, style: str = "modern", furnished: bool = T
             if furnished:
                 furnish(lay)
             plan = serialize(lay, palette, random.randrange(1, 1_000_000))
+            _import_bows(plan, lay.options.get("bows") or [])
             # i pezzi senza nome di un locale a L / T hanno il colore del locale a cui appartengono
             main = {r["zone"]: r for r in plan["rooms"] if r["name"]}
             for r in plan["rooms"]:

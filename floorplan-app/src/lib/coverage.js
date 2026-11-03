@@ -114,8 +114,8 @@ export function obstacles(plan, { doors = 'closed' } = {}) {
   };
   const doorState = (i) => (typeof doors === 'string' ? doors : doors[i] || doors.default || 'closed');
   const vani = [
-    ...plan.doors.map((d, i) => (d.kind === 'gate' ? null : { ...openingRect(d, t), door: true, open: doorState(i) === 'open' })),
-    ...plan.windows.map((w) => ({ ...openingRect(w, t), door: false })),
+    ...plan.doors.map((d, i) => (d.kind === 'gate' ? null : { ...openingRect(d, t), door: d.type !== 'sliding', pano: d.type === 'sliding', open: doorState(i) === 'open' })),
+    ...plan.windows.map((w) => ({ ...openingRect(w, t), door: false, pano: w.type === 'panoramic' })),
   ].filter(Boolean);
 
   for (const w of plan.walls || []) {
@@ -135,11 +135,13 @@ export function obstacles(plan, { doors = 'closed' } = {}) {
       if (a > cur) seg(cur, a, 0, WALL_H, 'wall', 'Muro');
       if (o.door) {
         if (!o.open) seg(a, b, 0, DOOR_H, 'door', 'Porta chiusa');
+      } else if (o.pano) {
+        seg(a, b, 0, 2.4, 'glass', 'Vetrata panoramica');   // a tutta altezza, senza muro sotto
       } else {
         seg(a, b, 0, SILL, 'wall', 'Muro');
         seg(a, b, SILL, DOOR_H, 'glass', 'Vetrata');
       }
-      seg(a, b, DOOR_H, WALL_H, 'wall', 'Muro');
+      seg(a, b, o.pano ? 2.4 : DOOR_H, WALL_H, 'wall', 'Muro');
       cur = Math.max(cur, b);
     }
     if (cur < a1) seg(cur, a1, 0, WALL_H, 'wall', 'Muro');

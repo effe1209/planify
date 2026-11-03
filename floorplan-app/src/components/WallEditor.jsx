@@ -93,9 +93,10 @@ export default function WallEditor({ plan, s, toMeters, edit, onPreview }) {
   const place = (e, run) => {
     e.stopPropagation();
     const m = toMeters(e);
-    const res = addOpening(plan, edit.addMode, run, run.orient === 'h' ? m.x : m.y);
+    const kind = edit.addMode === 'panoramic' ? 'window' : edit.addMode;
+    const res = addOpening(plan, kind, run, run.orient === 'h' ? m.x : m.y, edit.addMode === 'panoramic' ? 'panoramic' : '');
     if (res.error) { edit.onError?.(res.error); return; }
-    edit.onApply({ plan: res.plan, moved: [], dropped: [], opening: { kind: edit.addMode, index: res.index } });
+    edit.onApply({ plan: res.plan, moved: [], dropped: [], opening: { kind, index: res.index } });
   };
 
   /* ── vano scala ── */

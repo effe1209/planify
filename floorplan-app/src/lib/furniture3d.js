@@ -18,6 +18,8 @@ export const OBJECT_NAMES = {
   kitchen_counter: 'CUCINA', kitchen_peninsula: 'PENISOLA', shoe_cabinet: 'SCARPIERA', console: 'CONSOLE', floor_lamp: 'LAMPADA',
   bath_column: 'COLONNA_BAGNO', towel_radiator: 'SCALDASALVIETTE', utility_sink: 'LAVATOIO', minibar: 'MINIBAR',
   workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
+  wardrobe_corner: 'ARMADIO_ANGOLO', wardrobe_open: 'ARMADIO_APERTO', sofa_round: 'DIVANO_TONDO', sofa_curved: 'DIVANO_ARCO',
+  chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO',
 };
 
 /* Categoria di materiale dal nome con cui l'oggetto lo chiama: diventa il layer del pezzo nel blocco DXF. */
@@ -169,6 +171,114 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         bx(W, low ? 0.55 : 0.95, 0.07, 0, low ? 0.06 : 0.1, hz + 0.035, wood);
         bx(W + 0.06, 0.05, 0.1, 0, low ? 0.61 : 1.05, hz + 0.05, wood);
       }
+      break;
+    }
+    case 'wardrobe_corner': {
+      // armadio a L: due bracci profondi come l'armadio, braccio laterale a sinistra (a destra se specchiato), fessure delle ante sui fronti
+      const H = 2.2;
+      const d = Math.min(0.6, Math.min(W, D) * 0.45);
+      const sx = it.flip ? 1 : -1;                          // lato del braccio laterale
+      const back = (z) => -D / 2 + z;
+      bx(W, 0.06, d - 0.04, 0, 0, back(d / 2), darkLine);
+      bx(W, H - 0.11, d, 0, 0.06, back(d / 2), M.cabinet);
+      bx(d, 0.06, D - d, sx * (W / 2 - d / 2), 0, back(d + (D - d) / 2), darkLine);
+      bx(d, H - 0.11, D - d, sx * (W / 2 - d / 2), 0.06, back(d + (D - d) / 2), M.cabinet);
+      bx(W + 0.02, 0.05, d + 0.02, 0, H - 0.05, back(d / 2), M.cabinet);
+      bx(d + 0.02, 0.05, D - d, sx * (W / 2 - d / 2), H - 0.05, back(d + (D - d) / 2), M.cabinet);
+      const nTop = Math.max(2, Math.round((W - d) / 0.6));
+      const x0 = sx < 0 ? -W / 2 + d : -W / 2;
+      for (let i = 1; i < nTop; i++) bx(0.008, H - 0.16, 0.012, x0 + ((W - d) * i) / nTop, 0.08, back(d) + 0.004, darkLine);
+      const nSide = Math.max(1, Math.round((D - d) / 0.6));
+      for (let i = 1; i < nSide; i++) bx(0.012, H - 0.16, 0.008, sx * (W / 2 - d) - sx * 0.004, 0.08, back(d) + ((D - d) * i) / nSide, darkLine);
+      for (const [px, pz, vertical] of [[x0 + (W - d) / 2 - 0.035, back(d), false], [x0 + (W - d) / 2 + 0.035, back(d), false]]) {
+        void vertical;
+        bx(0.012, 0.16, 0.025, px, 1.0, pz + 0.013, metalMat);
+      }
+      break;
+    }
+    case 'wardrobe_open': {
+      // armadio aperto a vista: montanti, schienale chiaro, ripiani, asta con i capi appesi e pile piegate sui ripiani
+      const H = 2.1;
+      const upr = Math.max(2, Math.round(W / 0.55));
+      for (let i = 0; i <= upr; i++) bx(0.03, H, D, -W / 2 + 0.015 + ((W - 0.03) * i) / upr, 0, 0, wood);
+      bx(W, H - 0.03, 0.02, 0, 0.03, -D / 2 + 0.01, white);
+      for (const y of [0.04, 0.5, H - 0.04]) bx(W, 0.03, D, 0, y, 0, wood);
+      const rodY = 1.85;
+      wheel(0.012, W - 0.04, 0, rodY, -D / 2 + D * 0.45, chrome);
+      const pal = [m('cloth1', '#cfd6df'), m('cloth2', '#e8ddd0'), m('cloth3', '#8f9eb2'), m('cloth4', '#c9b8a6'), m('cloth5', '#b5bfa8'), m('cloth6', '#9a8f86')];
+      const n = Math.max(6, Math.round((W - 0.1) / 0.07));
+      for (let i = 0; i < n; i++) {
+        const x = -W / 2 + 0.06 + ((W - 0.12) * (i + 0.5)) / n;
+        const len = 0.55 + ((i * 37) % 5) * 0.08;
+        bx(0.04, len, D * 0.55, x, rodY - len, -D / 2 + D * 0.45, pal[(i * 7 + 3) % pal.length]);
+      }
+      for (let k = 0; k < Math.max(1, Math.round(W / 0.5)); k++) {
+        const x = -W / 2 + 0.2 + k * 0.45;
+        if (x > W / 2 - 0.2) break;
+        for (let j = 0; j < 4; j++) bx(0.32, 0.05, D * 0.7, x, 0.07 + j * 0.055, -D / 2 + D * 0.4, pal[(k + j) % pal.length]);
+      }
+      break;
+    }
+    case 'sofa_round': {
+      // divano tondo: base e seduta circolari, schienale ad arco (200°) dietro, un cuscino al centro
+      const R = Math.min(W, D) / 2;
+      const back = m('roundback', theme.fabric || '#9aa7b5', { side: THREE.DoubleSide });
+      cy(R - 0.04, R - 0.04, 0.12, 0, 0.06, 0, darkLine, 40);
+      cy(R - 0.06, R - 0.06, 0.2, 0, 0.18, 0, M.fabric, 40);
+      cy(R - 0.2, R - 0.2, 0.06, 0, 0.38, 0.03, M.fabric, 40);
+      const span = (210 * Math.PI) / 180;
+      const arc = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.03, R - 0.03, 0.46, 48, 1, true, Math.PI - span / 2, span), back);
+      place(arc, 0, 0.18 + 0.23 + 0.2, 0);
+      const arc2 = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.19, R - 0.19, 0.4, 48, 1, true, Math.PI - span / 2, span), back);
+      place(arc2, 0, 0.62, 0);
+      cy(0.12, 0.12, 0.1, 0, 0.44, 0.08, metalMat, 16);
+      break;
+    }
+    case 'sofa_curved': {
+      // divano ad arco: moduli di seduta e schienale lungo una parabola, concavità verso il davanti
+      const b = D * 0.45;
+      const depth = D - b;
+      const n = 9;
+      const zOf = (t) => -D / 2 + b * (2 * t - 1) ** 2;
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n;
+        const x = -W / 2 + W * t;
+        const slope = (b * 4 * (2 * t - 1)) / W;
+        const yaw = -Math.atan(slope);
+        const sw = (W / n) * 1.08;
+        const z = zOf(t) + depth / 2;
+        const seat = bx(sw, 0.22, depth - 0.04, x, 0.18, z, M.fabric);
+        seat.rotation.y = yaw;
+        const bk = bx(sw, 0.46, 0.2, x, 0.38, zOf(t) + 0.12, M.fabric);
+        bk.rotation.y = yaw;
+        bk.rotation.x = -0.1;
+        const base = bx(sw, 0.14, depth - 0.1, x, 0.05, z, darkLine);
+        base.rotation.y = yaw;
+      }
+      break;
+    }
+    case 'chair_design': {
+      // sedia di design: guscio chiaro (seduta e schienale curvo) su quattro gambe di legno svasate
+      const shell = m('shell', '#e9e4dc', { roughness: 0.4 });
+      const s = Math.min(W, D);
+      bx(s * 0.92, 0.045, s * 0.86, 0, 0.44, 0.03, shell);
+      const bk = bx(s * 0.92, 0.4, 0.045, 0, 0.47, -s / 2 + 0.07, shell);
+      bk.rotation.x = -0.18;
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const lg = cy(0.011, 0.016, 0.45, sx * s * 0.34, 0, sz * s * 0.3, wood, 12);
+        lg.rotation.z = -sx * 0.1;
+        lg.rotation.x = sz * 0.1;
+      }
+      break;
+    }
+    case 'chair_outdoor': {
+      // sedia da esterno di design: seduta e schienale intrecciati (rattan), gambe sottili in metallo scuro
+      const wick = m('wicker', '#c9a77a', { roughness: 0.9, side: THREE.DoubleSide });
+      const s = Math.min(W, D);
+      cy(s * 0.42, s * 0.38, 0.07, 0, 0.42, 0.02, wick, 28);
+      const arc = new THREE.Mesh(new THREE.CylinderGeometry(s * 0.42, s * 0.42, 0.46, 32, 1, true, Math.PI - 1.3, 2.6), wick);
+      place(arc, 0, 0.72, 0.02);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cy(0.012, 0.016, 0.42, sx * s * 0.28, 0, sz * s * 0.26, darkLine, 10);
       break;
     }
     case 'wardrobe': {

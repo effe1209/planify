@@ -117,7 +117,14 @@ export function elevation(project, side, { north = 0, roof = null } = {}) {
     const lo = (o) => (view.axis === 'x' ? o.x : o.y);
     for (const w of (plan.windows || []).filter(facing)) {
       const a = hx(lo(w)), b = hx(lo(w) + w.w);
-      shapes.push({ kind: 'glass', pts: [[a, s.base + SILL], [b, s.base + SILL], [b, s.base + SILL + WINDOW_H], [a, s.base + SILL + WINDOW_H]] });
+      const pano = w.type === 'panoramic';
+      const y0 = pano ? 0.02 : SILL;
+      const y1 = pano ? 2.4 : SILL + WINDOW_H;
+      shapes.push({ kind: 'glass', pts: [[a, s.base + y0], [b, s.base + y0], [b, s.base + y1], [a, s.base + y1]] });
+    }
+    for (const d of (plan.doors || []).filter((x) => x.type === 'sliding').filter(facing)) {
+      const a = hx(lo(d)), b = hx(lo(d) + d.w);
+      shapes.push({ kind: 'glass', pts: [[a, s.base + 0.02], [b, s.base + 0.02], [b, s.base + 2.4], [a, s.base + 2.4]] });
     }
     for (const d of (plan.doors || []).filter((x) => x.entrance || x.kind === 'garage').filter(facing)) {
       const a = hx(lo(d)), b = hx(lo(d) + d.w);

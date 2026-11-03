@@ -6,6 +6,8 @@
  *   { kind: 'art' | 'mirror', x, y, ux, uy, nx, ny, len }   cornice sottile centrata in x, y
  */
 import { opening } from './ajax';
+import { isPanoramic } from './openings';
+import { withCornerWindows } from './cornerWindows';
 
 const CURTAIN_ROOMS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study', 'hotel_room']);
 const BACK = { S: [0, -1], N: [0, 1], E: [-1, 0], W: [1, 0] };   // dal centro dell'arredo verso il suo retro
@@ -19,22 +21,63 @@ function backOf(it) {
   return { x, y, ux: Math.abs(by), uy: Math.abs(bx), nx: -bx, ny: -by, along };
 }
 
-export function decorFor(plan) {
+/*
+ * Quanto sta libero lungo il muro, oltre il bordo di un vano, da quel lato (`side` ±1 lungo la direzione del muro): fino al muro d'angolo
+ * del locale (meno lo spessore) o alla prossima apertura dello stesso muro. Solo per muri orizzontali o verticali; sui muri obliqui non si limita.
+ */
+function freeBeyond(plan, op, o, side) {
+  const horiz = Math.abs(op.ux) > 0.9;
+  const vert = Math.abs(op.uy) > 0.9;
+  if (!op.room || !(horiz || vert)) return Infinity;
+  const r = op.room;
+  const sgn = (horiz ? op.ux : op.uy) * side;                 // verso crescente (+1) o decrescente (−1) della coordinata lungo il muro
+  const edge = horiz ? (sgn > 0 ? r.x + r.w : r.x) : (sgn > 0 ? r.y + r.h : r.y);
+  const here = (horiz ? op.cx : op.cy) + sgn * op.w / 2;      // bordo del vano da quel lato
+  let free = (edge - here) * sgn - (op.t + 0.03);             // dal bordo del vano al muro d'angolo, meno lo spessore del muro
+  // altre aperture sullo stesso muro, da quel lato
+  for (const x of [...plan.windows, ...plan.doors.filter((d) => d.kind !== 'gate')]) {
+    if (x === o) continue;
+    const q = opening(plan, x);
+    if (Math.abs(horiz ? q.cy - op.cy : q.cx - op.cx) > op.t) continue;
+    const near = ((horiz ? q.cx : q.cy) - sgn * q.w / 2 - here) * sgn;   // dal bordo del vano al bordo vicino dell'altra apertura
+    if (near > -0.05) free = Math.min(free, near - 0.05);
+  }
+  return free;
+}
+
+export function decorFor(plan0) {
+  const plan = withCornerWindows(plan0);
   const out = [];
   const rooms = new Map(plan.rooms.map((r) => [r.id, r]));
   const glass = plan.windows.map((w) => opening(plan, w));
   // un quadro o uno specchio non va sopra un vetro: stesso muro (entro 40 cm) e tratti che si toccano
   const onGlass = (b, len) => glass.some((op) => Math.abs((b.x - op.cx) * b.nx + (b.y - op.cy) * b.ny) < 0.4
     && Math.abs((b.x - op.cx) * b.ux + (b.y - op.cy) * b.uy) < len / 2 + op.w / 2 + 0.1);
-  for (const op of glass) {
+  // le vetrate scorrevoli sono porte a tutto vetro: anche loro hanno la tenda
+  const curtained = [...plan.windows.map((w) => ({ o: w, op: opening(plan, w) })),
+    ...plan.doors.filter((d) => d.type === 'sliding').map((d) => ({ o: d, op: opening(plan, d) }))];
+  for (const { o, op } of curtained) {
     if (!op.room || !CURTAIN_ROOMS.has(op.room.kind)) continue;
     const face = { x: op.cx + op.nx * (op.t / 2 + 0.03), y: op.cy + op.ny * (op.t / 2 + 0.03) };
+    if (isPanoramic(o) || o.corner) {
+      // vetrata grande: tenda a pannelli su un binario lungo tutto il vetro, aperta ai lati e sempre dentro la larghezza del vano,
+      // così non tocca i muri vicini (i pannelli stanno ai due estremi del vetro, verso il centro)
+      const panel = Math.min(0.55, Math.max(0.3, op.w * 0.16));
+      for (const side of [-1, 1]) {
+        const ex = face.x + op.ux * side * (op.w / 2 - 0.02);
+        const ey = face.y + op.uy * side * (op.w / 2 - 0.02);
+        out.push({ kind: 'curtain', x: ex, y: ey, ux: -op.ux * side, uy: -op.uy * side, nx: op.nx, ny: op.ny, len: panel });
+      }
+      continue;
+    }
     const panel = Math.min(0.4, Math.max(0.25, op.w * 0.22));
     for (const side of [-1, 1]) {
-      // tenda aperta: il pannello sta di lato al vano, appena sovrapposto al vetro
+      // tenda aperta: il pannello sta di lato al vano, appena sovrapposto al vetro, e non entra nel muro d'angolo né in un'altra apertura
+      const len = Math.min(panel, 0.08 + freeBeyond(plan, op, o, side));
+      if (len < 0.12) continue;
       const ex = face.x + op.ux * side * (op.w / 2 - 0.08);
       const ey = face.y + op.uy * side * (op.w / 2 - 0.08);
-      out.push({ kind: 'curtain', x: ex, y: ey, ux: op.ux * side, uy: op.uy * side, nx: op.nx, ny: op.ny, len: panel });
+      out.push({ kind: 'curtain', x: ex, y: ey, ux: op.ux * side, uy: op.uy * side, nx: op.nx, ny: op.ny, len });
     }
   }
   for (const it of plan.furniture) {

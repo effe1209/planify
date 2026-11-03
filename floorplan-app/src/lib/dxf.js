@@ -234,6 +234,13 @@ export function buildDxf(plan, { devices = [], codes = {}, coverage = null, view
       d.line('PORTE', P([0, c]), P([o.w, c]));
       continue;
     }
+    if (o.type === 'sliding') {
+      // vetrata scorrevole: due ante su binari paralleli, come in pianta
+      d.poly('PORTE', [P([0, 0]), P([o.w, 0]), P([o.w, t]), P([0, t])]);
+      d.line('PORTE', P([0, t * 0.33]), P([o.w * 0.54, t * 0.33]));
+      d.line('PORTE', P([o.w * 0.46, t * 0.67]), P([o.w, t * 0.67]));
+      continue;
+    }
     const dir = o.openDir || 1;
     d.line('PORTE', P([0, c]), P([0, c + dir * o.w]));
     const arc = [];
@@ -249,6 +256,11 @@ export function buildDxf(plan, { devices = [], codes = {}, coverage = null, view
     d.poly('FINESTRE', [P([0, 0]), P([o.w, 0]), P([o.w, t]), P([0, t])]);
     d.line('FINESTRE', P([0, t * 0.34]), P([o.w, t * 0.34]));
     d.line('FINESTRE', P([0, t * 0.66]), P([o.w, t * 0.66]));
+    if (o.type === 'panoramic') {
+      // vetrata panoramica: i montanti ogni 1,3 m circa
+      const n = Math.max(1, Math.round(o.w / 1.3));
+      for (let k = 1; k < n; k++) d.line('FINESTRE', P([(o.w * k) / n, 0]), P([(o.w * k) / n, t]));
+    }
   }
 
   // arredi con nome e altezza (contano per le ombre dei rilevatori)
