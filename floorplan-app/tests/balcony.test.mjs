@@ -20,3 +20,14 @@ const narrow = { rooms: [{ kind: 'living', x: 0, y: 2, w: 6, h: 3 }, { kind: 'ba
 assert.equal(balconyRailings(narrow).length, 3);
 assert.deepEqual(balconyRailings({ rooms: [{ kind: 'living', x: 0, y: 0, w: 4, h: 4 }] }), []);
 console.log('balcony ok');
+
+// poltrone e tavolino in rattan sul balcone, tappeto tondo di juta sotto i divani piccoli
+{
+  const { rugsFor } = await import('../src/lib/rugs.js');
+  const plan = { rooms: [{ id: 'r', x: 0, y: 0, w: 6, h: 5, kind: 'living' }],
+    furniture: [{ id: 's', room: 'r', type: 'sofa_round', x: 2, y: 1.5, w: 1.2, h: 1.2, facing: 'S' }] };
+  const rugs = rugsFor(plan);
+  assert.equal(rugs.length, 1);
+  assert.ok(rugs[0].round, 'il tappeto sotto il divano tondo è tondo');
+  console.log('balcony rattan/rug ok');
+}

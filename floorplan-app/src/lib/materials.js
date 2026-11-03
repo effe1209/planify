@@ -1,7 +1,8 @@
 /*
  * Materiali della casa: per facciata, tetto, pareti interne e pavimenti si sceglie il tipo (legno, pietra, mattoni…) e, a parte, il
  * colore (lib/palette.js). In più la struttura: «in legno» aggiunge pilastri d'angolo, travi a vista, portico all'ingresso e travetti
- * sotto la gronda (lib/timber.js). Vale per tutto il progetto: project.materials = { facade?, roof?, walls?, floor?, structure? }.
+ * sotto la gronda (lib/timber.js); il portico (la tettoia dell'ingresso) si spegne con `porch: false`. Vale per tutto il progetto:
+ * project.materials = { facade?, roof?, walls?, floor?, structure?, porch? }.
  * Una chiave assente = il materiale dello stile del piano.
  */
 
@@ -58,7 +59,10 @@ export function cleanMaterials(m) {
   const out = {};
   if (m) {
     for (const { key } of MATERIAL_ROWS) if (find(key, m[key])) out[key] = m[key];
-    if (m.structure === 'wood') out.structure = 'wood';
+    if (m.structure === 'wood') {
+      out.structure = 'wood';
+      if (m.porch === false) out.porch = false;   // senza tettoia all'ingresso
+    }
   }
   return Object.keys(out).length ? out : null;
 }

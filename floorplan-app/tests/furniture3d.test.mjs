@@ -15,7 +15,7 @@ for (const type of ['bed', 'wardrobe', 'dresser', 'shelving', 'shelving_heavy', 
   'shower', 'shower_round', 'shower_walkin', 'bathtub', 'office_chair', 'tv', 'sofa', 'sofa_corner', 'armchair', 'sideboard', 'plant', 'tree',
   'hedge', 'fence', 'path', 'gate_pedestrian', 'gate_driveway', 'washer', 'dryer', 'vacuum', 'nightstand', 'desk', 'table', 'table_round',
   'coffee_table', 'kitchen_counter', 'kitchen_peninsula', 'shoe_cabinet', 'console', 'floor_lamp', 'bath_column', 'towel_radiator', 'utility_sink',
-  'minibar', 'workbench', 'laundry_basket', 'gazebo', 'wardrobe_corner', 'wardrobe_open', 'sofa_round', 'sofa_curved', 'chair_design', 'chair_outdoor']) {
+  'minibar', 'workbench', 'laundry_basket', 'gazebo', 'wardrobe_corner', 'wardrobe_open', 'sofa_round', 'sofa_curved', 'chair_design', 'chair_outdoor', 'armchair_rattan', 'table_rattan']) {
   assert.ok(hasObject(type), type);
   const it = { type, x: 1, y: 2, w: type === 'car' ? 1.9 : 1.2, h: type === 'car' ? 4.5 : 0.6, facing: 'E' };
   const g = buildObject(THREE, it, M, mat, THEMES[['modern', 'classic', 'industrial', 'japandi'][type.length % 4]]);

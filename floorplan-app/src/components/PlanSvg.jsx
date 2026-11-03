@@ -618,6 +618,26 @@ const BASE_FURNITURE = {
       {[[0.18, 0.22], [0.82, 0.22], [0.2, 0.86], [0.8, 0.86]].map(([x, y]) => <circle key={`${x}${y}`} cx={w * x} cy={h * y} r={1.6} fill="#3a3f46" />)}
     </>
   ),
+  /* poltrona in rattan da esterno: conchiglia intrecciata, cuscino crema, coperta oliva ripiegata sul bracciolo */
+  armchair_rattan: (w, h) => (
+    <>
+      <rect x={w * 0.04} y={h * 0.04} width={w * 0.92} height={h * 0.92} rx={Math.min(w, h) * 0.42} fill="#c49a64" stroke="#7a5a33" strokeWidth="1.1" />
+      <path d={`M ${w * 0.1} ${h * 0.5} A ${w * 0.4} ${h * 0.44} 0 0 1 ${w * 0.9} ${h * 0.5}`} fill="none" stroke="#7a5a33" strokeOpacity="0.55" strokeWidth="1" />
+      <path d={`M ${w * 0.18} ${h * 0.45} A ${w * 0.32} ${h * 0.34} 0 0 1 ${w * 0.82} ${h * 0.45}`} fill="none" stroke="#7a5a33" strokeOpacity="0.4" strokeWidth="1" />
+      <rect x={w * 0.2} y={h * 0.3} width={w * 0.6} height={h * 0.55} rx={Math.min(w, h) * 0.22} fill="#f1e9d8" stroke="#bfb293" strokeWidth="0.9" />
+      <rect x={w * 0.52} y={h * 0.5} width={w * 0.3} height={h * 0.3} rx="3" fill="#7d8050" fillOpacity="0.85" stroke="#5f6240" strokeWidth="0.7" />
+    </>
+  ),
+  /* tavolino tondo in rattan: piano in marmo, pianta e lanterna con candela */
+  table_rattan: (w, h) => (
+    <>
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.5} fill="#c49a64" stroke="#7a5a33" strokeWidth="1.1" />
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.4} fill="#ecebe7" stroke="#bdbab2" strokeWidth="0.8" />
+      <circle cx={w * 0.4} cy={h * 0.47} r={Math.min(w, h) * 0.1} fill="#6f9a5a" stroke="#4d7340" strokeWidth="0.8" />
+      <circle cx={w * 0.62} cy={h * 0.55} r={Math.min(w, h) * 0.07} fill="#2c2f33" />
+      <circle cx={w * 0.62} cy={h * 0.55} r={Math.min(w, h) * 0.03} fill="#f4ead2" />
+    </>
+  ),
   wardrobe: (w, h, s, t) => {
     const n = Math.max(2, Math.round(w / 38));
     return (
@@ -1034,7 +1054,7 @@ function Sliding({ d, s, wt }) {
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
-  laundry: 'tile', garage: 'concrete', garden: 'lawn', stairs: 'wood', balcony: 'tile',
+  laundry: 'tile', garage: 'concrete', garden: 'lawn', stairs: 'wood', balcony: 'deck',
   office_open: 'carpet', meeting: 'carpet', director: 'carpet',
 };
 
@@ -1239,6 +1259,11 @@ export default function PlanSvg({
           <line x1="0" y1="8.5" x2="44" y2="8.5" stroke={theme.floorInk} strokeOpacity="0.12" />
           <line x1="22" y1="0" x2="22" y2="8.5" stroke={theme.floorInk} strokeOpacity="0.09" />
         </pattern>
+        <pattern id={`deck-${uid}`} width="40" height="7" patternUnits="userSpaceOnUse">
+          <rect width="40" height="7" fill="#4b3b2f" />
+          <rect y="3.5" width="40" height="3.5" fill="#3d3026" fillOpacity="0.5" />
+          <line x1="0" y1="6.6" x2="40" y2="6.6" stroke="#1f1812" strokeOpacity="0.7" />
+        </pattern>
         <pattern id={`herringbone-${uid}`} width="16" height="16" patternUnits="userSpaceOnUse">
           <path d="M0 8L8 0M8 16L16 8M0 8L8 16M8 0L16 8" fill="none" stroke={theme.floorInk} strokeOpacity="0.13" />
         </pattern>
@@ -1322,7 +1347,7 @@ export default function PlanSvg({
         {showFurn && !tech && (
           <g pointerEvents="none" opacity={furnOpacity}>
             {rugsFor(plan).filter((r) => !coveredByStairs(r, stairs)).map((r, i) => (
-              <Rug key={`rug-${i}`} x={r.x * s} y={r.y * s} w={r.w * s} h={r.h * s} t={theme} />
+              <Rug key={`rug-${i}`} x={r.x * s} y={r.y * s} w={r.w * s} h={r.h * s} t={theme} round={r.round} />
             ))}
           </g>
         )}

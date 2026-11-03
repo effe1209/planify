@@ -19,7 +19,7 @@ export const OBJECT_NAMES = {
   bath_column: 'COLONNA_BAGNO', towel_radiator: 'SCALDASALVIETTE', utility_sink: 'LAVATOIO', minibar: 'MINIBAR',
   workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
   wardrobe_corner: 'ARMADIO_ANGOLO', wardrobe_open: 'ARMADIO_APERTO', sofa_round: 'DIVANO_TONDO', sofa_curved: 'DIVANO_ARCO',
-  chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO',
+  chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO', armchair_rattan: 'POLTRONA_RATTAN', table_rattan: 'TAVOLINO_RATTAN',
 };
 
 /* Categoria di materiale dal nome con cui l'oggetto lo chiama: diventa il layer del pezzo nel blocco DXF. */
@@ -231,7 +231,10 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       place(arc, 0, 0.18 + 0.23 + 0.2, 0);
       const arc2 = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.19, R - 0.19, 0.4, 48, 1, true, Math.PI - span / 2, span), back);
       place(arc2, 0, 0.62, 0);
-      cy(0.12, 0.12, 0.1, 0, 0.44, 0.08, metalMat, 16);
+      // cuscini tondi oliva e coperta verde appoggiata sul bordo
+      const olive = m('olive', '#7d8050', { roughness: 0.95 });
+      for (const sx of [-1, 1]) cy(0.13, 0.13, 0.08, sx * R * 0.42, 0.44, -R * 0.2, olive, 24).rotation.x = 0.35;
+      bx(0.34, 0.03, 0.2, R * 0.55, 0.62, -R * 0.62, olive).rotation.y = 0.6;
       break;
     }
     case 'sofa_curved': {
@@ -255,6 +258,10 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         const base = bx(sw, 0.14, depth - 0.1, x, 0.05, z, darkLine);
         base.rotation.y = yaw;
       }
+      // cuscini tondi oliva ai lati e coperta verde sul bracciolo
+      const olive = m('olive', '#7d8050', { roughness: 0.95 });
+      for (const sx of [-1, 1]) cy(0.13, 0.13, 0.08, sx * W * 0.3, 0.42, zOf(0.5 + sx * 0.3) + 0.3, olive, 24).rotation.x = 0.35;
+      bx(0.22, 0.04, 0.5, W / 2 - 0.1, 0.62, zOf(0.97) + 0.3, olive);
       break;
     }
     case 'chair_design': {
@@ -279,6 +286,33 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const arc = new THREE.Mesh(new THREE.CylinderGeometry(s * 0.42, s * 0.42, 0.46, 32, 1, true, Math.PI - 1.3, 2.6), wick);
       place(arc, 0, 0.72, 0.02);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cy(0.012, 0.016, 0.42, sx * s * 0.28, 0, sz * s * 0.26, darkLine, 10);
+      break;
+    }
+    case 'armchair_rattan': {
+      // poltrona in rattan intrecciato: seduta tonda, schienale a conchiglia, cuscino crema e coperta oliva ripiegata
+      const wick = m('wicker', '#b98f5c', { roughness: 0.9, side: THREE.DoubleSide });
+      const cream = m('cream', '#efe6d4', { roughness: 0.95 });
+      const olive = m('olive', '#7d8050', { roughness: 0.95 });
+      const s = Math.min(W, D);
+      cy(s * 0.4, s * 0.36, 0.08, 0, 0.3, 0.02, wick, 32);
+      const shell = new THREE.Mesh(new THREE.CylinderGeometry(s * 0.46, s * 0.4, 0.5, 32, 1, true, Math.PI - 1.9, 3.8), wick);
+      place(shell, 0, 0.55, 0.02);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cy(0.02, 0.025, 0.3, sx * s * 0.26, 0, sz * s * 0.24, wick, 10);
+      cy(s * 0.34, s * 0.34, 0.1, 0, 0.38, 0.05, cream, 28);
+      bx(s * 0.5, 0.025, s * 0.2, s * 0.05, 0.485, s * 0.12, olive);
+      break;
+    }
+    case 'table_rattan': {
+      // tavolino tondo in rattan con piano in marmo, una pianta e una lanterna con la candela
+      const wick = m('wicker', '#b98f5c', { roughness: 0.9 });
+      const marble = m('marble', '#ece9e4', { roughness: 0.25 });
+      const s = Math.min(W, D);
+      cy(s * 0.46, s * 0.46, 0.03, 0, 0.5, 0, marble, 36);
+      cy(s * 0.48, s * 0.48, 0.02, 0, 0.48, 0, wick, 36);
+      for (const a of [0, 2.1, 4.2]) cy(0.02, 0.025, 0.48, Math.cos(a) * s * 0.3, 0, Math.sin(a) * s * 0.3, wick, 10);
+      ball(0.07, -s * 0.15, 0.62, 0.05, m('leaf', '#5f7f4a', { roughness: 0.9 }));
+      cy(0.045, 0.05, 0.14, s * 0.17, 0.53, -0.03, m('lantern', '#2c2f33'), 14);
+      cy(0.012, 0.012, 0.06, s * 0.17, 0.55, -0.03, m('wax', '#f4ead2', { roughness: 0.6 }), 8);
       break;
     }
     case 'wardrobe': {

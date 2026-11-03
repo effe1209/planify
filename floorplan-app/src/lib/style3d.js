@@ -125,6 +125,21 @@ function paint(kind, a, b, c) {
       }
       break;
     }
+    case 'deck': {
+      // doghe strette di legno scuro da esterno (7 cm), con giunto netto e un po' di venatura
+      const w = 18;
+      for (let i = 0; i * w < N; i++) {
+        g.fillStyle = css(mix(a, b, rnd()));
+        g.fillRect(i * w, 0, w, N);
+        for (let k = 0; k < 4; k++) {
+          g.fillStyle = css(hex(c), 0.18);
+          g.fillRect(i * w + rnd() * w, rnd() * N, 1, 40 + rnd() * 80);
+        }
+        g.fillStyle = css(hex(c), 0.9);
+        g.fillRect(i * w, 0, 1.6, N);
+      }
+      break;
+    }
     case 'herringbone': {
       const S = 64;
       for (let r = 0; r * S < N + S; r++) {
@@ -406,6 +421,7 @@ export function kitMaterials(THREE, mat, kit) {
     baseboard: mat(kit.baseboard.color),
     floor: floorTex(kit.floor),
     wet: floorTex(kit.wet),
+    deck: floorTex({ kind: 'deck', a: '#4b3b2f', b: '#3d3026', joint: '#1f1812' }),
     roof: roofMat,
     frame: mat(kit.frame, { roughness: 0.5 }),
     door: mat(kit.door, { roughness: 0.6 }),

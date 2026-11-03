@@ -35,6 +35,15 @@ export default function MaterialsPanel({ materials, onChange, onLook }) {
             </select>
           </label>
         </li>
+        {cur.structure === 'wood' && (
+          <li>
+            <label className="pf-check">
+              <input type="checkbox" checked={cur.porch !== false} aria-label="Portico d'ingresso"
+                onChange={(e) => onChange(cleanMaterials({ ...cur, porch: e.target.checked ? undefined : false }))} />
+              <span>Portico d&apos;ingresso <em>(la tettoia sopra il portoncino)</em></span>
+            </label>
+          </li>
+        )}
       </ul>
       <div className="pf-row">
         <button type="button" className="pf-btn-add" disabled={!Object.keys(cur).length} onClick={() => onChange(null)}>
