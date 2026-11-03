@@ -115,7 +115,7 @@ export const FURNITURE = [
   { id: 'sofa_2', type: 'sofa', label: 'Divano 2 posti', w: 1.6, h: 0.9, group: 'Giorno' },
   { id: 'sofa_3', type: 'sofa', label: 'Divano 3 posti', w: 2.2, h: 0.9, group: 'Giorno' },
   { id: 'sofa_corner', type: 'sofa_corner', label: 'Divano angolare', w: 2.6, h: 1.7, group: 'Giorno' },
-  { id: 'sofa_round', type: 'sofa_round', label: 'Divano tondo piccolo', w: 1.6, h: 1.6, group: 'Giorno' },
+  { id: 'sofa_round', type: 'sofa_round', label: 'Divano tondo piccolo', w: 1.3, h: 1.0, group: 'Giorno' },
   { id: 'sofa_curved', type: 'sofa_curved', label: 'Divano ad arco piccolo', w: 1.9, h: 1.0, group: 'Giorno' },
   { id: 'armchair', type: 'armchair', label: 'Poltrona', w: 0.8, h: 0.8, group: 'Giorno' },
   { id: 'coffee_table', type: 'coffee_table', label: 'Tavolino da salotto', w: 1.0, h: 0.55, group: 'Giorno' },

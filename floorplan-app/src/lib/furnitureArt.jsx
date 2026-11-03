@@ -78,8 +78,9 @@ export const FURNITURE_ART = {
     const my = head;
     const mh = h - head - plat;
     const gap = 4;
-    const pw = (mw - gap * (n + 1)) / n;
-    const fold = my + mh * 0.3;
+    const n2 = w > 1.7 * s ? 3 : w > 1.1 * s ? 2 : 1;
+    const pw2 = (mw - gap * (n2 + 1)) / n2;
+    const fold = my + mh * 0.34;
     return (
       <g>
         {t.low && <rect width={w} height={h} rx={t.round} fill={t.wood} stroke={t.woodLine} strokeWidth="1.1" />}
@@ -90,11 +91,12 @@ export const FURNITURE_ART = {
           <circle key={i} cx={4 + i * 9} cy={head / 2} r={0.9} fill={F_STROKE} fillOpacity="0.45" />
         ))}
         <rect x={mx} y={my} width={mw} height={mh} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
-        {Array.from({ length: n }, (_, i) => (
+        {/* cuscini: fila dietro bianca (2-3), davanti due più piccoli verde e sabbia che si sovrappongono */}
+        {Array.from({ length: n2 }, (_, i) => (
           <g key={i}>
-            <rect x={mx + gap + i * (pw + gap)} y={my + 3} width={pw} height={mh * 0.17} rx={4} fill="#fbfbfd" stroke={F_SOFT} />
-            <line x1={mx + gap + i * (pw + gap) + 3} y1={my + 3 + mh * 0.085} x2={mx + gap + i * (pw + gap) + pw - 3}
-              y2={my + 3 + mh * 0.085} stroke={F_SOFT} strokeWidth="0.5" />
+            <rect x={mx + gap + i * (pw2 + gap)} y={my + 3} width={pw2} height={mh * 0.19} rx={5} fill="#fbfbfd" stroke={F_SOFT} />
+            <line x1={mx + gap + i * (pw2 + gap) + 3} y1={my + 3 + mh * 0.095} x2={mx + gap + i * (pw2 + gap) + pw2 - 3}
+              y2={my + 3 + mh * 0.095} stroke={F_SOFT} strokeWidth="0.5" />
           </g>
         ))}
         {/* piumone con risvolto del lenzuolo e trapuntatura */}
@@ -106,8 +108,28 @@ export const FURNITURE_ART = {
             return <line key={i} x1={mx + 3} y1={y} x2={mx + mw - 3} y2={y} />;
           })}
         </g>
-        {/* coperta ai piedi */}
-        <rect x={mx} y={my + mh * 0.78} width={mw} height={mh * 0.14} fill={t.accent} fillOpacity="0.55" stroke={t.accent} strokeWidth="0.6" />
+        {/* cuscini davanti, sopra il piumone */}
+        {[[0.2, '#7d8050', -0.05], [0.5, '#e8dcc3', 0.04]].map(([k, c, rot], i) => {
+          const cw = Math.min(mw * 0.3, 0.42 * s);
+          const cx = mx + mw * (n2 > 1 ? k + 0.12 : 0.5) - cw / 2;
+          return <rect key={i} x={cx} y={fold - mh * 0.05} width={cw} height={mh * 0.17} rx={4} fill={c} stroke="#5f6240" strokeOpacity="0.45" strokeWidth="0.6"
+            transform={`rotate(${rot * 57} ${cx + cw / 2} ${fold + mh * 0.03})`} />;
+        })}
+        {/* coperta verde in lungo sul letto, con le frange ai piedi */}
+        {(() => {
+          const sw = Math.min(mw * 0.22, 0.4 * s);
+          const sx = mx + mw / 2 - sw / 2;
+          const y0 = fold + mh * 0.1;
+          const y1 = my + mh - 2;
+          return (
+            <g>
+              <rect x={sx} y={y0} width={sw} height={y1 - y0} fill="#7d8050" fillOpacity="0.92" stroke="#5f6240" strokeWidth="0.7" />
+              <line x1={sx + sw * 0.15} y1={y0 + 2} x2={sx + sw * 0.15} y2={y1 - 2} stroke="#d9d6b4" strokeOpacity="0.5" strokeWidth="0.6" />
+              <line x1={sx + sw * 0.85} y1={y0 + 2} x2={sx + sw * 0.85} y2={y1 - 2} stroke="#d9d6b4" strokeOpacity="0.5" strokeWidth="0.6" />
+              <path d={Array.from({ length: 9 }, (_, i) => `M ${sx + (sw * i) / 8} ${y1} v 3`).join(' ')} stroke="#7d8050" strokeWidth="0.8" />
+            </g>
+          );
+        })()}
       </g>
     );
   },
