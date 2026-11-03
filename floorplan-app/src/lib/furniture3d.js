@@ -548,15 +548,41 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       bx(W, H, 0.02, 0, 0, -D / 2 + 0.01, M.cabinet);
       const n = 5;
       const cols = ['#8b5e4b', '#46627a', '#c2a35c', '#5f7d5a', '#a64b4b'];
+      const books = cols.map((color, i) => m(`book-${i}`, color, { roughness: 0.82 }));
+      const band = m('bookband', '#d8c89b', { roughness: 0.72 });
+      const rng = seeded(`${it.x}|${it.y}|${W}|${D}|bookcase`);
+      const widths = [0.034, 0.04, 0.046, 0.052];
+      const heights = [0.2, 0.23, 0.27, 0.3];
       for (let i = 0; i <= n; i++) {
         const y = (i * (H - 0.03)) / n;
         bx(W - 0.06, 0.03, D - 0.02, 0, y, 0.0, M.cabinet);
         if (i > 0 && i < n) {
-          let x = -W / 2 + 0.06;
-          for (let j = 0; x < W / 2 - 0.1 && j < 14; j++) {
-            const bw = 0.025 + 0.012 * ((i + j) % 3);
-            bx(bw, 0.22 + 0.03 * ((i * 3 + j) % 4), D - 0.12, x + bw / 2, y + 0.03 - (H - 0.03) / n + (H - 0.03) / n, 0, m(`b${(i + j) % 5}`, cols[(i + j) % 5]));
-            x += bw + 0.004;
+          const baseY = y + 0.03;
+          const left = -W / 2 + 0.06;
+          const right = W / 2 - 0.06;
+          const stacked = i === 2 || i === 4;
+          const stackW = stacked ? Math.min(0.28, W * 0.25) : 0;
+          const stackSide = i === 2 ? 1 : -1;
+          const stackX = stackSide > 0 ? right - stackW / 2 : left + stackW / 2;
+          const start = stacked && stackSide < 0 ? left + stackW + 0.035 : left;
+          const end = stacked && stackSide > 0 ? right - stackW - 0.035 : right;
+          let x = start;
+          for (let j = 0; x < end && j < 22; j++) {
+            const bw = widths[Math.floor(rng() * widths.length)];
+            const bh = heights[Math.floor(rng() * heights.length)];
+            if (x + bw > end) break;
+            const book = bx(bw, bh, D - 0.12, x + bw / 2, baseY, 0, books[Math.floor(rng() * books.length)]);
+            book.rotation.y = (rng() - 0.5) * 0.08;
+            book.rotation.z = (rng() - 0.5) * 0.08;
+            if (rng() < 0.28) bx(bw * 0.72, 0.006, 0.003, x + bw / 2, baseY + bh * 0.16, (D - 0.12) / 2 + 0.001, band);
+            x += bw + 0.008;
+          }
+          if (stacked) {
+            for (let j = 0; j < 3; j++) {
+              const mt = books[Math.floor(rng() * books.length)];
+              bx(stackW, 0.024, D - 0.12, stackX, baseY + j * 0.026, 0, mt);
+              if (j !== 1) bx(stackW * 0.72, 0.005, 0.003, stackX, baseY + j * 0.026 + 0.009, (D - 0.12) / 2 + 0.001, band);
+            }
           }
         }
       }
