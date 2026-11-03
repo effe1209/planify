@@ -11,6 +11,7 @@ import { sketchToPlan } from './sketchToPlan.js';
 import { AJAX_MODELS, DEVICE_STYLE } from './ajax.js';
 import { aimDevice, CELL_STATE, reachAt, sensorModel } from './coverage.js';
 import { furnitureZ } from './scene3d.js';
+import { CARTOUCHE_H, LEGEND_W, sheetLayout } from './techSheet.js';
 
 const ROOM_LAYERS = /^(aree|area|rooms?|stanze?|locali)$/i;
 const OTHER_LAYERS = /^(muri|walls?|arredi|furniture|quote|dim|porte|finestre|testi|sensori|dispositivi|copertura|zone|non_sorv)/i;
@@ -113,6 +114,11 @@ function notRecognised() {
 /* ── Scrittura: DXF R12 (AC1009), il formato che leggono tutti i CAD ── */
 
 /* Layer: nome, colore ACI, tipo di linea, contenuto. */
+export const SHEET_LAYERS = [
+  ['CORNICE', 7, 'CONTINUOUS', 'Foglio: bordo e cornice'],
+  ['CARTIGLIO', 7, 'CONTINUOUS', 'Foglio: cartiglio, scala e legenda dei locali'],
+];
+
 export const DXF_LAYERS = [
   ['AREE', 8, 'CONTINUOUS', 'Contorno dei locali'],
   ['MURI', 7, 'CONTINUOUS', 'Muri'],
@@ -176,7 +182,7 @@ const BLOCK_ATTRS = [['CODICE', 'Codice', false], ['MODELLO', 'Modello Ajax', tr
  * opts.devices: dispositivi Ajax del piano → blocchi AJAX_<sigla> con attributi (codice, modello, locale, altezza,
  * direzione), campo nominale dei rilevatori e, con opts.coverage (coverFloor), zone coperte / parziali / cieche.
  */
-export function buildDxf(plan, { devices = [], codes = {}, coverage = null, views = null } = {}) {
+export function buildDxf(plan, { devices = [], codes = {}, coverage = null, views = null, sheet = null } = {}) {
   const W = plan.dimensions.width;
   const L = plan.dimensions.length;
   const t = plan.wallThickness / plan.scale;
@@ -184,11 +190,12 @@ export function buildDxf(plan, { devices = [], codes = {}, coverage = null, view
   const { put } = d;
   // prospetti e sezioni (opts.views = { drawings, marks }): sotto la pianta, ognuno sui suoi layer
   const lay = views?.drawings?.length ? layoutViews(views.drawings, L) : null;
-  const layers = lay ? [...DXF_LAYERS, ...VIEW_LAYERS] : DXF_LAYERS;
+  const S = sheet ? sheetLayout(plan, sheet) : null;   // cornice e cartiglio al formato e alla scala scelti
+  const layers = [...DXF_LAYERS, ...(lay ? VIEW_LAYERS : []), ...(S ? SHEET_LAYERS : [])];
 
   // intestazione, tabelle, blocchi
   put(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 6,
-    9, '$EXTMIN', 10, -3, 20, n3(lay ? L - lay.bottom - 3 : -3), 30, 0, 9, '$EXTMAX', 10, n3(Math.max(W, lay?.maxX || 0) + 3), 20, n3(L + 3), 30, 0, 0, 'ENDSEC');
+    9, '$EXTMIN', 10, n3(Math.min(-3, S ? S.x0 : 0)), 20, n3(Math.min(lay ? L - lay.bottom - 3 : -3, S ? S.y0 : 0)), 30, 0, 9, '$EXTMAX', 10, n3(Math.max(W, lay?.maxX || 0, S ? S.x0 + S.F.w * S.k : 0) + 3), 20, n3(Math.max(L, S ? S.y0 + S.F.h * S.k : 0) + 3), 30, 0, 0, 'ENDSEC');
   put(0, 'SECTION', 2, 'TABLES');
   put(0, 'TABLE', 2, 'LTYPE', 70, 2);
   put(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Continua', 72, 65, 73, 0, 40, 0);
@@ -371,6 +378,71 @@ export function buildDxf(plan, { devices = [], codes = {}, coverage = null, view
     put(0, 'SEQEND', 8, layer);
   }
 
+  if (S) sheetEntities(put, S, plan, sheet);
+
   put(0, 'ENDSEC', 0, 'EOF');
   return d.out.join('\n');
+}
+
+/*
+ * Cornice e cartiglio del foglio nel DXF, in metri alla scala scelta: bordo, cornice a 10 mm, colonna di destra con legenda dei locali
+ * e cartiglio (progetto, tavola, committente, progettista, pratica, scala, formato, data). Le altezze dei testi sono in mm di carta.
+ * Coordinate del DXF dirette (y verso l'alto); `sheet` = { format, scale, project, branding, floor, date }.
+ */
+function sheetEntities(put, S, plan, sheet) {
+  const { F, k, x0, y0 } = S;
+  const X = (mx) => n3(x0 + mx * k);
+  const Y = (my) => n3(y0 + my * k);
+  const line = (layer, ax, ay, bx, by) => put(0, 'LINE', 8, layer, 10, X(ax), 20, Y(ay), 30, 0, 11, X(bx), 21, Y(by), 31, 0);
+  const box = (layer, ax, ay, bx, by) => { line(layer, ax, ay, bx, ay); line(layer, bx, ay, bx, by); line(layer, bx, by, ax, by); line(layer, ax, by, ax, ay); };
+  const text = (layer, mx, my, hmm, str, right = false) => {
+    put(0, 'TEXT', 8, layer, 10, X(mx), 20, Y(my), 30, 0, 40, n3(hmm * k), 1, enc(str));
+    if (right) put(72, 2, 11, X(mx), 21, Y(my), 31, 0);
+  };
+  const m = F.margin;
+  box('CORNICE', 0, 0, F.w, F.h);
+  box('CORNICE', m, m, F.w - m, F.h - m);
+  const xc = F.w - m - LEGEND_W;
+  line('CORNICE', xc, m, xc, F.h - m);
+  // dall'alto del foglio come nel PDF (yp in mm dall'alto) → dal basso
+  const up = (yp) => F.h - yp;
+  const cy = F.h - m - CARTOUCHE_H;          // alto del cartiglio, mm dall'alto
+  line('CARTIGLIO', xc, up(cy), F.w - m, up(cy));
+  line('CARTIGLIO', xc, up(cy + 16), F.w - m, up(cy + 16));
+  line('CARTIGLIO', xc, up(cy + 43.5), F.w - m, up(cy + 43.5));
+  line('CARTIGLIO', xc + 25, up(cy + 43.5), xc + 25, m);
+  line('CARTIGLIO', xc + 50, up(cy + 43.5), xc + 50, m);
+  const br = sheet.branding || {};
+  const pr = sheet.project || {};
+  text('CARTIGLIO', F.w - m - 4, up(cy + 9), 5, br.name || 'Planify', true);
+  const field = (label, value, yy, bold) => {
+    text('CARTIGLIO', xc + 4, up(yy), 1.8, label);
+    text('CARTIGLIO', xc + 24, up(yy), bold ? 3 : 2.5, value || '');
+  };
+  field('PROGETTO', pr.name || 'Progetto', cy + 21, true);
+  field('TAVOLA', `${sheet.floor || ''} - pianta`.replace(/^ - /, ''), cy + 26);
+  field('COMMITTENTE', br.client, cy + 31);
+  field('PROGETTISTA', br.designer, cy + 36);
+  field('N. PRATICA', br.ref, cy + 41);
+  const cell = (label, value, mx) => { text('CARTIGLIO', mx + 2, up(cy + 46.5), 1.6, label); text('CARTIGLIO', mx + 2, up(cy + 50.5), 3, value); };
+  cell('SCALA', `1:${S.n}${S.unified ? '' : ' (non unif.)'}`, xc);
+  cell('FORMATO', F.id, xc + 25);
+  cell('DATA', sheet.date || new Date().toLocaleDateString('it-IT'), xc + 50);
+  // legenda dei locali
+  let yy = 16;
+  text('CARTIGLIO', xc + 4, up(yy), 3, 'LOCALI');
+  line('CARTIGLIO', xc + 4, up(yy + 1.5), F.w - m - 4, up(yy + 1.5));
+  yy += 6;
+  let total = 0;
+  const rooms = plan.rooms.filter((r) => r.kind !== 'garden' && r.kind !== 'stairs');
+  for (const r of rooms) {
+    if (yy > cy - 10) break;
+    const area = Math.round((r.area ?? r.w * r.h) * 100) / 100;
+    total += area;
+    text('CARTIGLIO', xc + 4, up(yy), 2.5, r.name || r.kind);
+    text('CARTIGLIO', F.w - m - 4, up(yy), 2.5, `${String(area).replace('.', ',')} m2`, true);
+    yy += 4;
+  }
+  text('CARTIGLIO', xc + 4, up(yy + 1), 2.5, 'Totale');
+  text('CARTIGLIO', F.w - m - 4, up(yy + 1), 2.5, `${String(Math.round(total * 100) / 100).replace('.', ',')} m2`, true);
 }

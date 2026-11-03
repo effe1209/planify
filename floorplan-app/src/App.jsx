@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import RenderPanel from './components/RenderPanel';
 import {
   AlertCircle, Armchair, Box, Layers, Briefcase, Check, ChevronDown, Cookie, Copy, Download, FileJson, FileText, Image as ImageIcon,
-  Cloud as CloudIcon, Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
+  Building2, Cloud as CloudIcon, Info, LayoutGrid, Link2, Loader2, Lock, Moon, PencilLine, PencilRuler, PenTool, Ruler, Scan, ShieldCheck, Shuffle, Sparkles, Star, Sun, Tag,
   Camera, Droplets, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, Undo2, Unlock, Upload, Zap, ZoomIn, ZoomOut, Move
 } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
@@ -48,6 +48,8 @@ import { cloud, cloudTokenFrom } from './lib/cloud';
 import { sharePayload } from './lib/share';
 import { useCloud } from './hooks/useCloud';
 import CloudDialog from './components/CloudDialog';
+import SheetsDialog from './components/SheetsDialog';
+import { getBranding } from './lib/branding';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
 import { planSecurity } from './lib/ajax';
@@ -55,7 +57,7 @@ import { aimDevice, coverFloor, doorsFor, optimizeDevices, placeDevice, sensorCo
 import { useCoverage } from './hooks/useCoverage';
 import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
-import { activeFloor, addFloor, houseFor, houseFront, houseRequest, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
+import { activeFloor, addFloor, houseFor, houseFront, houseRequest, levelLabel, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph, Wordmark } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -163,6 +165,8 @@ export default function App() {
   const consent = useConsent();
   const [cookieDialog, setCookieDialog] = useState(false);
   const [cloudDialog, setCloudDialog] = useState(false);
+  const [sheetsDialog, setSheetsDialog] = useState(false);
+  const [sheetsBusy, setSheetsBusy] = useState(false);
   const cx = useCloud();
   const [cloudStatus, setCloudStatus] = useState('idle');   // idle | saving | saved | error | conflict
   const cloudSig = useRef(new Map());                        // progetto locale → ultima versione salvata (per non salvare due volte lo stesso)
@@ -1564,7 +1568,7 @@ export default function App() {
   };
 
   /* DXF R12 a layer del piano aperto, con i dispositivi Ajax come blocchi e la copertura calcolata (lib/dxf.js). */
-  const exportDxf = () => {
+  const exportDxf = (sheet = null) => {   // sheet: { format, scale } → cornice e cartiglio alla scala scelta
     if (!plan) return;
     const devs = floorDevices || [];
     const opts = devs.length
@@ -1587,8 +1591,34 @@ export default function App() {
     } catch {
       views = null;   // il DXF della pianta esce comunque
     }
-    saveBlob(new Blob([buildDxf(plan, { ...opts, views })], { type: 'application/dxf' }), `${name}.dxf`);
-    say(devs.length ? 'File CAD esportato con sensori, copertura, prospetti e sezioni' : 'File CAD esportato con prospetti e sezioni');
+    const sheetOpt = sheet && { ...sheet, project: current, branding: getBranding(current), floor: `${levelLabel(floor.level)} ${floor.name}` };
+    saveBlob(new Blob([buildDxf(plan, { ...opts, views, ...(sheetOpt && { sheet: sheetOpt }) })], { type: 'application/dxf' }), `${name}${sheet ? `-${sheet.format.toLowerCase()}` : ''}.dxf`);
+    say(sheet ? `DXF esportato con cornice e cartiglio ${sheet.format}` : devs.length ? 'File CAD esportato con sensori, copertura, prospetti e sezioni' : 'File CAD esportato con prospetti e sezioni');
+  };
+  const exportSheets = async (opts) => {
+    if (!current || sheetsBusy) return;
+    setSheetsBusy(true);
+    say('Preparazione delle tavole…');
+    try {
+      const { exportSheetsPdf } = await import('./lib/pdfExport');
+      await exportSheetsPdf(current, opts);
+      setSheetsDialog(false);
+    } catch (e) {
+      setError(`Tavole non riuscite: ${e.message}`);
+    } finally {
+      setSheetsBusy(false);
+    }
+  };
+  const exportIfc = async () => {
+    if (!current) return;
+    try {
+      const { buildIfc } = await import('./lib/ifc');
+      const { text, counts, name } = buildIfc(current, { author: getBranding(current).designer });
+      saveBlob(new Blob([text], { type: 'application/x-step' }), `${name}.ifc`);
+      say(`IFC esportato: ${counts.walls} muri, ${counts.spaces} locali, ${counts.doors} porte, ${counts.windows} finestre`);
+    } catch (e) {
+      setError(`Esportazione IFC non riuscita: ${e.message}`);
+    }
   };
 
   const copy = async (text, msg) => {
@@ -1614,7 +1644,11 @@ export default function App() {
   const exportItems = [
     { key: 'svg', label: 'SVG', Icon: Download, onClick: exportSvg, title: 'Scarica SVG' },
     { key: 'png', label: 'PNG', Icon: ImageIcon, onClick: exportPng, title: 'Scarica PNG' },
-    { key: 'dxf', label: 'DXF (CAD)', Icon: Briefcase, onClick: exportDxf, accent: true, title: 'Scarica DXF per il CAD' },
+    { key: 'dxf', label: 'DXF (CAD)', Icon: Briefcase, onClick: () => exportDxf(), accent: true, title: 'Scarica DXF per il CAD' },
+    { key: 'ifc', label: 'IFC (BIM)', Icon: Building2, onClick: exportIfc, accent: true,
+      title: 'Scarica IFC per Revit, ArchiCAD e gli altri programmi BIM: muri, solai, locali, porte e finestre di tutti i piani' },
+    { key: 'sheets', label: 'Tavole', Icon: Ruler, onClick: () => setSheetsDialog(true), accent: true,
+      title: 'Tavole in scala (A4-A1) con cartiglio, in PDF o DXF' },
     { key: 'json', label: 'JSON', Icon: FileJson, onClick: exportJson, title: 'Scarica JSON' },
     { key: 'pdf', label: 'PDF progetto', Icon: FileText, onClick: exportPdf, accent: true,
       title: 'Esporta progetto PDF: copertina, tutti i piani con i sensori e distinta materiali' },
@@ -2475,6 +2509,10 @@ export default function App() {
           onNecessaryOnly={() => saveConsent({ history: false, analytics: false })}
           onCustomize={() => setCookieDialog(true)}
         />
+      )}
+      {sheetsDialog && (
+        <SheetsDialog busy={sheetsBusy} onClose={() => setSheetsDialog(false)} onPdf={exportSheets}
+          onDxf={(opts) => { exportDxf(opts); setSheetsDialog(false); }} />
       )}
       {cloudDialog && (
         <CloudDialog cx={cx} project={current} readOnly={readOnly} onClose={() => setCloudDialog(false)} say={say}
