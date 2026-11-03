@@ -22,7 +22,7 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
   return (
     <section className="pf-sec pf-item-panel">
       <div className="pf-item-head">
-        <h2>{FURNITURE_LABEL[it.type] || it.type}</h2>
+        <h2>{it.name || FURNITURE_LABEL[it.type] || it.type}</h2>
         <button type="button" className="pf-btn-icon" onClick={onClose} aria-label="Deseleziona"><X size={14} /></button>
       </div>
       <p className="pf-hint">
@@ -58,7 +58,7 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
           {it.rot ? <button type="button" className="pf-mini" onClick={() => onRotation(0)} title="Torna dritto"><RotateCcw size={13} /> 0°</button> : null}
         </div>
       )}
-      {onColor && (
+      {onColor && it.type !== 'custom_model' && (
         <div className="pf-item-color">
           <span className="pf-hint">Colore</span>
           <div className="pf-item-swatches" role="group" aria-label="Colore dell'arredo">

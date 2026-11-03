@@ -43,6 +43,7 @@ import EstimatePanel from './components/EstimatePanel';
 import SchedulePanel from './components/SchedulePanel';
 import { buildEstimate } from './lib/estimate';
 import { autoDecoratePlan, placeDecorItem, snapWallMountedItem, syncAttachedAccessories } from './lib/accessories';
+import { importGlb as importCustomGlb } from './lib/customModels';
 import { scheduleFor } from './lib/schedule';
 import { readSharedProject, shareUrl } from './lib/share';
 import { cloud, cloudTokenFrom } from './lib/cloud';
@@ -1063,11 +1064,13 @@ export default function App() {
     const entry = FURNITURE.find((f) => f.id === catalogId);
     if (!room || !entry) return;
     const offset = (roomFurniture.length * 0.3) % Math.max(0.2, room.w - entry.w);
+    const startX = entry.isDecor ? room.x + (room.w - entry.w) / 2 : room.x + 0.3 + offset;
+    const startY = entry.isDecor ? room.y + (room.h - entry.h) / 2 : room.y + 0.3 + offset;
     const item = {
       id: newId(),
       type: entry.type,
-      x: clamp(snap(room.x + 0.3 + offset), room.x, room.x + Math.max(0, room.w - entry.w)),
-      y: clamp(snap(room.y + 0.3 + offset), room.y, room.y + Math.max(0, room.h - entry.h)),
+      x: clamp(snap(startX), room.x, room.x + Math.max(0, room.w - entry.w)),
+      y: clamp(snap(startY), room.y, room.y + Math.max(0, room.h - entry.h)),
       w: entry.w,
       h: entry.h,
       rot: 0,
@@ -1093,8 +1096,62 @@ export default function App() {
       if (!free) say('Il soppalco è pieno: sposta gli arredi per fargli posto');
     }
     const itemPlacement = entry.isDecor ? placeDecorItem(autoDecoratePlan(plan), item, entry) : item;
+    if (!itemPlacement) {
+      say('Aggiungi prima un letto, un divano, una poltrona o un piano d’appoggio in questo locale');
+      return;
+    }
     editFurniture((list) => [...list, itemPlacement]);
     say(`${entry.label} aggiunto`);
+  };
+
+  const importCustomModel = async (roomId, file) => {
+    const onMezz = roomId === 'mezz' && plan?.mezzanine;
+    const room = onMezz ? { ...plan.mezzanine, id: plan.rooms.find((r) => r.kind === 'living')?.id ?? plan.rooms[0]?.id }
+      : plan?.rooms.find((r) => r.id === roomId);
+    if (!room || !plan) return;
+    setError(null);
+    try {
+      const THREE = await import('three');
+      const model = await importCustomGlb(THREE, file);
+      const bx = Math.max(model.bounds.x, 0.02);
+      const bz = Math.max(model.bounds.z, 0.02);
+      const scale = Math.min(1.5 / Math.max(bx, bz), Math.max(0.12, room.w - 0.2) / bx, Math.max(0.12, room.h - 0.2) / bz);
+      const w = Math.max(0.1, bx * scale);
+      const h = Math.max(0.1, bz * scale);
+      const height = Math.max(0.05, Math.min(3, model.bounds.y * scale));
+      let item = {
+        id: newId(), type: 'custom_model', modelId: model.id, name: model.name,
+        modelBounds: model.bounds, x: snap(room.x + (room.w - w) / 2), y: snap(room.y + (room.h - h) / 2),
+        w, h, z: [0, height], rot: 0, room: room.id,
+        ...(onMezz && { elev: plan.mezzanine.elev }),
+      };
+      const step = 0.2;
+      const spots = [];
+      for (let yy = room.y + 0.1; yy <= room.y + room.h - h - 0.05; yy += step) {
+        for (let xx = room.x + 0.1; xx <= room.x + room.w - w - 0.05; xx += step) {
+          spots.push([xx, yy]);
+        }
+      }
+      spots.sort((a, b) => Math.hypot(a[0] + w / 2 - (room.x + room.w / 2), a[1] + h / 2 - (room.y + room.h / 2))
+        - Math.hypot(b[0] + w / 2 - (room.x + room.w / 2), b[1] + h / 2 - (room.y + room.h / 2)));
+      const free = spots.find(([x, y]) => {
+        const p = snapItem(plan, item, x, y);
+        return itemProblems(plan, -1, { ...item, x: p.x, y: p.y }).length === 0;
+      });
+      if (free) {
+        const p = snapItem(plan, item, free[0], free[1]);
+        item = { ...item, x: p.x, y: p.y, room: p.room || item.room };
+      } else {
+        const p = onMezz ? { x: item.x, y: item.y } : snapItem(plan, item, item.x, item.y);
+        item = { ...item, x: p.x, y: p.y, room: p.room || item.room };
+      }
+      const nextIndex = autoDecoratePlan(plan).furniture.length;
+      editFurniture((list) => [...list, item]);
+      setSelectedItem(nextIndex);
+      say(free ? `Modello «${model.name}» importato` : `Modello «${model.name}» importato; controlla la posizione perché non ho trovato uno spazio libero`);
+    } catch (e) {
+      setError(`Importazione GLB non riuscita: ${e.message}`);
+    }
   };
 
   /* ── Generazione dal motore ── */
@@ -2346,6 +2403,7 @@ export default function App() {
                   onFlip={flipFurniture}
                   onRemoveItem={removeFurniture}
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
+                  onImportModel={(file) => importCustomModel(selectedRoom.id, file)}
                   mezz={selectedRoom.mezz && !readOnly ? { ...mezzLimits(plan), label: mezzAxis(plan).label, ratio: (s) => mezzRatio(plan, s), onSize: resizeMezzanine } : null}
                   onFurnish={engineHas('furnish_plan') && !readOnly && !selectedRoom.mezz ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
                   busy={furnishing}

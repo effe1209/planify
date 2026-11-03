@@ -108,6 +108,7 @@ export const FURNITURE = [
   { id: 'wardrobe', type: 'wardrobe', label: 'Armadio 3 ante', w: 1.8, h: 0.6, group: 'Notte' },
   { id: 'wardrobe_small', type: 'wardrobe', label: 'Armadio 2 ante', w: 1.2, h: 0.6, group: 'Notte' },
   { id: 'wardrobe_corner', type: 'wardrobe_corner', label: 'Armadio ad angolo', w: 1.6, h: 1.6, group: 'Notte' },
+  { id: 'wardrobe_open_corner', type: 'wardrobe_open_corner', label: 'Guardaroba aperto angolare', w: 1.7, h: 1.7, group: 'Notte' },
   { id: 'wardrobe_open', type: 'wardrobe_open', label: 'Armadio aperto a vista 150', w: 1.5, h: 0.55, group: 'Notte' },
   { id: 'wardrobe_open_s', type: 'wardrobe_open', label: 'Armadio aperto a vista 100', w: 1.0, h: 0.55, group: 'Notte' },
   { id: 'desk', type: 'desk', label: 'Scrivania', w: 1.2, h: 0.6, group: 'Notte' },
@@ -180,9 +181,10 @@ export const FURNITURE = [
     supportTypes: ['wall_shelf'], mountHeight: 1.5 },
 ];
 export const FURNITURE_LABEL = {
+  custom_model: 'Modello Blender',
   rug: 'Tappeto', bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', office_chair: 'Sedia da ufficio', sofa: 'Divano',
   sofa_corner: 'Divano angolare', sofa_round: 'Divano tondo', sofa_curved: 'Divano ad arco', chair_design: 'Sedia di design', chair_outdoor: 'Sedia da esterno', armchair_rattan: 'Poltrona in rattan', table_rattan: 'Tavolino in rattan',
-  wardrobe_corner: 'Armadio ad angolo', wardrobe_open: 'Armadio aperto', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
+  wardrobe_corner: 'Armadio ad angolo', wardrobe_open_corner: 'Guardaroba aperto angolare', wardrobe_open: 'Armadio aperto', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
   table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola',
   shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',
   toilet: 'WC', bidet: 'Bidet', sink: 'Lavabo', bath_column: 'Colonna contenitore', towel_radiator: 'Scaldasalviette', minibar: 'Minibar', console: 'Credenza', plant: 'Pianta',

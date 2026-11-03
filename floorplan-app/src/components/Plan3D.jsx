@@ -302,7 +302,9 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             ? buildHouse(THREE, P.project, (f) => themeFor(P.project, f), { lowWalls: P.lowWalls, spread: P.spread })
             : buildScene(THREE, P.plan, themeWithPalette(THEMES[P.style] || THEMES.modern, P.palette, P.materials), { lowWalls: P.lowWalls });
           scene.add(model);
-          import('../lib/pbr').then(({ upgradeMaterials }) => upgradeMaterials(THREE, model, { aniso: renderer.capabilities.getMaxAnisotropy?.() || 8 }))
+          import('../lib/customModels').then(({ hydrateCustomModels }) => hydrateCustomModels(THREE, model))
+            .then(() => import('../lib/pbr'))
+            .then(({ upgradeMaterials }) => upgradeMaterials(THREE, model, { aniso: renderer.capabilities.getMaxAnisotropy?.() || 8 }))
             .then(() => {
               if (model.parent === scene) invalidate(true);
               else model.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => m.userData?.pbrTextures?.forEach((t) => t.dispose())); });
@@ -403,6 +405,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             const fresh = project
               ? buildHouse(THREE, project, (f) => themeFor(project, f))
               : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
+            const { hydrateCustomModels } = await import('../lib/customModels');
+            await hydrateCustomModels(THREE, fresh);
             const rf = roofRef.current;
             if (rf) {
               const top = project ? roofFloor(project) : { floor: { plan }, y: plan?.height || WALL_H };

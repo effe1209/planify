@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, Upload, X } from 'lucide-react';
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
 import { forUse } from '../lib/materialLibrary';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
 
 /* Pannello di personalizzazione della stanza selezionata: nome, uso, finitura, arredi. */
-const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula']);
+const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula', 'wardrobe_corner', 'wardrobe_open_corner']);
 
-export default function RoomEditor({ room, furniture, library = [], onChange, onRotate, onFlip, onRemoveItem, onAddItem, onFurnish, busy, onClose, mezz = null }) {
+export default function RoomEditor({ room, furniture, library = [], onChange, onRotate, onFlip, onRemoveItem, onAddItem, onImportModel, onFurnish, busy, onClose, mezz = null }) {
   const [newId, setNewId] = useState('bed_double');
+  const [importBusy, setImportBusy] = useState(false);
+  const modelInput = useRef(null);
   const groups = [...new Set(FURNITURE.map((f) => f.group))];
 
   return (
@@ -82,7 +84,7 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
         <div className="pf-furn-list">
           {furniture.map(({ item, index }) => (
             <div key={index} className="pf-furn-row">
-              <span>{FURNITURE_LABEL[item.type] || item.type} <em>{item.w} × {item.h} m</em></span>
+              <span>{item.name || FURNITURE_LABEL[item.type] || item.type} <em>{item.w} × {item.h} m</em></span>
               <div className="pf-furn-actions">
                 {!item.wallMounted && ASYMMETRIC.has(item.type) && (
                   <button type="button" className="pf-btn-icon" title="Specchia" onClick={() => onFlip(index)}>
@@ -100,6 +102,24 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
           ))}
         </div>
       </div>
+
+      {onImportModel && (
+        <div className="pf-field-sm">
+          <span>Modello personalizzato</span>
+          <input ref={modelInput} type="file" accept=".glb,model/gltf-binary" hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              setImportBusy(true);
+              try { await onImportModel(file); } finally { setImportBusy(false); }
+            }} />
+          <button type="button" className="pf-btn-add" disabled={importBusy} onClick={() => modelInput.current?.click()}>
+            <Upload size={13} /> {importBusy ? 'Importazione…' : 'Importa modello Blender (.glb)'}
+          </button>
+          <p className="pf-hint">L’ingombro si può modificare dopo l’importazione.</p>
+        </div>
+      )}
 
       {onFurnish && (
         <div className="pf-field-sm">

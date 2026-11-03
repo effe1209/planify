@@ -81,13 +81,15 @@ export const CIRCUITS = {
 const NIGHT = new Set(['bed', 'closet', 'bath']);
 const DAY_KINDS = new Set(['living', 'living_kitchen', 'dining', 'kitchen']);
 const CIRCULATION = new Set(['corridor', 'entry']);
+const PANEL_EXCLUDED = new Set(['bed', 'bed_single', 'hotel_room', 'bath', 'wc', 'closet', 'storage', 'laundry', 'balcony', 'garden']);
+const panelRoom = (r) => !!r && !PANEL_EXCLUDED.has(r.kind) && area(r) >= 4 && Math.max(r.w || 0, r.h || 0) >= 1.2;
 // locali «di arrivo»: da lì non si comanda la luce del locale da cui si entra
 const DEAD_END = new Set(['bed', 'bath', 'wc', 'closet', 'storage', 'laundry', 'study']);
 const COMMAND = new Set(['switch', 'switch_2way', 'switch_inter', 'button']);
 const LIGHTS = new Set(['light', 'light_wall', 'fan']);
 const SOCKETS = new Set(['socket', 'socket_ip', 'dedicated']);
 // arredi davanti ai quali una presa «libera» non serve (o non è ammessa, vicino all'acqua)
-const BLOCKING = new Set(['wardrobe', 'wardrobe_corner', 'wardrobe_open', 'shelving', 'shelving_heavy', 'kitchen_counter', 'bathtub', 'shower',
+const BLOCKING = new Set(['wardrobe', 'wardrobe_corner', 'wardrobe_open_corner', 'wardrobe_open', 'shelving', 'shelving_heavy', 'kitchen_counter', 'bathtub', 'shower',
   'shower_walkin', 'shower_round', 'toilet', 'bidet', 'washer', 'dryer', 'utility_sink', 'bed', 'sofa',
   'sofa_corner', 'car', 'workbench', 'minibar', 'bookcase', 'sideboard', 'dresser', 'shoe_cabinet']);
 const WATER = new Set(['bathtub', 'shower', 'shower_walkin', 'shower_round']);
@@ -503,16 +505,16 @@ function planFloor(project, floor, level, stairRole, main) {
   // quadro: generale all'ingresso del piano principale, di piano vicino alla scala sugli altri
   let panel = null;
   if (!garden) {
-    if (main && entrance) {
+    if (main && entrance && panelRoom(entrance.op.room)) {
       const { d, op } = entrance;
       const p = atDoor(d, op.room, -(d.w + 0.45)) || atDoor(d, op.room, d.w + 0.95);
       if (p) panel = add('panel', op.room, p);
     }
     if (!panel) {
       const stairs = plan.rooms.find((r) => r.kind === 'stairs');
-      const host = plan.rooms.filter((r) => CIRCULATION.has(r.kind) || r.kind === 'garage')
+      const host = plan.rooms.filter((r) => (CIRCULATION.has(r.kind) || r.kind === 'garage') && panelRoom(r))
         .sort((a, b) => (stairs ? dist(center(a), center(stairs)) - dist(center(b), center(stairs)) : area(b) - area(a)))[0]
-        || plan.rooms.filter((r) => r.kind !== 'stairs').sort((a, b) => area(b) - area(a))[0];
+        || plan.rooms.filter((r) => panelRoom(r) && DAY_KINDS.has(r.kind)).sort((a, b) => area(b) - area(a))[0];
       const target = stairs ? center(stairs) : host && center(host);
       const p = host && nearestWall(host, target, 99, points);
       if (p) panel = add(main ? 'panel' : 'subpanel', host, p);

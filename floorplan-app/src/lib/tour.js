@@ -94,7 +94,7 @@ export async function createTourStage(project, { time = 'afternoon', width = 128
   RectAreaLightUniformsLib.init();
   const views = tourViews(project);
   const hdri = await loadHdri(THREE, time);
-  const built = buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: views[0] || null, time, background: 'sky', roof: true, windows: false, ground: 'horizon' });
+  const built = await buildRenderScene(THREE, project, { renderer, RoomEnvironment, hdri, view: views[0] || null, time, background: 'sky', roof: true, windows: false, ground: 'horizon' });
   if (!built) { renderer.dispose(); throw new Error('Non c\'è nulla da mostrare.'); }
   try {
     const { upgradeMaterials } = await import('./pbr');
