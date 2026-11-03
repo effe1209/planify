@@ -6,6 +6,7 @@ import { balconyRailings } from '../lib/balcony';
 import { withCornerWindows } from '../lib/cornerWindows';
 import WallEditor from './WallEditor';
 import SketchEditor from './SketchEditor';
+import ExtStairShape from './ExtStairShape';
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
@@ -1473,6 +1474,7 @@ export default function PlanSvg({
             <rect key={`w-${i}`} x={w.x * s} y={w.y * s} width={w.w * s} height={w.h * s} />
           ))}
         </g>
+        {plan.extStair && <ExtStairShape es={plan.extStair} s={s} labels={!thumb && layers.labels !== false} />}
         {balconyRailings(plan).length > 0 && (
           <g fill="none" strokeLinecap="butt" pointerEvents="none">
             {balconyRailings(plan).map((l, i) => (

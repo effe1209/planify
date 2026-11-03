@@ -5,6 +5,7 @@
  */
 import * as G from './geometry.js';
 import { cutWalls } from './sketchToPlan.js';
+import { PANORAMIC_MAX } from './openings.js';
 
 const GRID = 0.05;
 const MIN_EDGE = 0.2;
@@ -29,7 +30,7 @@ export function chordOf(plan, o) {
 const centreOf = (plan, o) => { const c = chordOf(plan, o); return G.add(c.start, G.mul(c.u, c.w / 2)); };
 
 /* Apertura sul lato a→b con il centro al parametro t (0–1). */
-function place(plan, a, b, t, w, kind, old = null) {
+function place(plan, a, b, t, w, kind, old = null, type = undefined) {
   const u = G.unit(G.sub(b, a));
   const n = G.normal(u);
   const centre = G.lerp(a, b, t);
@@ -40,6 +41,7 @@ function place(plan, a, b, t, w, kind, old = null) {
     x: r2(origin[0]), y: r2(origin[1]), w: r2(w),
     rot: r2((Math.atan2(u[1], u[0]) * 180) / Math.PI),
     ...(kind === 'door' && { openDir: old?.openDir ?? 1 }),
+    ...(type && { type }),
   };
 }
 
@@ -85,6 +87,7 @@ function rebuild(plan, polys, extra = {}) {
   const next = {
     ...plan, rooms, doors, windows, furniture,
     dimensions: { width: W, length: L }, svgWidth: W * plan.scale, svgHeight: L * plan.scale,
+    ...(plan.extStair && (dx || dy) ? { extStair: { ...plan.extStair, at: [r3(plan.extStair.at[0] + dx), r3(plan.extStair.at[1] + dy)] } } : {}),
   };
   next.wallLines = wallLinesFor(next, rooms, doors, windows);
   const kinds = rooms.map((r) => r.kind);
@@ -200,23 +203,88 @@ const sides = (plan, centre, n) => plan.rooms.filter((r) => r.poly).map((r) => (
   r, pos: G.pointInPolygon(G.add(centre, G.mul(n, 0.25)), r.poly), neg: G.pointInPolygon(G.add(centre, G.mul(n, -0.25)), r.poly),
 }));
 
-/* Porta o finestra nel punto `p` del muro più vicino. Le finestre solo sui muri esterni. */
-export function addOpening(plan, kind, p, w = kind === 'door' ? 0.9 : 1.2) {
+/* Un lato di locale che dà all'esterno (o sul balcone: lì un locale non conta come «dentro»). */
+const insideRooms = (plan, centre, n, sign) => plan.rooms.some((r) => r.poly && r.kind !== 'balcony' && G.pointInPolygon(G.add(centre, G.mul(n, 0.25 * sign)), r.poly));
+
+const OPENINGS = {   // strumento → lista, tipo e larghezza di partenza
+  door: { list: 'doors', kind: 'door', w: 0.9 },
+  window: { list: 'windows', kind: 'window', w: 1.2 },
+  panoramic: { list: 'windows', kind: 'window', type: 'panoramic', w: 2.2 },
+  sliding: { list: 'doors', kind: 'door', type: 'sliding', w: 1.8 },
+};
+
+/* Porta, finestra, vetrata panoramica o vetrata scorrevole nel punto `p` del muro più vicino. Finestre e vetrate fisse solo sui muri esterni o verso il balcone. */
+export function addOpening(plan, tool, p, w = null) {
+  const spec = OPENINGS[tool];
+  if (!spec) return { error: 'Strumento non valido' };
   const e = nearestEdge(plan, p);
   if (!e) return { error: 'Clicca vicino a un muro' };
   const len = G.dist(e.a, e.b);
-  const ww = Math.min(w, len - 0.2);
+  const ww = Math.min(w ?? spec.w, len - 0.2, PANORAMIC_MAX);
   if (ww < 0.5) return { error: 'Il muro è troppo corto' };
   const t = Math.min(1 - (ww / 2 + 0.1) / len, Math.max((ww / 2 + 0.1) / len, e.t));
   const centre = G.lerp(e.a, e.b, t);
   const n = G.normal(G.unit(G.sub(e.b, e.a)));
-  const ss = sides(plan, centre, n);
-  const inPos = ss.some((x) => x.pos);
-  const inNeg = ss.some((x) => x.neg);
-  if (kind === 'window' && inPos && inNeg) return { error: 'Le finestre vanno sui muri esterni' };
-  const o = place(plan, e.a, e.b, t, ww, kind, kind === 'door' ? { openDir: ss.find((x) => x.r.id === e.room.id)?.pos ? 1 : -1 } : null);
-  const list = kind === 'door' ? 'doors' : 'windows';
-  return { plan: rebuild(plan, new Map(), { [list]: [...plan[list], o] }), index: plan[list].length };
+  const inPos = insideRooms(plan, centre, n, 1);
+  const inNeg = insideRooms(plan, centre, n, -1);
+  if (spec.kind === 'window' && inPos && inNeg) return { error: 'Le finestre e le vetrate vanno sui muri esterni o verso il balcone' };
+  const pos = G.pointInPolygon(G.add(centre, G.mul(n, 0.25)), e.room.poly);
+  const o = place(plan, e.a, e.b, t, ww, spec.kind, spec.kind === 'door' ? { openDir: pos ? 1 : -1, entrance: false } : null, spec.type);
+  return { plan: rebuild(plan, new Map(), { [spec.list]: [...plan[spec.list], o] }), index: plan[spec.list].length, kind: spec.kind };
+}
+
+/* Cambia il tipo di un'apertura: porta, finestra, vetrata panoramica (fissa) o vetrata scorrevole. */
+export function setOpeningType(plan, kind, index, type) {
+  const from = kind === 'door' ? 'doors' : 'windows';
+  const o = plan[from][index];
+  if (!o) return { error: 'Apertura non trovata' };
+  if (o.entrance) return { error: 'Il portoncino non si può cambiare in una finestra' };
+  const toKind = type === 'sliding' || type === 'door' ? 'door' : 'window';
+  const to = toKind === 'door' ? 'doors' : 'windows';
+  const { type: _t, entrance: _e, openDir, ...rest } = o;
+  const next = { ...rest, ...(type === 'panoramic' || type === 'sliding' ? { type } : {}), ...(toKind === 'door' ? { openDir: openDir ?? 1, entrance: false } : {}) };
+  if (to === from) return { plan: rebuild(plan, new Map(), { [from]: plan[from].map((x, i) => (i === index ? next : x)) }), selected: { kind, index } };
+  return { plan: rebuild(plan, new Map(), { [from]: plan[from].filter((_, i) => i !== index), [to]: [...plan[to], next] }), selected: { kind: toKind, index: plan[to].length } };
+}
+
+const AXIS = 1e-3;
+
+/*
+ * Balcone sul muro esterno più vicino a `p`: un locale «Balcone» appoggiato al muro (profondità `depth`, larghezza fino a `width`),
+ * con una vetrata scorrevole che lo collega al locale. Solo su muri dritti orizzontali o verticali.
+ */
+export function addBalcony(plan, p, { depth = 1.2, width = 3 } = {}) {
+  const e = nearestEdge(plan, p, 1.5);
+  if (!e || e.room.kind === 'balcony') return { error: 'Clicca vicino a un muro esterno della casa' };
+  const horiz = Math.abs(e.a[1] - e.b[1]) < AXIS;
+  const vert = Math.abs(e.a[0] - e.b[0]) < AXIS;
+  if (!horiz && !vert) return { error: 'Il balcone si mette solo su muri dritti' };
+  const len = G.dist(e.a, e.b);
+  if (len < 1.2) return { error: 'Il muro è troppo corto per un balcone' };
+  const u = G.unit(G.sub(e.b, e.a));
+  const n = G.normal(u);
+  const mid = G.lerp(e.a, e.b, e.t);
+  const probeIn = G.pointInPolygon(G.add(mid, G.mul(n, 0.25)), e.room.poly);
+  const out = probeIn ? G.mul(n, -1) : n;                    // verso l'esterno del locale
+  if (insideRooms(plan, mid, out, 1)) return { error: 'Su questo muro c\'è già un altro locale: scegli un muro esterno' };
+  const bw = Math.min(width, len - 0.1);
+  const t0 = Math.min(len - bw / 2, Math.max(bw / 2, G.dot(G.sub(mid, e.a), u)));
+  const c = G.add(e.a, G.mul(u, t0));
+  const A = G.add(c, G.mul(u, -bw / 2));
+  const B = G.add(c, G.mul(u, bw / 2));
+  const poly = [A, B, G.add(B, G.mul(out, depth)), G.add(A, G.mul(out, depth))].map((q) => [r3(q[0]), r3(q[1])]);
+  const cen = [poly.reduce((x, q) => x + q[0], 0) / 4, poly.reduce((x, q) => x + q[1], 0) / 4];
+  const probes = [cen, ...poly.map((q) => G.lerp(q, cen, 0.1))];
+  if (plan.rooms.some((r) => r.poly && r.kind !== 'balcony' && probes.some((q) => G.pointInPolygon(q, r.poly)))) {
+    return { error: 'Il balcone finirebbe dentro un altro locale' };
+  }
+  const id = Math.max(0, ...plan.rooms.map((r) => r.id)) + 1;
+  const room = { id, name: 'Balcone', kind: 'balcony', zone: id, color: '#e6ecef', poly };
+  const sw = Math.min(1.8, bw - 0.2);
+  const door = place(plan, e.a, e.b, t0 / len, sw, 'door', { openDir: probeIn ? 1 : -1, entrance: false }, 'sliding');
+  const withRoom = { ...plan, rooms: [...plan.rooms, room] };
+  const next = rebuild(withRoom, new Map([[id, poly]]), { doors: [...plan.doors, door] });
+  return { plan: next, room: id };
 }
 
 export function moveOpening(plan, kind, index, p) {

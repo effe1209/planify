@@ -1,7 +1,7 @@
 /* Modifica diretta della pianta disegnata a mano (lib/sketchEdit.js). */
 import assert from 'node:assert/strict';
 import { sketchToPlan } from '../src/lib/sketchToPlan.js';
-import { addOpening, flipOpening, isSketchPlan, moveEdge, moveOpening, moveRoom, moveVertex, removeOpening, resizeOpening } from '../src/lib/sketchEdit.js';
+import { addBalcony, addOpening, setOpeningType, flipOpening, isSketchPlan, moveEdge, moveOpening, moveRoom, moveVertex, removeOpening, resizeOpening } from '../src/lib/sketchEdit.js';
 import * as G from '../src/lib/geometry.js';
 
 const rect = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
@@ -49,4 +49,29 @@ assert.ok(Math.abs(wr.plan.windows[w.index].w - 2) < 0.01);
 const wx = removeOpening(wr.plan, 'window', w.index);
 assert.equal(wx.plan.windows.length, n0);
 if (plan.doors.length) assert.equal(flipOpening(plan, 0).plan.doors[0].openDir, -plan.doors[0].openDir);
+
+// vetrata panoramica e scorrevole come negli schizzi generati; il tipo si cambia dopo
+const pano = addOpening(plan, 'panoramic', [3, 0.1]);
+assert.ok(pano.plan, pano.error);
+assert.equal(pano.plan.windows[pano.index].type, 'panoramic');
+assert.ok(pano.plan.windows[pano.index].w >= 1.5);
+assert.ok(addOpening(plan, 'panoramic', [5.1, 2]).error, 'la vetrata fissa non sta tra due locali');
+const sl = addOpening(plan, 'sliding', [5.1, 2]);
+assert.ok(sl.plan && sl.plan.doors[sl.index].type === 'sliding', 'scorrevole anche tra due locali');
+const conv = setOpeningType(pano.plan, 'window', pano.index, 'sliding');
+assert.equal(conv.selected.kind, 'door');
+assert.equal(conv.plan.windows.length, pano.plan.windows.length - 1);
+assert.equal(conv.plan.doors[conv.selected.index].type, 'sliding');
+assert.ok(setOpeningType(plan, 'door', plan.doors.findIndex((d) => d.entrance), 'window').error, 'il portoncino resta tale');
+
+// balcone: locale esterno appoggiato al muro, con la sua vetrata scorrevole
+const bal = addBalcony(plan, [3, 4.1]);
+assert.ok(bal.plan, bal.error);
+const br = bal.plan.rooms.find((r) => r.id === bal.room);
+assert.equal(br.kind, 'balcony');
+assert.ok(Math.abs(br.h - 1.2) < 0.01 && br.w <= 3.01);
+assert.ok(bal.plan.doors.some((d) => d.type === 'sliding'));
+assert.equal(bal.plan.rooms.length, plan.rooms.length + 1);
+assert.ok(bal.plan.dimensions.length > plan.dimensions.length, 'la pianta cresce col balcone');
+assert.ok(addBalcony(plan, [5.1, 2]).error, 'non sul muro tra due locali');
 console.log('sketchedit ok');

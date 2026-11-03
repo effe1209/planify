@@ -1625,11 +1625,55 @@ def ensure_access(lay: Layout) -> None:
             lay.notes.append(f"{r.name} non ha accesso: nessuna porta raggiungibile.")
 
 
+PANORAMIC_KINDS = ("living", "living_kitchen", "zone_day", "dining")
+
+
+def upgrade_glazing(lay: Layout) -> None:
+    """Nei soggiorni e nelle zone giorno la finestra più larga su un lato esterno lungo (almeno 3,4 m di muro libero) diventa una
+    vetrata panoramica fissa a tutta altezza, e se ci sta si allarga fino a 2,4 m. Una sola per locale; i bagni e le camere non ne hanno."""
+    if lay.room_type in ("hotel-room", "garage", "garden"):
+        return
+    for room in lay.rooms:
+        if room.kind not in PANORAMIC_KINDS or any(w.room_a == room.id and w.type == "panoramic" for w in lay.windows):
+            continue
+        best = None
+        for o in lay.windows:
+            if o.room_a != room.id or o.type or o.room_b is not None or o.w < 1.2:
+                continue
+            side = next((s for s in lay.ext_sides(room) if lay._side_geom(room, s)[:2] == (o.orient, o.line)), None)
+            if side is None:
+                continue
+            spans = [(lo, hi) for lo, hi in lay.ext_spans(room, side) if lo - EPS <= o.start and o.start + o.w <= hi + EPS]
+            if not spans or spans[0][1] - spans[0][0] < 3.4:
+                continue
+            if best is None or o.w > best[0].w:
+                best = (o, spans[0])
+        if best is None:
+            continue
+        o, (lo, hi) = best
+        o.type = "panoramic"
+        # allargamento simmetrico se non urta altre aperture e resta lontano dagli angoli
+        for w in (2.4, 2.2, 2.0):
+            if w <= o.w:
+                break
+            start = snap(o.start + o.w / 2 - w / 2)
+            if start < lo + 0.45 or start + w > hi - 0.45:
+                continue
+            old_start, old_w = o.start, o.w
+            o.start, o.w = round(start, 3), round(w, 3)
+            if any(q is not o and q.orient == o.orient and abs(q.line - o.line) < EPS and q.start < o.start + o.w + 0.3 and o.start < q.start + q.w + 0.3
+                   for q in lay.windows + lay.doors):
+                o.start, o.w = old_start, old_w
+                continue
+            break
+
+
 def furnish(lay: Layout, only: Optional[set] = None, access: bool = True):
     """Arreda i locali. `only` = id dei soli locali da arredare (gli altri restano com'erano); `access` = ripara i
     locali senza porta (aggiunge porte): con una pianta data la geometria non si tocca."""
     if access:
         ensure_access(lay)
+        upgrade_glazing(lay)
     P = Placer(lay)
     for r in lay.rooms:                     # prima i bagni (possono invertire il verso porta)
         if only is not None and r.id not in only:

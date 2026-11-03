@@ -20,6 +20,7 @@ const DOOR_W_BATH = 0.8;
 /* Quanto "costa" attraversare una stanza per raggiungerne un'altra: meglio passare dal disimpegno che dal bagno. */
 const PASS_COST = { corridor: 0, entry: 0, garden: 0.5, living: 0.5, living_kitchen: 0.5, garage: 1, hotel_room: 1, kitchen: 1, dining: 1,
   study: 2, laundry: 3, bed: 3, bed_single: 3, storage: 5, closet: 6, bath: 8 };
+const PANORAMIC_KINDS = new Set(['living', 'living_kitchen', 'dining']);
 const ENTRANCE_PREF = ['corridor', 'living_kitchen', 'living', 'hotel_room', 'kitchen', 'study', 'bed', 'bed_single', 'bath'];
 
 /* ── Analisi dei lati ──────────────────────────────────────────────────── */
@@ -699,10 +700,12 @@ export function sketchToPlan(shapes, { style = 'modern', peninsula = false } = {
     const max = r.kind === 'bath' ? 1 : r.area > 22 ? 3 : 2;
     for (const sp of spans) {
       if (windowsByRoom.get(r.id).length >= max) break;
-      const w = r.kind === 'bath' ? 0.6 : Math.min(1.4, sp.len - 0.4);
+      // soggiorno e zona giorno: la prima finestra su un tratto lungo diventa una vetrata panoramica a tutta altezza
+      const pano = PANORAMIC_KINDS.has(r.kind) && !windowsByRoom.get(r.id).length && sp.len >= 3.4;
+      const w = r.kind === 'bath' ? 0.6 : pano ? Math.min(2.4, sp.len - 0.8) : Math.min(1.4, sp.len - 0.4);
       if (w < 0.6 || sp.len < w + 0.3) continue;
       const o = opening(sp.run.a, sp.run.b, (sp.t0 + sp.t1) / 2, round(w, 2), null);
-      windows.push({ x: o.x, y: o.y, w: o.w, rot: o.rot, chord: o.chord });
+      windows.push({ x: o.x, y: o.y, w: o.w, rot: o.rot, chord: o.chord, ...(pano && { type: 'panoramic' }) });
       windowsByRoom.get(r.id).push({ centre: o.centre, w: o.w });
     }
     if (!windowsByRoom.get(r.id).length && !['bath', 'corridor', 'garage', 'laundry'].includes(r.kind)) {

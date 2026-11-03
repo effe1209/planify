@@ -13,6 +13,8 @@ import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME,
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
 import SketchEditPanel from './components/SketchEditPanel';
+import ExtStairPanel from './components/ExtStairPanel';
+import { removeExtStair, setExtStair } from './lib/extStair';
 import * as SK from './lib/sketchEdit';
 import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
@@ -825,6 +827,7 @@ export default function App() {
   const [selectedWall, setSelectedWall] = useState(null);         // muro interno scelto con un clic (unire, aprire)
   const [selectedStair, setSelectedStair] = useState(false);
   const [splitDir, setSplitDir] = useState('v');
+  const [extStairError, setExtStairError] = useState(null);
   const editWarning = useMemo(() => (selectedOpening && plan ? doorWarning(plan, selectedOpening) : null), [plan, selectedOpening]);
   const editable = !!plan && !readOnly && !plan.rooms.some((r) => r.poly) && !plan.wallLines?.length
     && !['garden'].includes(floor?.meta?.type);
@@ -2348,7 +2351,7 @@ export default function App() {
                   <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
                 </button>
                 {wallEdit && (
-                  <EditTools addMode={addMode} splitDir={splitDir} only={sketchEditable ? ['door', 'window'] : null}
+                  <EditTools addMode={addMode} splitDir={splitDir} only={sketchEditable ? ['door', 'window', 'panoramic', 'sliding', 'balcony'] : null}
                     onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
                     onSplitDir={setSplitDir} />
                 )}
@@ -2393,6 +2396,7 @@ export default function App() {
                   onResize={(w) => { const r = SK.resizeOpening(plan, selectedOpening.kind, selectedOpening.index, w); if (r.plan) applySketchEdit(r.plan); }}
                   onFlip={() => { const r = SK.flipOpening(plan, selectedOpening.index); if (r.plan) applySketchEdit(r.plan); }}
                   onRemove={() => { applySketchEdit(SK.removeOpening(plan, selectedOpening.kind, selectedOpening.index).plan); setSelectedOpening(null); }}
+                  onType={(type) => { const r = SK.setOpeningType(plan, selectedOpening.kind, selectedOpening.index, type); if (r.error) setError(r.error); else { applySketchEdit(r.plan); setSelectedOpening(r.selected); } }}
                   onClose={() => setSelectedOpening(null)} />
               )}
               {editable && wallEdit && (
@@ -2552,6 +2556,11 @@ export default function App() {
                 <PalettePanel palette={current?.palette} styleId={floor.meta?.style || form.style}
                   onChange={(pal) => editProject((p) => { const { palette: _p, ...rest } = p; return pal ? { ...rest, palette: pal } : rest; })} />
               )}
+              </>)}
+              {T('plan') && !readOnly && !['garden'].includes(floor.meta?.type) && (<>
+              <ExtStairPanel plan={plan} level={floor.level} error={extStairError}
+                onSet={(opts) => { const r = setExtStair(plan, opts.side, opts); if (r.error) setExtStairError(r.error); else { setExtStairError(null); editPlan(() => r.plan); } }}
+                onRemove={() => { setExtStairError(null); editPlan((p) => removeExtStair(p)); }} />
               </>)}
               {T('plan') && (<>
               <NorthPanel plan={plan} north={current?.north ?? 0}

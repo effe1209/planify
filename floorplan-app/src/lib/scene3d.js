@@ -53,6 +53,7 @@ import { projectStairs } from './stairs';
 import { MATERIALS } from './materials';
 import { kitMaterials, styleKit, texture as kitTexture, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
+import { extStairGeometry } from './extStair';
 
 export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true, timberBeams = false } = {}) {
   const plan = withCornerWindows(plan0);   // due finestre vicine in un angolo sono una sola, con il montante
@@ -298,6 +299,53 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
         cur = Math.max(cur, c.b);
       }
       if (cur < pb) seg(cur, pb, 0, wh2);
+    }
+  }
+
+  // scala esterna al giardino: pianerottolo a quota del pavimento, gradini pieni fino a terra (sotto il piano) e ringhiera sui lati liberi
+  if (plan.extStair) {
+    const es = plan.extStair;
+    const g = extStairGeometry(es);
+    const mark = (m, layer = 'SCALA_ESTERNA') => { if (m) m.userData.layer = layer; return m; };
+    for (const st of g.steps) mark(box(st.x, st.y, st.w, st.h, -g.rise, st.top, M.stone));
+    const L = g.landing;
+    mark(box(L.x, L.y, L.w, L.h, -0.16, 0.16, K.deck));
+    // sostegni agli angoli esterni del pianerottolo
+    const post = 0.08;
+    const [ox, oy] = es.out;
+    const far = ox !== 0 ? (ox > 0 ? L.x + L.w - post : L.x) : null;
+    const farY = oy !== 0 ? (oy > 0 ? L.y + L.h - post : L.y) : null;
+    for (const [px, pz] of ox !== 0 ? [[far, L.y], [far, L.y + L.h - post]] : [[L.x, farY], [L.x + L.w - post, farY]]) mark(box(px, pz, post, post, -g.rise, g.rise - 0.16, M.metal));
+    // parapetto: i lati del pianerottolo che non toccano il muro né la rampa
+    const sides = [
+      { x: L.x, y: L.y, w: L.w, h: 0.03, out: oy < 0 ? 'wall' : oy > 0 ? 'open' : 'side' },
+      { x: L.x, y: L.y + L.h - 0.03, w: L.w, h: 0.03, out: oy > 0 ? 'wall' : oy < 0 ? 'open' : 'side' },
+      { x: L.x, y: L.y, w: 0.03, h: L.h, out: ox < 0 ? 'wall' : ox > 0 ? 'open' : 'side' },
+      { x: L.x + L.w - 0.03, y: L.y, w: 0.03, h: L.h, out: ox > 0 ? 'wall' : ox < 0 ? 'open' : 'side' },
+    ];
+    // «wall»: l'attacco alla casa (nessun parapetto); «open»: lato verso l'esterno; «side»: lati lungo l'uscita, aperti solo dove parte la rampa
+    const first = g.steps[0];
+    for (const sd of sides) {
+      if (sd.out === 'wall') continue;
+      const touchesRamp = first && !(sd.x + sd.w < first.x - 0.02 || first.x + first.w < sd.x - 0.02 || sd.y + sd.h < first.y - 0.02 || first.y + first.h < sd.y - 0.02);
+      if (touchesRamp && sd.out === 'open') {
+        // la rampa dritta parte da questo lato: parapetto solo nei tratti ai due lati della rampa
+        const horiz = sd.w > sd.h;
+        const lo = horiz ? first.x : first.y;
+        const hi = horiz ? first.x + first.w : first.y + first.h;
+        const a0 = horiz ? sd.x : sd.y;
+        const a1 = horiz ? sd.x + sd.w : sd.y + sd.h;
+        for (const [p0, p1] of [[a0, Math.min(lo, a1)], [Math.max(hi, a0), a1]]) {
+          if (p1 - p0 < 0.05) continue;
+          const [bx, by, bw, bh] = horiz ? [p0, sd.y, p1 - p0, sd.h] : [sd.x, p0, sd.w, p1 - p0];
+          mark(box(bx, by, bw, bh, 0.08, 0.92, M.glass), 'RINGHIERE');
+          mark(box(bx, by, bw, bh, 1.0, 0.05, M.metal), 'RINGHIERE');
+        }
+        continue;
+      }
+      if (touchesRamp) continue;
+      mark(box(sd.x, sd.y, sd.w, sd.h, 0.08, 0.92, M.glass), 'RINGHIERE');
+      mark(box(sd.x, sd.y, sd.w, sd.h, 1.0, 0.05, M.metal), 'RINGHIERE');
     }
   }
 

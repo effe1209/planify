@@ -1,4 +1,5 @@
 import { furnitureZ } from './scene3d';
+import * as G from './geometry';
 
 const DECOR = new Set(['pillow', 'throw', 'book_stack', 'vase', 'candle', 'figurine', 'decor_lamp', 'led_strip', 'wall_shelf']);
 const FACING = { S: 0, N: 180, E: -90, W: 90 };
@@ -165,6 +166,62 @@ function shelfForRoom(plan, room, furniture = []) {
   };
 }
 
+/* Mensola in una stanza di forma libera: su un lato dritto (orizzontale o verticale) abbastanza lungo, dentro il poligono, lontana da porte e finestre e dagli arredi alti, vicino ai posti a sedere. */
+function shelfForPolyRoom(plan, room, furniture = []) {
+  const length = 0.72;
+  const depth = 0.18;
+  const half = (plan.wallThickness || 10) / (plan.scale || 50) / 2;
+  const gap = 0.02;
+  const seats = furniture.filter((it) => it.room === room.id && SEATS.has(it.type));
+  const spans = [];
+  for (const o of [...(plan.doors || []), ...(plan.windows || [])]) {
+    const a = (o.rot * Math.PI) / 180;
+    const u = [Math.cos(a), Math.sin(a)];
+    const n = G.normal(u);
+    const start = G.add([o.x, o.y], G.mul(n, half));
+    for (let t = -0.12; t <= o.w + 0.12; t += 0.08) spans.push(G.add(start, G.mul(u, t)));
+  }
+  const options = [];
+  for (const [a, b] of G.edges(room.poly)) {
+    const horiz = Math.abs(a[1] - b[1]) < 1e-3;
+    const vert = Math.abs(a[0] - b[0]) < 1e-3;
+    if (!horiz && !vert) continue;
+    const len = G.dist(a, b);
+    if (len < length + 0.8) continue;
+    const u = G.unit(G.sub(b, a));
+    const n = G.normal(u);
+    const mid = G.lerp(a, b, 0.5);
+    const inward = G.pointInPolygon(G.add(mid, G.mul(n, 0.25)), room.poly) ? n : G.mul(n, -1);
+    const target = seats.length ? seats.reduce((m, it) => (G.dist([it.x + it.w / 2, it.y + it.h / 2], mid) < G.dist(m, mid) ? [it.x + it.w / 2, it.y + it.h / 2] : m), [Infinity, Infinity]) : mid;
+    const t = Math.max(length / 2 + 0.3, Math.min(len - length / 2 - 0.3, G.dot(G.sub(target, a), u)));
+    const c = G.add(G.add(a, G.mul(u, t)), G.mul(inward, half + gap + depth / 2));
+    const w = horiz ? length : depth;
+    const h = horiz ? depth : length;
+    const rect = { x: c[0] - w / 2, y: c[1] - h / 2, w, h };
+    const corners = [[rect.x, rect.y], [rect.x + w, rect.y], [rect.x, rect.y + h], [rect.x + w, rect.y + h]];
+    if (!corners.every((q) => G.pointInPolygon(q, room.poly))) continue;
+    if (spans.some((q) => q[0] > rect.x - 0.15 && q[0] < rect.x + w + 0.15 && q[1] > rect.y - 0.15 && q[1] < rect.y + h + 0.15)) continue;
+    const tall = furniture.some((it) => {
+      if (it.room !== room.id || it.decor) return false;
+      if ((it.z?.[1] ?? furnitureZ(it.type)[1]) <= 1.48) return false;
+      const pad = 0.025;
+      return !(rect.x + w + pad <= it.x || it.x + it.w + pad <= rect.x || rect.y + h + pad <= it.y || it.y + it.h + pad <= rect.y);
+    });
+    if (tall) continue;
+    const facing = horiz ? (inward[1] > 0 ? 'S' : 'N') : (inward[0] > 0 ? 'E' : 'W');
+    options.push({ rect, facing, distance: G.dist(target, c) });
+  }
+  const best = options.sort((p, q) => p.distance - q.distance)[0];
+  if (!best) return null;
+  const { rect, facing } = best;
+  return {
+    id: idFor('decor-shelf', `${plan.seed || ''}:${room.id}`), type: 'wall_shelf',
+    x: rect.x, y: rect.y, w: rect.w, h: rect.h, mountSize: { w: length, h: depth },
+    room: room.id, facing, rot: 0, decor: true, autoDecor: true, wallMounted: true, mountHeight: 1.58,
+    z: [1.58, 1.635], color: '#8b7258',
+  };
+}
+
 export function snapWallMountedItem(plan, item, x, y) {
   const room = plan.rooms?.find((r) => r.id === item.room) || plan.rooms?.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
   if (!room || room.poly) return { ...item, x: +x.toFixed(3), y: +y.toFixed(3), wallMounted: true };
@@ -238,11 +295,12 @@ export function autoDecoratePlan(plan) {
     }
   }
   for (const room of plan.rooms) {
-    if (decoratedRooms.has(room.id) || room.poly || !ROOMS_WITH_SHELVES.has(room.kind) || room.w < 2.7 || room.h < 2.3) continue;
+    if (decoratedRooms.has(room.id) || !ROOMS_WITH_SHELVES.has(room.kind)) continue;
+    if (room.poly ? (room.area ?? room.w * room.h) < 8 : room.w < 2.7 || room.h < 2.3) continue;
     const hasStorage = parents.some((it) => it.room === room.id && ['bookcase', 'shelving', 'shelving_heavy', 'wall_shelf'].includes(it.type));
     const hasFurniture = parents.some((it) => it.room === room.id && SEATS.has(it.type));
     if (!hasFurniture || hasStorage) continue;
-    const shelf = shelfForRoom(plan, room, parents);
+    const shelf = room.poly ? shelfForPolyRoom(plan, room, parents) : shelfForRoom(plan, room, parents);
     if (!shelf) continue;
     if (!existingIds.has(shelf.id)) { list.push(shelf); existingIds.add(shelf.id); }
     addShelfDetails(plan, shelf, list);

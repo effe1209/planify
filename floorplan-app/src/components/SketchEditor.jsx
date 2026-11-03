@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import * as G from '../lib/geometry';
-import { addOpening, chordOf, moveEdge, moveOpening, moveRoom, moveVertex, snapGrid } from '../lib/sketchEdit';
+import { addBalcony, addOpening, chordOf, moveEdge, moveOpening, moveRoom, moveVertex, snapGrid } from '../lib/sketchEdit';
 
 const BLUE = '#58760a';   // il verde del marchio, scuro per leggersi sul foglio bianco
 const MAX_VERTEX_HANDLES = 14;   // sulle curve (decine di vertici) restano solo i lati e la stanza intera
@@ -16,7 +16,7 @@ const MAX_VERTEX_HANDLES = 14;   // sulle curve (decine di vertici) restano solo
 export default function SketchEditor({ plan, s, toMeters, edit, onPreview }) {
   const [drag, setDrag] = useState(null);
   const result = useRef(null);
-  const picking = edit.addMode === 'door' || edit.addMode === 'window';
+  const picking = ['door', 'window', 'panoramic', 'sliding', 'balcony'].includes(edit.addMode);
 
   const start = (e, info) => {
     e.stopPropagation();
@@ -70,11 +70,12 @@ export default function SketchEditor({ plan, s, toMeters, edit, onPreview }) {
   const pick = (e) => {
     e.stopPropagation();
     const m = toMeters(e);
-    const res = addOpening(plan, edit.addMode, [m.x, m.y]);
+    const res = edit.addMode === 'balcony' ? addBalcony(plan, [m.x, m.y]) : addOpening(plan, edit.addMode, [m.x, m.y]);
     if (res.error) { edit.onError?.(res.error); return; }
     edit.onError?.(null);
     edit.onApply?.(res.plan);
-    edit.onSelect?.({ kind: edit.addMode, index: res.index });
+    if (res.room != null) edit.onSelectRoom?.(res.room);
+    else edit.onSelect?.({ kind: res.kind, index: res.index });
   };
   const openings = [...plan.doors.map((o, index) => ({ o, kind: 'door', index })), ...plan.windows.map((o, index) => ({ o, kind: 'window', index }))];
 
