@@ -49,6 +49,8 @@ import { sharePayload } from './lib/share';
 import { useCloud } from './hooks/useCloud';
 import CloudDialog from './components/CloudDialog';
 import SheetsDialog from './components/SheetsDialog';
+import LibraryDialog, { LibraryPanel } from './components/LibraryDialog';
+import { getLibrary, purchaseQuote, storeLibrary } from './lib/materialLibrary';
 import { getBranding } from './lib/branding';
 import { planPlumbing } from './lib/plumbing';
 import { planElectric } from './lib/electric';
@@ -166,6 +168,7 @@ export default function App() {
   const [cookieDialog, setCookieDialog] = useState(false);
   const [cloudDialog, setCloudDialog] = useState(false);
   const [sheetsDialog, setSheetsDialog] = useState(false);
+  const [libraryDialog, setLibraryDialog] = useState(false);
   const [sheetsBusy, setSheetsBusy] = useState(false);
   const cx = useCloud();
   const [cloudStatus, setCloudStatus] = useState('idle');   // idle | saving | saved | error | conflict
@@ -620,6 +623,12 @@ export default function App() {
   const estimateCfg = current?.estimate || null;
   const schedule = useMemo(() => (current ? scheduleFor(current) : null), [current]);
   const estimate = useMemo(() => (current && estimateCfg ? buildEstimate(current, estimateCfg) : null), [current, estimateCfg]);
+  const library = useMemo(() => getLibrary(current), [current]);
+  const quote = useMemo(() => (current ? purchaseQuote(current) : { rows: [], subtotal: 0, vat: 22, tax: 0, total: 0 }), [current]);
+  const changeLibrary = (items) => {
+    storeLibrary(items);   // anche nel browser: i progetti nuovi ripartono dalla stessa libreria
+    editProject((p) => ({ ...p, library: items }));
+  };
   const startEstimate = () => {
     editProject((p) => ({ ...p, estimate: { prices: {}, vat: 10, contingency: 10 } }));
     say('Preventivo calcolato su tutto il progetto');
@@ -2294,6 +2303,7 @@ export default function App() {
                   key={selectedRoom.id}
                   room={selectedRoom}
                   furniture={roomFurniture}
+                  library={library}
                   onChange={(patch) => updateRoom(selectedRoom.id, patch)}
                   onRotate={rotateFurniture}
                   onFlip={flipFurniture}
@@ -2363,6 +2373,8 @@ export default function App() {
                 onStart={startPlumbing} onSheet={setSheet} onChange={changePlumbing} onClear={clearPlumbing} />
 
               <SchedulePanel schedule={schedule} />
+
+              <LibraryPanel count={library.length} quote={quote} onOpen={() => setLibraryDialog(true)} />
 
               <EstimatePanel config={estimateCfg} data={estimate} onStart={startEstimate} onChange={changeEstimate}
                 onClear={clearEstimate} />
@@ -2510,6 +2522,7 @@ export default function App() {
           onCustomize={() => setCookieDialog(true)}
         />
       )}
+      {libraryDialog && <LibraryDialog library={library} quote={quote} onLibrary={changeLibrary} onClose={() => setLibraryDialog(false)} say={say} />}
       {sheetsDialog && (
         <SheetsDialog busy={sheetsBusy} onClose={() => setSheetsDialog(false)} onPdf={exportSheets}
           onDxf={(opts) => { exportDxf(opts); setSheetsDialog(false); }} />

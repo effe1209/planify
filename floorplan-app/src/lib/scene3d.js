@@ -5,7 +5,7 @@
  */
 import { frontOf } from './project';
 import { rugsFor } from './rugs';
-import { tintMaterials, tintTheme, validColor } from './furnitureColor';
+import { shade, tintMaterials, tintTheme, validColor } from './furnitureColor';
 import { decorFor } from './decor';
 import { slideDoor } from './mezz';
 import { balconyRailings } from './balcony';
@@ -48,7 +48,7 @@ import { buildTimber, rafterTails } from './timber';
 import { stairHoles, stairSteps } from './stairs3d';
 import { buildObject } from './furniture3d';
 import { projectStairs } from './stairs';
-import { kitMaterials, styleKit, uvMeters } from './style3d';
+import { kitMaterials, styleKit, texture as kitTexture, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
 
 export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
@@ -90,6 +90,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     root.add(g);
     return g;
   };
+  const finishFloors = new Map();   // materiali dei pavimenti scelti dalla libreria, uno per colore e trama
   const rooms = plan.rooms.filter((r) => r.kind !== 'garden');
   const inside = (px, pz) => rooms.some((r) => (r.poly ? pointInPolygon([px, pz], r.poly)
     : px >= r.x - 0.02 && px <= r.x + r.w + 0.02 && pz >= r.y - 0.02 && pz <= r.y + r.h + 0.02));
@@ -109,7 +110,17 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     }
     const color = r.kind === 'garden' ? '#b9d6a8' : r.kind === 'garage' ? '#c9ccd1' : r.color || '#f5f5f5';
     // pavimento dello stile: listoni, spina di pesce o cemento nelle zone abitate, piastrelle o marmo nei bagni
-    const floorMat = r.kind === 'garden' || r.kind === 'garage' ? mat(color) : r.kind === 'balcony' ? K.deck : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color);
+    // materiale scelto per il pavimento del locale (libreria): colore e trama del catalogo
+    const fin = r.finish?.floor;
+    const finKey = fin?.color && `${fin.texture || 'none'}|${fin.color}`;
+    if (finKey && !finishFloors.has(finKey)) {
+      const map = fin.texture && fin.texture !== 'none' ? kitTexture(THREE, fin.texture, fin.color, shade(fin.color, -0.05), shade(fin.color, -0.35)) : null;
+      const fm = mat(map ? '#ffffff' : fin.color, { ...(map && { map }), roughness: fin.texture === 'marble' ? 0.3 : 0.7 });
+      fm.userData.pbr = fin.texture && fin.texture !== 'none' ? fin.texture : undefined;
+      fm.userData.pbrTint = fin.color;
+      finishFloors.set(finKey, fm);
+    }
+    const floorMat = finKey ? finishFloors.get(finKey) : r.kind === 'garden' || r.kind === 'garage' ? mat(color) : r.kind === 'balcony' ? K.deck : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color);
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.002;

@@ -24,6 +24,7 @@ import { projectStairs } from './stairs';
 import { serializeSvg } from './sheet';
 import { A4, CARTOUCHE_H, LEGEND_W, SHEET_SCALES, drawingArea, fitScale, roomLegend, sheetFormat } from './techSheet';
 import { getBranding } from './branding';
+import { CATEGORIES as LIB_CATEGORIES, purchaseQuote } from './materialLibrary';
 import { fmt, fmtM } from './utils';
 
 export const INK = '#14181f';
@@ -600,6 +601,70 @@ function estimatePage(doc, data) {
 }
 
 /*
+ * Materiali scelti nei locali: preventivo di acquisto (quantità con sfrido, prezzi, IVA) e le schede tecniche, una per materiale,
+ * con colore, formato, spessore, finitura, dove va e il link alla scheda del produttore.
+ */
+function materialPages(doc, quote) {
+  const eur = (v) => `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+  const um = (u) => (u === 'm2' ? 'm2' : u);
+  doc.addPage('a4', 'portrait');
+  doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Preventivo di acquisto dei materiali', M, 18);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(MUTED);
+  doc.text(safe(`${quote.rows.length} materiali scelti nei locali · totale ${eur(quote.total)} IVA ${quote.vat}% compresa`), M, 24);
+  const rows = quote.rows.map((r) => [[r.name, [r.brand, r.code].filter(Boolean).join(' · ')],
+    `${fmtM(r.net)} ${um(r.unit)}`, r.waste ? `${r.waste}%` : '-', `${fmtM(r.qty)} ${um(r.unit)}`, eur(r.price), eur(r.total)]);
+  let y = table(doc, 30, ['Materiale', 'Netto', 'Sfrido', 'Da ordinare', 'Prezzo', 'Totale'], rows, [0.34, 0.12, 0.09, 0.15, 0.15, 0.15],
+    { onNewPage: () => doc.addPage('a4', 'portrait') }) + 4;
+  y = table(doc, y, ['Riepilogo', '', '', '', '', 'Importo'], [
+    ['Imponibile', '', '', '', '', eur(quote.subtotal)],
+    [`IVA ${quote.vat}%`, '', '', '', '', eur(quote.tax)],
+    [['Totale'], '', '', '', '', eur(quote.total)],
+  ], [0.34, 0.12, 0.09, 0.15, 0.15, 0.15], { onNewPage: () => doc.addPage('a4', 'portrait') }) + 6;
+  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(MUTED);
+  doc.text(doc.splitTextToSize(safe('Prezzi di fornitura del materiale (IVA esclusa nelle righe), posa non compresa. I pavimenti e i rivestimenti hanno il 10% di sfrido. '
+    + 'Quantità a metro lineare stimate: da verificare in cantiere. Ordine di grandezza, non offerta.'), doc.internal.pageSize.getWidth() - 2 * M), M, y);
+
+  // schede tecniche
+  const names = Object.fromEntries(LIB_CATEGORIES);
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const BLOCK = 46;
+  let yy = 0;
+  quote.rows.forEach((r, i) => {
+    if (i % 5 === 0) {
+      doc.addPage('a4', 'portrait');
+      doc.setFont('helvetica', 'bold').setFontSize(15).setTextColor(INK).text('Schede tecniche dei materiali', M, 18);
+      yy = 26;
+    }
+    doc.setDrawColor(LINE).setLineWidth(0.2).line(M, yy - 3, pw - M, yy - 3);
+    doc.setFillColor(r.color || '#ffffff').setDrawColor(INK).setLineWidth(0.2).roundedRect(M, yy, 22, 22, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(INK).text(safe(r.name), M + 27, yy + 4);
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(MUTED).text(safe([r.brand, r.code].filter(Boolean).join(' · ') || '-'), M + 27, yy + 9);
+    const spec = [
+      ['Categoria', names[r.category] || r.category],
+      r.format && ['Formato', r.format],
+      r.thickness && ['Spessore', `${r.thickness} mm`],
+      r.finish && ['Finitura', r.finish],
+      r.color && ['Colore', r.color],
+      ['Prezzo', `${eur(r.price)} / ${um(r.unit)} (IVA esclusa)`],
+    ].filter(Boolean);
+    doc.setFontSize(8);
+    spec.forEach(([k, v], j) => {
+      const col = j % 2;
+      const row = Math.floor(j / 2);
+      doc.setTextColor(MUTED).text(safe(k), M + 27 + col * 75, yy + 15 + row * 4.2);
+      doc.setTextColor(INK).text(safe(String(v)), M + 27 + col * 75 + 18, yy + 15 + row * 4.2);
+    });
+    const where = [...new Set(r.uses.map((u) => `${u.room} (${u.use === 'floor' ? 'pavimento' : 'pareti'})`))].join(', ');
+    doc.setTextColor(MUTED).text(doc.splitTextToSize(safe(`Dove: ${where}`), pw - 2 * M - 27).slice(0, 2), M + 27, yy + 29);
+    if (r.note) doc.setTextColor(MUTED).text(doc.splitTextToSize(safe(`Note: ${r.note}`), pw - 2 * M - 27).slice(0, 1), M + 27, yy + 38);
+    if (r.url) doc.setTextColor(ACCENT_INK).text(safe(r.url).slice(0, 90), M + 27, yy + 42);
+    yy += BLOCK;
+  });
+  void ph;
+}
+
+/*
  * «Tavole in scala»: solo le tavole tecniche (pianta quotata, legenda, serramenti, cartiglio), una per piano, nel formato
  * scelto (A4, A3, A2, A1) e a una scala vera (1:20, 1:50, 1:100, 1:200, 1:500 o la migliore che entra).
  */
@@ -718,6 +783,8 @@ export async function exportProjectPdf(project) {
   if (plumbing?.bom.length) plumbingSummary(doc, project, plumbing);
   if (schedule.rows.length) schedulePage(doc, schedule);
   if (project.estimate) estimatePage(doc, buildEstimate(project, project.estimate));
+  const matQuote = purchaseQuote(project);
+  if (matQuote.rows.length) materialPages(doc, matQuote);
 
   if (bom.length) {
     doc.addPage('a4', 'portrait');
