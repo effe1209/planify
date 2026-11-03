@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Cloud, Star, Trash2 } from 'lucide-react';
 import { SHAPE_NAME, TYPE_NAME } from '../constants';
 import { fmtM } from '../lib/utils';
@@ -5,6 +6,11 @@ import PlanSvg from './PlanSvg';
 import { activeFloor } from '../lib/project';
 
 const THUMB_LAYERS = { furniture: false, labels: false, dims: false, grid: false };
+
+/* miniatura: si ridisegna solo se cambiano la pianta o lo stile (non a ogni modifica di un altro progetto o dello stato del cloud) */
+const ThumbSvg = memo(function ThumbSvg({ plan, style }) {
+  return <PlanSvg plan={plan} layers={THUMB_LAYERS} thumb style={style} />;
+});
 
 const entryTitle = (e) => {
   if (e.floors.length > 1) return `${e.name || 'Progetto'} · ${e.floors.length} piani`;
@@ -24,7 +30,7 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
         <div key={e.id} className={`pf-thumb ${currentId === e.id ? 'is-on' : ''}`}>
           <button type="button" className="pf-thumb-open" onClick={() => onOpen(e)}
             title={`${entryTitle(e)} · ${fmtM(activeFloor(e).plan.dimensions.width)} × ${fmtM(activeFloor(e).plan.dimensions.length)} m`}>
-            <PlanSvg plan={activeFloor(e).plan} layers={THUMB_LAYERS} thumb style={activeFloor(e).meta?.style} />
+            <ThumbSvg plan={activeFloor(e).plan} style={activeFloor(e).meta?.style} />
             <span>{e.cloudId && <Cloud size={11} aria-label="Sul cloud" />} {entryTitle(e)}</span>
           </button>
           <div className="pf-thumb-actions">

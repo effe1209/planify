@@ -145,11 +145,11 @@ def test_walls_only_as_fill_glazed_facade_and_corner_door():
 
 
 def test_balcony_gets_outdoor_furniture_and_closets_are_open():
-    """Il balcone si arreda con un tavolino tondo, due sedie da esterno e una pianta; la cabina armadio ha armadi aperti a vista."""
+    """Il balcone si arreda con un tavolino in rattan, due poltrone in rattan e una pianta; la cabina armadio ha armadi aperti a vista."""
     plan = planner.import_dxf_data(open(os.path.join(HERE, "monolocale_campito.dxf")).read(), furnished=True)
     balcony = next(r for r in plan["rooms"] if r["kind"] == "balcony")
     types = sorted(f["type"] for f in plan["furniture"] if f["room"] == balcony["id"])
-    assert types == ["chair_outdoor", "chair_outdoor", "plant", "table_round"], types
+    assert types == ["armchair_rattan", "armchair_rattan", "plant", "table_rattan"], types
     for f in plan["furniture"]:
         if f["room"] == balcony["id"]:
             assert balcony["x"] - 0.01 <= f["x"] and f["x"] + f["w"] <= balcony["x"] + balcony["w"] + 0.01, f
