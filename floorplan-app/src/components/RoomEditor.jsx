@@ -84,14 +84,14 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
             <div key={index} className="pf-furn-row">
               <span>{FURNITURE_LABEL[item.type] || item.type} <em>{item.w} × {item.h} m</em></span>
               <div className="pf-furn-actions">
-                {ASYMMETRIC.has(item.type) && (
+                {!item.wallMounted && ASYMMETRIC.has(item.type) && (
                   <button type="button" className="pf-btn-icon" title="Specchia" onClick={() => onFlip(index)}>
                     <FlipHorizontal2 size={12} />
                   </button>
                 )}
-                <button type="button" className="pf-btn-icon" title="Ruota di 90°" onClick={() => onRotate(index)}>
+                {!item.wallMounted && <button type="button" className="pf-btn-icon" title="Ruota di 90°" onClick={() => onRotate(index)}>
                   <RotateCw size={12} />
-                </button>
+                </button>}
                 <button type="button" className="pf-btn-icon is-danger" title="Elimina" onClick={() => onRemoveItem(index)}>
                   <Trash2 size={12} />
                 </button>

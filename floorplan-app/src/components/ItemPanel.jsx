@@ -12,7 +12,7 @@ import { fmtM } from '../lib/utils';
  */
 const SWATCHES = ['#f1ead9', '#d9c7a1', '#7d8050', '#8fa3a8', '#c58b6d', '#4b4f56', '#9a6b4a', '#ffffff'];
 
-export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onHeight, onSize, onColor, onRotation, onClose }) {
+export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onHeight, onMountHeight, onSize, onColor, onRotation, onClose }) {
   const [lock, setLock] = useState(true);
   const it = plan.furniture[index];
   if (!it) return null;
@@ -46,7 +46,7 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
           </button>
         </div>
       )}
-      {onRotation && (
+      {onRotation && !it.wallMounted && (
         <div className="pf-row2">
           <label className="pf-field-sm">
             <span>Rotazione (°)</span>
@@ -75,7 +75,15 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
           </div>
         </div>
       )}
-      {onHeight && (
+      {it.decor && onMountHeight ? (
+        <div className="pf-row2">
+          <label className="pf-field-sm">
+            <span>Altezza da terra (m)</span>
+            <input className="pf-input-sm" type="number" min="0" max="2.6" step="0.05" value={+(it.mountHeight ?? z0).toFixed(2)}
+              onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) onMountHeight(Math.min(2.6, Math.max(0, v))); }} />
+          </label>
+        </div>
+      ) : onHeight && (
         <div className="pf-row2">
           <label className="pf-field-sm">
             <span>Altezza (m){z0 > 0 ? ` da ${fmtM(z0)} m` : ''}</span>
@@ -100,8 +108,8 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
         <p className="pf-hint pf-item-ok">Posizione libera: nessuna sovrapposizione e passaggi liberi.</p>
       )}
       <div className="pf-security-actions">
-        <button type="button" className="pf-mini" onClick={onRotate} title="Ruota di 90° (R)"><RotateCw size={13} /> Ruota</button>
-        <button type="button" className="pf-mini" onClick={onFlip} title="Specchia (F)"><FlipHorizontal2 size={13} /> Specchia</button>
+        {!it.wallMounted && <button type="button" className="pf-mini" onClick={onRotate} title="Ruota di 90° (R)"><RotateCw size={13} /> Ruota</button>}
+        {!it.wallMounted && <button type="button" className="pf-mini" onClick={onFlip} title="Specchia (F)"><FlipHorizontal2 size={13} /> Specchia</button>}
         <button type="button" className="pf-mini is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={13} /> Elimina</button>
       </div>
       <p className="pf-hint">Trascina per spostare (aggancio a 5 cm e ai muri) · frecce 5 cm, Maiusc+frecce 25 cm · R ruota di 90° · Q/E di 15° · maniglia in pianta per l'angolo libero · ⌘Z annulla</p>

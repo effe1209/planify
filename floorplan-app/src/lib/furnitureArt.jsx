@@ -10,7 +10,9 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /* variazione ripetibile per ogni arredo (stessa posizione, stesso risultato), in -1..1 */
 const vary = (item, k) => {
-  const x = Math.sin(((item?.x ?? 0) * 12.9898 + (item?.y ?? 0) * 78.233 + k * 37.719)) * 43758.5453;
+  let stable = 0;
+  for (const c of String(item?.id || '')) stable = Math.imul(stable ^ c.charCodeAt(0), 16777619);
+  const x = Math.sin(((item?.id ? stable : (item?.x ?? 0) * 12.9898 + (item?.y ?? 0) * 78.233) + k * 37.719)) * 43758.5453;
   return (x - Math.floor(x)) * 2 - 1;
 };
 
@@ -119,7 +121,7 @@ export const FURNITURE_ART = {
         ))}
         <rect x={mx} y={my} width={mw} height={mh} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
         {/* cuscini: fila dietro bianca (1-3), forme morbide, ognuno un po' diverso; davanti due più piccoli verde e sabbia */}
-        {Array.from({ length: n2 }, (_, i) => {
+        {item.integratedPillows !== false && Array.from({ length: n2 }, (_, i) => {
           const px = mx + gap + i * (pw2 + gap) + vary(item, i) * 1.2;
           const py = my + 3 + vary(item, i + 9) * 1;
           const ph = mh * 0.19;
@@ -142,7 +144,7 @@ export const FURNITURE_ART = {
           })}
         </g>
         {/* cuscini davanti, sopra il piumone */}
-        {[[0.2, '#7d8050', -0.05], [0.5, '#e8dcc3', 0.04]].map(([k, c, rot], i) => {
+        {item.integratedPillows !== false && [[0.2, '#7d8050', -0.05], [0.5, '#e8dcc3', 0.04]].map(([k, c, rot], i) => {
           const cw = Math.min(mw * 0.3, 0.42 * s);
           const cx = mx + mw * (n2 > 1 ? k + 0.12 : 0.5) - cw / 2 + vary(item, 60 + i) * 2;
           const cy0 = fold - mh * 0.05 + vary(item, 70 + i) * 1.5;
@@ -155,7 +157,7 @@ export const FURNITURE_ART = {
           );
         })}
         {/* coperta verde drappeggiata in lungo sul letto, con lati ondulati, pieghe e frange irregolari ai piedi */}
-        {(() => {
+        {item.integratedThrow !== false && (() => {
           const sw = Math.min(mw * 0.22, 0.4 * s);
           const sx = mx + mw / 2 - sw / 2 + vary(item, 90) * 1.5;
           const y0 = fold + mh * 0.1;
@@ -412,6 +414,70 @@ export const FURNITURE_ART = {
     <g>
       <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.46} fill="#fff8de" fillOpacity="0.85" stroke={t.legs === 'metal' ? t.metal : t.woodLine} strokeWidth="0.9" />
       <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.12} fill="#f2c94c" />
+    </g>
+  ),
+  pillow: (w, h, s, t, item) => (
+    <g>
+      <path d={pillowPath(1, 1, w - 2, h - 2)} fill={item.color || t.accentSoft} stroke={t.accent} strokeWidth="0.9" />
+      <path d={pillowCreases(1, 1, w - 2, h - 2)} fill="none" stroke={t.accent} strokeOpacity="0.4" strokeWidth="0.65" />
+    </g>
+  ),
+  throw: (w, h, s, t, item) => (
+    <g>
+      <path d={wavyStrip(1, 1, w - 2, h - 2, vary(item, 41))} fill={item.color || '#a89a7b'} fillOpacity="0.9" stroke={F_SOFT} strokeWidth="0.8" />
+      {Array.from({ length: 5 }, (_, i) => <path key={i} d={`M ${w * (0.16 + i * 0.16)} ${h * 0.15} Q ${w * (0.1 + i * 0.16)} ${h * 0.5} ${w * (0.16 + i * 0.16)} ${h * 0.82}`} fill="none" stroke="#fff" strokeOpacity="0.3" strokeWidth="0.65" />)}
+    </g>
+  ),
+  book_stack: (w, h, s, t, item) => (
+    <g>
+      {[0, 1, 2].map((i) => {
+        const bh = Math.max(1.5, h * (0.2 + (i % 2) * 0.08));
+        const x = w * (0.05 + i * 0.08);
+        const y = h - bh - i * Math.max(1, h * 0.07);
+        return <g key={i}><rect x={x} y={y} width={w * (0.78 - i * 0.08)} height={bh} rx="1" fill={i === 0 ? (item.color || '#9b6957') : ['#65745f', '#485c72'][i - 1]} stroke={F_STROKE} strokeWidth="0.55" /><line x1={x + 2} y1={y + bh / 2} x2={x + w * 0.7} y2={y + bh / 2} stroke="#eee6d5" strokeOpacity="0.75" strokeWidth="0.6" /></g>;
+      })}
+    </g>
+  ),
+  vase: (w, h, s, t, item) => (
+    <g>
+      <path d={`M ${w * 0.34} ${h * 0.12} L ${w * 0.66} ${h * 0.12} L ${w * 0.68} ${h * 0.34} Q ${w * 0.94} ${h * 0.72} ${w * 0.72} ${h * 0.92} L ${w * 0.28} ${h * 0.92} Q ${w * 0.06} ${h * 0.72} ${w * 0.32} ${h * 0.34} Z`} fill={item.color || '#a98467'} stroke={F_STROKE} strokeWidth="0.8" />
+      <ellipse cx={w / 2} cy={h * 0.12} rx={w * 0.16} ry={h * 0.055} fill="#eee8dc" stroke={F_STROKE} strokeWidth="0.6" />
+      <path d={`M ${w * 0.5} ${h * 0.12} Q ${w * 0.42} ${h * 0.02} ${w * 0.38} ${h * 0.01} M ${w * 0.5} ${h * 0.12} Q ${w * 0.56} ${h * 0.02} ${w * 0.64} ${h * 0.04}`} fill="none" stroke="#6f8a61" strokeWidth="1" />
+    </g>
+  ),
+  candle: (w, h, s, t, item) => (
+    <g>
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.42} fill={item.color || '#eee5d3'} stroke={F_STROKE} strokeWidth="0.7" />
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) * 0.22} fill="#fff8dc" />
+      <path d={`M ${w / 2} ${h * 0.18} q ${-w * 0.13} ${h * 0.16} 0 ${h * 0.26} q ${w * 0.13} ${-h * 0.11} 0 ${-h * 0.26}`} fill="#f2b64a" />
+    </g>
+  ),
+  figurine: (w, h, s, t, item) => (
+    <g fill={item.color || '#b99a69'} stroke={F_STROKE} strokeWidth="0.65">
+      <ellipse cx={w / 2} cy={h * 0.76} rx={w * 0.34} ry={h * 0.2} />
+      <circle cx={w / 2} cy={h * 0.4} r={Math.min(w, h) * 0.22} />
+      <path d={`M ${w * 0.38} ${h * 0.26} L ${w * 0.3} ${h * 0.04} L ${w * 0.48} ${h * 0.2} M ${w * 0.62} ${h * 0.26} L ${w * 0.7} ${h * 0.04} L ${w * 0.52} ${h * 0.2}`} />
+    </g>
+  ),
+  decor_lamp: (w, h, s, t, item) => (
+    <g>
+      <circle cx={w / 2} cy={h * 0.62} r={Math.min(w, h) * 0.43} fill="#f8edcf" stroke={F_STROKE} strokeWidth="0.75" />
+      <circle cx={w / 2} cy={h * 0.62} r={Math.min(w, h) * 0.23} fill={item.color || '#e4d5b6'} />
+      <path d={`M ${w * 0.5} ${h * 0.4} L ${w * 0.5} ${h * 0.12}`} stroke={F_STROKE} strokeWidth="1.2" />
+    </g>
+  ),
+  wall_shelf: (w, h, s, t, item) => (
+    <g>
+      <rect x="0.5" y={h * 0.64} width={w - 1} height={Math.max(2, h * 0.23)} rx="1" fill={item.color || t.wood} stroke={F_STROKE} strokeWidth="0.75" />
+      {[0.16, 0.24, 0.33, 0.42, 0.51].map((k, i) => <rect key={i} x={w * k} y={h * (0.24 + (i % 2) * 0.05)} width={w * 0.07} height={h * (0.38 - (i % 2) * 0.05)} rx="0.5" fill={['#9c6958', '#65745f', '#485c72', '#b58b55', '#725b77'][i]} />)}
+      <line x1={w * 0.2} y1={h * 0.9} x2={w * 0.2} y2={h * 0.99} stroke={F_STROKE} strokeWidth="0.8" />
+      <line x1={w * 0.8} y1={h * 0.9} x2={w * 0.8} y2={h * 0.99} stroke={F_STROKE} strokeWidth="0.8" />
+    </g>
+  ),
+  led_strip: (w, h, s, t, item) => (
+    <g>
+      <rect x="0.5" y={h * 0.35} width={w - 1} height={Math.max(1.5, h * 0.3)} rx="1" fill={item.color || '#f1cf9d'} />
+      <line x1="1" y1={h / 2} x2={w - 1} y2={h / 2} stroke="#fff4d5" strokeWidth="0.55" strokeDasharray="2 2" />
     </g>
   ),
 };

@@ -42,6 +42,7 @@ import PlumbingPanel from './components/PlumbingPanel';
 import EstimatePanel from './components/EstimatePanel';
 import SchedulePanel from './components/SchedulePanel';
 import { buildEstimate } from './lib/estimate';
+import { autoDecoratePlan, placeDecorItem, snapWallMountedItem, syncAttachedAccessories } from './lib/accessories';
 import { scheduleFor } from './lib/schedule';
 import { readSharedProject, shareUrl } from './lib/share';
 import { cloud, cloudTokenFrom } from './lib/cloud';
@@ -71,7 +72,7 @@ import { sketchToPlan } from './lib/sketchToPlan';
 import { buildDxf, parseDxfClientSide } from './lib/dxf';
 import { elevation, levelMarks, section } from './lib/elevation';
 import { serializeSvg, sheetBox } from './lib/sheet';
-import { clamp, fmt, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
+import { clamp, fmt, newId, normalizeBaseUrl, randomSeed, saveBlob, snap, storage } from './lib/utils';
 import { requestBase, waitForEngine } from './lib/engine';
 import { engineStair, neighbourCore, neighbourWet, projectStairs, stairNote, stairsFit } from './lib/stairs';
 import { HOUSE_PRESETS, floorName, houseFloorsRequest, houseShift, suggestProgram } from './lib/house';
@@ -194,6 +195,24 @@ export default function App() {
   const current = shared || history.current;     // progetto aperto
   const floor = activeFloor(current);            // piano su cui si lavora
   const plan = floor?.plan || null;
+  useEffect(() => {
+    if (!current || readOnly) return;
+    const decorated = new Map();
+    for (const f of current.floors || []) {
+      const next = autoDecoratePlan(f.plan);
+      if (next !== f.plan) decorated.set(f.id, next);
+    }
+    if (!decorated.size) return;
+    history.update(current.id, (entry) => ({
+      ...entry,
+      floors: entry.floors.map((f) => decorated.has(f.id) ? { ...f, plan: decorated.get(f.id) } : f),
+    }));
+  }, [current?.id, current?.floors, history.update, readOnly]);
+  const renderedPlan = useMemo(() => autoDecoratePlan(plan), [plan]);
+  const renderedProject = useMemo(() => current && ({
+    ...current,
+    floors: current.floors.map((f) => ({ ...f, plan: autoDecoratePlan(f.plan) })),
+  }), [current]);
   // scale tra piani consecutivi: stessa posizione su entrambe le piante (vedi lib/stairs.js)
   const stairs = projectStairs(current);
   const floorStairs = floor ? stairs.byFloor[floor.id] : undefined;
@@ -721,12 +740,17 @@ export default function App() {
   };
   const moveFurniture = (index, x, y) => editFurniture((list) => list.map((f, i) => {
     if (i !== index) return f;
-    const p = snapItem(plan, f, x, y);
-    return { ...f, x: p.x, y: p.y, room: p.room };
+    const p = f.wallMounted ? snapWallMountedItem(plan, f, x, y) : snapItem(plan, f, x, y);
+    return { ...f, x: p.x, y: p.y, room: p.room, facing: p.facing || f.facing };
   }));
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
-  const editFurniture = (fn) => editPlan((p) => ({ ...p, furniture: fn(p.furniture) }));
+  const editFurniture = (fn) => editPlan((p) => {
+    const prepared = autoDecoratePlan(p);
+    const next = fn(prepared.furniture);
+    const synced = syncAttachedAccessories(prepared.furniture, next);
+    return autoDecoratePlan({ ...prepared, furniture: synced });
+  });
   /* Arreda (o svuota) la pianta così com'è: il motore mette solo i mobili, muri porte e finestre non cambiano. */
   const [furnishing, setFurnishing] = useState(false);
   const furnishPlan = async ({ roomIds = null, clear = false } = {}) => {
@@ -1021,9 +1045,9 @@ export default function App() {
       if (arrows[e.key]) {
         e.preventDefault();
         moveFurniture(selectedItem, it.x + arrows[e.key][0], it.y + arrows[e.key][1]);
-      } else if (e.key === 'r' || e.key === 'R') rotateFurniture(selectedItem);
-      else if (e.key === 'f' || e.key === 'F') flipFurniture(selectedItem);
-      else if (['[', ']', 'q', 'Q', 'e', 'E'].includes(e.key)) editFurniture((list) => list.map((f, i) => (i === selectedItem ? rotateItemBy(f, ['[', 'q', 'Q'].includes(e.key) ? -15 : 15) : f)));
+      } else if ((e.key === 'r' || e.key === 'R') && !it?.wallMounted) rotateFurniture(selectedItem);
+      else if ((e.key === 'f' || e.key === 'F') && !it?.wallMounted) flipFurniture(selectedItem);
+      else if (['[', ']', 'q', 'Q', 'e', 'E'].includes(e.key) && !it?.wallMounted) editFurniture((list) => list.map((f, i) => (i === selectedItem ? rotateItemBy(f, ['[', 'q', 'Q'].includes(e.key) ? -15 : 15) : f)));
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         removeFurniture(selectedItem);
@@ -1040,6 +1064,7 @@ export default function App() {
     if (!room || !entry) return;
     const offset = (roomFurniture.length * 0.3) % Math.max(0.2, room.w - entry.w);
     const item = {
+      id: newId(),
       type: entry.type,
       x: clamp(snap(room.x + 0.3 + offset), room.x, room.x + Math.max(0, room.w - entry.w)),
       y: clamp(snap(room.y + 0.3 + offset), room.y, room.y + Math.max(0, room.h - entry.h)),
@@ -1050,6 +1075,9 @@ export default function App() {
       room: onMezz ? room.id : roomId,
       ...(onMezz && { elev: plan.mezzanine.elev }),
       ...(entry.parts && { parts: entry.parts }),
+      ...(entry.isDecor && { decor: true }),
+      ...(entry.mountHeight != null && { mountHeight: entry.mountHeight }),
+      ...(entry.wallMounted && { wallMounted: true }),
     };
     if (onMezz) {   // dentro il soppalco, nel primo punto libero
       const spots = [];
@@ -1064,7 +1092,8 @@ export default function App() {
       item.y = p.y;
       if (!free) say('Il soppalco è pieno: sposta gli arredi per fargli posto');
     }
-    editFurniture((list) => [...list, item]);
+    const itemPlacement = entry.isDecor ? placeDecorItem(autoDecoratePlan(plan), item, entry) : item;
+    editFurniture((list) => [...list, itemPlacement]);
     say(`${entry.label} aggiunto`);
   };
 
@@ -1522,7 +1551,7 @@ export default function App() {
     if (!current) return;
     const data = {
       name: current.name || 'Progetto Planify',
-      floors: current.floors.map((f) => ({ name: f.name, level: f.level, plan: f.plan })),
+      floors: renderedProject.floors.map((f) => ({ name: f.name, level: f.level, plan: f.plan })),
       ...(current.security && { security: current.security }),
       ...(current.electric && { electric: current.electric }),
       ...(current.plumbing && { plumbing: current.plumbing }),
@@ -1536,7 +1565,7 @@ export default function App() {
     say('Preparazione del PDF del progetto…');
     try {
       const { exportProjectPdf } = await import('./lib/pdfExport');
-      await exportProjectPdf(current);
+      await exportProjectPdf(renderedProject);
     } catch (e) {
       setError(`Esportazione PDF non riuscita: ${e.message}`);
     }
@@ -1579,7 +1608,7 @@ export default function App() {
     try {
       // un solo ZIP con modello (tetto, luci, allarme, camere), script per Cycles e istruzioni (di serie il pomeriggio; il pannello Render lo fa all'ora scelta)
       const { blenderPackage } = await import('./lib/blenderExport');
-      const res = await blenderPackage(current, { name: threeName().replace(/-3d.*$/, '') || 'planimetria' });
+      const res = await blenderPackage(renderedProject, { name: threeName().replace(/-3d.*$/, '') || 'planimetria' });
       saveBlob(new Blob([res.zip], { type: 'application/zip' }), `${res.name}-blender.zip`);
       say(`Blender: ${res.meshes.toLocaleString('it-IT')} oggetti, ${res.lights} luci, ${res.cameras} camere (ZIP con script per Cycles)`);
     } catch (err) {
@@ -1594,7 +1623,7 @@ export default function App() {
     if (!plan) return;
     const devs = floorDevices || [];
     const opts = devs.length
-      ? { devices: devs, codes: sensorCodes(current, devices), coverage: coverFloor(plan, devs, { doors: floorDoors }) }
+      ? { devices: devs, codes: sensorCodes(current, devices), coverage: coverFloor(renderedPlan, devs, { doors: floorDoors }) }
       : {};
     const slug = (v) => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const name = [slug(current.name) || 'planimetria', current.floors.length > 1 ? slug(floor.name) : ''].filter(Boolean).join('-');
@@ -1606,15 +1635,15 @@ export default function App() {
       const cutY = st && (st.up === 'E' || st.up === 'W') ? st.y + st.h / 2 : dims.length / 2;
       const cutX = st && !(st.up === 'E' || st.up === 'W') ? st.x + st.w / 2 : dims.width / 2;
       const drawings = [
-        ...['down', 'up', 'right', 'left'].map((sd) => elevation(current, sd, { north: current?.north ?? 0, roof: { ...ROOF_DEFAULTS } })),
-        section(current, 'x', cutY), section(current, 'y', cutX),
+        ...['down', 'up', 'right', 'left'].map((sd) => elevation(renderedProject, sd, { north: current?.north ?? 0, roof: { ...ROOF_DEFAULTS } })),
+        section(renderedProject, 'x', cutY), section(renderedProject, 'y', cutX),
       ].filter((v) => v.shapes.length);
       if (drawings.length) views = { drawings, marks: levelMarks(current) };
     } catch {
       views = null;   // il DXF della pianta esce comunque
     }
-    const sheetOpt = sheet && { ...sheet, project: current, branding: getBranding(current), floor: `${levelLabel(floor.level)} ${floor.name}` };
-    saveBlob(new Blob([buildDxf(plan, { ...opts, views, ...(sheetOpt && { sheet: sheetOpt }) })], { type: 'application/dxf' }), `${name}${sheet ? `-${sheet.format.toLowerCase()}` : ''}.dxf`);
+    const sheetOpt = sheet && { ...sheet, project: renderedProject, branding: getBranding(current), floor: `${levelLabel(floor.level)} ${floor.name}` };
+    saveBlob(new Blob([buildDxf(renderedPlan, { ...opts, views, ...(sheetOpt && { sheet: sheetOpt }) })], { type: 'application/dxf' }), `${name}${sheet ? `-${sheet.format.toLowerCase()}` : ''}.dxf`);
     say(sheet ? `DXF esportato con cornice e cartiglio ${sheet.format}` : devs.length ? 'File CAD esportato con sensori, copertura, prospetti e sezioni' : 'File CAD esportato con prospetti e sezioni');
   };
   const exportSheets = async (opts) => {
@@ -1623,7 +1652,7 @@ export default function App() {
     say('Preparazione delle tavole…');
     try {
       const { exportSheetsPdf } = await import('./lib/pdfExport');
-      await exportSheetsPdf(current, opts);
+      await exportSheetsPdf(renderedProject, opts);
       setSheetsDialog(false);
     } catch (e) {
       setError(`Tavole non riuscite: ${e.message}`);
@@ -2145,15 +2174,15 @@ export default function App() {
                 onGenerate={generateFromSketch} />
             ) : plan && sheets ? (
               <ErrorBoundary key={`sheets-${current.id}`}>
-                <SheetsView project={current} plan={plan} north={current?.north ?? 0} roof={sheets.roof} />
+                <SheetsView project={renderedProject} plan={renderedPlan} north={current?.north ?? 0} roof={sheets.roof} />
               </ErrorBoundary>
             ) : plan && view3d ? (
               <ErrorBoundary key={`3d-${current.id}-${view3d.whole ? 'casa' : floor.id}`}>
                 <div className="pf-3d-wrap">
-                  <Plan3D onPick={pick3d} selection={selection3d} plan={plan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? current : null} style={floor.meta?.style} lowWalls={view3d.low}
+                  <Plan3D onPick={pick3d} selection={selection3d} plan={renderedPlan} palette={current?.palette} materials={current?.materials} north={current?.north ?? 0} roof={view3d.roof} overlay={overlay3d} project={view3d.whole ? renderedProject : null} style={floor.meta?.style} lowWalls={view3d.low}
                     spread={view3d.spread ? 3.5 : 0} loftLevel={plan.mezzanine || (view3d.whole && current?.floors.some((f) => f.plan?.mezzanine)) ? loftLevel : 'all'} cut={view3d.cut || null} onReady={(api) => { three.current = api; }} />
                   {view3d.render && (
-                    <RenderPanel project={current} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
+                    <RenderPanel project={renderedProject} three={three} whole={!!view3d.whole} level={typeof floor?.level === 'number' ? floor.level : 0}
                       roofOn={!!view3d.roof} onRoof={(on) => setView3d((v) => (v ? { ...v, roof: on ? { ...ROOF_DEFAULTS } : null } : v))} lowWalls={view3d.low} name={threeName()} onClose={() => setView3d({ ...view3d, render: false })} onDone={say} />
                   )}
                 </div>
@@ -2169,7 +2198,7 @@ export default function App() {
               <div className="pf-sheet" key={`${current.id}-${floor.id}`}
                 style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
                 <PlanSvg
-                  plan={plan} layers={layers} hoverId={hoverId} selectedId={selectedId}
+                  plan={renderedPlan} layers={layers} hoverId={hoverId} selectedId={selectedId}
                   onHover={setHoverId} onSelect={setSelectedId} svgRef={svgRef} zoom={z}
                   typeLabel={`${TYPE_NAME[floor.meta?.type] || 'Planimetria'} · ${floor.name}`} north={current?.north ?? 0}
                   style={floor.meta?.style} palette={current?.palette} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
@@ -2268,6 +2297,11 @@ export default function App() {
                     const next = { ...f, z };
                     if (!z) delete next.z;
                     return next;
+                  }))}
+                  onMountHeight={(height) => editFurniture((list) => list.map((f, i) => {
+                    if (i !== selectedItem) return f;
+                    const oldZ = f.z || [f.mountHeight || 0, (f.mountHeight || 0) + 0.2];
+                    return { ...f, mountHeight: height, z: [height, height + oldZ[1] - oldZ[0]] };
                   }))}
                   onClose={() => setSelectedItem(null)} />
               )}

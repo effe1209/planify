@@ -61,9 +61,10 @@ export async function upgradeMaterials(THREE, model, { aniso = 8 } = {}) {
       c.needsUpdate = true;
       return c;
     };
-    m.map = clone(set.color);
-    m.normalMap = clone(set.normal);
-    m.roughnessMap = clone(set.rough);
+    m.userData.pbrTextures?.forEach((t) => t.dispose());
+    const maps = [clone(set.color), clone(set.normal), clone(set.rough)];
+    [m.map, m.normalMap, m.roughnessMap] = maps;
+    m.userData.pbrTextures = maps.filter(Boolean);
     m.bumpMap = null;
     m.normalScale?.set(1, 1);
     m.roughness = 1;                     // la rugosità vera è nella mappa

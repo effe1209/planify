@@ -161,6 +161,23 @@ export const FURNITURE = [
   { id: 'gazebo', type: 'gazebo', label: 'Gazebo / pergolato', w: 3.0, h: 3.0, group: 'Giardino' },
   { id: 'path', type: 'path', label: 'Camminamento', w: 1.0, h: 4.0, group: 'Giardino' },
   { id: 'tree', type: 'tree', label: 'Albero', w: 1.4, h: 1.4, group: 'Giardino' },
+  { id: 'pillow', type: 'pillow', label: 'Cuscino decorativo', w: 0.42, h: 0.34, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['bed', 'sofa', 'sofa_corner', 'sofa_round', 'sofa_curved', 'armchair', 'armchair_rattan'], mountOffset: 0.08 },
+  { id: 'throw', type: 'throw', label: 'Coperta morbida', w: 0.62, h: 0.78, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['bed', 'sofa', 'sofa_corner', 'sofa_round', 'sofa_curved', 'armchair', 'armchair_rattan'], mountOffset: 0.04 },
+  { id: 'book_stack', type: 'book_stack', label: 'Libri', w: 0.28, h: 0.2, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['nightstand', 'desk', 'table', 'table_round', 'coffee_table', 'console', 'sideboard', 'kitchen_counter', 'kitchen_peninsula', 'wall_shelf'] },
+  { id: 'vase', type: 'vase', label: 'Vaso decorativo', w: 0.16, h: 0.16, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['nightstand', 'desk', 'table', 'table_round', 'coffee_table', 'console', 'sideboard', 'kitchen_counter', 'kitchen_peninsula', 'wall_shelf'] },
+  { id: 'candle', type: 'candle', label: 'Candela', w: 0.1, h: 0.1, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['nightstand', 'desk', 'table', 'table_round', 'coffee_table', 'console', 'sideboard', 'wall_shelf'] },
+  { id: 'figurine', type: 'figurine', label: 'Statuina', w: 0.11, h: 0.11, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['nightstand', 'desk', 'table', 'table_round', 'coffee_table', 'console', 'sideboard', 'wall_shelf'] },
+  { id: 'decor_lamp', type: 'decor_lamp', label: 'Lampada da arredo', w: 0.2, h: 0.2, group: 'Decorazioni', isDecor: true,
+    supportTypes: ['nightstand', 'desk', 'table', 'table_round', 'coffee_table', 'console', 'sideboard', 'wall_shelf'] },
+  { id: 'wall_shelf', type: 'wall_shelf', label: 'Mensola a parete', w: 0.9, h: 0.18, group: 'Decorazioni', isDecor: true, wallMounted: true, mountHeight: 1.58 },
+  { id: 'led_strip', type: 'led_strip', label: 'Striscia LED', w: 1.0, h: 0.025, group: 'Decorazioni', isDecor: true, wallMounted: true,
+    supportTypes: ['wall_shelf'], mountHeight: 1.5 },
 ];
 export const FURNITURE_LABEL = {
   rug: 'Tappeto', bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', office_chair: 'Sedia da ufficio', sofa: 'Divano',
@@ -174,6 +191,8 @@ export const FURNITURE_LABEL = {
   shelving_heavy: 'Scaffalatura pesante', hedge: 'Siepe', fence: 'Recinzione', gate_pedestrian: 'Cancello pedonale',
   gate_driveway: 'Cancello carrabile', gazebo: 'Gazebo', path: 'Camminamento', ramp: 'Rampa garage', tree: 'Albero',
   sideboard: 'Madia', bookcase: 'Libreria', dresser: 'Cassettiera', shoe_cabinet: 'Scarpiera', floor_lamp: 'Lampada da terra',
+  pillow: 'Cuscino decorativo', throw: 'Coperta morbida', book_stack: 'Libri', vase: 'Vaso decorativo', candle: 'Candela',
+  figurine: 'Statuina', decor_lamp: 'Lampada da arredo', wall_shelf: 'Mensola a parete', led_strip: 'Striscia LED',
 };
 
 export const LOADING_STEPS = [

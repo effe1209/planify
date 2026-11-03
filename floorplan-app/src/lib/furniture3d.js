@@ -20,6 +20,8 @@ export const OBJECT_NAMES = {
   workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
   wardrobe_corner: 'ARMADIO_ANGOLO', wardrobe_open: 'ARMADIO_APERTO', sofa_round: 'DIVANO_TONDO', sofa_curved: 'DIVANO_ARCO',
   chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO', armchair_rattan: 'POLTRONA_RATTAN', table_rattan: 'TAVOLINO_RATTAN',
+  pillow: 'CUSCINO', throw: 'COPERTA', book_stack: 'LIBRI', vase: 'VASO', candle: 'CANDELA', figurine: 'STATUINA',
+  decor_lamp: 'LAMPADA_DECORATIVA', wall_shelf: 'MENSOLA', led_strip: 'STRISCIA_LED',
 };
 
 /* Categoria di materiale dal nome con cui l'oggetto lo chiama: diventa il layer del pezzo nel blocco DXF. */
@@ -27,12 +29,13 @@ export function materialCategory(key) {
   if (/glass|porthole|bottle/.test(key)) return 'VETRO';
   if (/chrome|iron|rim|metal|steel|burner|radiator|ring|^deep$/.test(key)) return 'METALLO';
   if (/tire/.test(key)) return 'GOMMA';
-  if (/head|tail|lamp/.test(key)) return 'LUCE';
-  if (/white|pillow|chairfab|cloth|towel|^tub$/.test(key)) return 'TESSUTO';
+  if (/head|tail|lamp|led|flame/.test(key)) return 'LUCE';
+  if (/white|pillow|chairfab|cloth|towel|fabric|duvet|throw|olive|sand|^tub$/.test(key)) return 'TESSUTO';
   if (/gravel|stone/.test(key)) return 'PIETRA';
   if (/leaf|soil/.test(key)) return 'VEGETAZIONE';
-  if (/bark|wicker|peg|gazroof|legs$/.test(key)) return 'LEGNO';
-  if (/basin|pot|appliance|applitop|niche|splash|sinkbowl|water|drain|paint|vacbody/.test(key)) return 'CERAMICA';
+  if (/wood|bark|wicker|peg|gazroof|legs$/.test(key)) return 'LEGNO';
+  if (/page|paper|cover/.test(key)) return 'CARTA';
+  if (/basin|pot|appliance|applitop|niche|splash|sinkbowl|water|drain|paint|vacbody|ceramic|vase|candle|figure/.test(key)) return 'CERAMICA';
   return 'PLASTICA';
 }
 
@@ -48,6 +51,7 @@ export function roundedBox(w, h, d, r) {
 
 /* Numeri pseudo-casuali ripetibili (stesso seme, stessa sequenza): ogni letto ha le sue piccole variazioni, sempre le stesse. */
 export function seeded(seed) {
+  seed = String(seed);
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
   return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 100000) / 100000; };
@@ -144,7 +148,14 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
   const m = (key, color, extra) => {
     if (!own[key]) {
       own[key] = mat(color, extra);
-      own[key].userData.cat = materialCategory(key);
+      const cat = materialCategory(key);
+      own[key].userData.cat = cat;
+      if (cat === 'LEGNO') { own[key].userData.pbr = 'plank'; own[key].userData.pbrTint = color; own[key].roughness = 0.72; }
+      else if (cat === 'TESSUTO') { own[key].userData.pbr = 'fabric'; own[key].userData.pbrTint = color; own[key].roughness = 0.96; }
+      else if (cat === 'METALLO') { own[key].metalness = Math.max(own[key].metalness || 0, 0.58); own[key].roughness = Math.max(own[key].roughness || 0, 0.38); }
+      else if (cat === 'CERAMICA') own[key].roughness = 0.3;
+      else if (cat === 'PIETRA') own[key].roughness = 0.82;
+      else own[key].roughness = Math.max(own[key].roughness || 0, 0.68);
     }
     return own[key];
   };
@@ -226,33 +237,37 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       bx(W, low ? 0.2 : 0.22, D - 0.04, 0, low ? 0.06 : 0.12, 0.02, wood);
       bx(W - 0.06, 0.2, D - 0.12, 0, baseTop, 0.02, white);
       const len = (D - 0.12) * 0.64;
-      const rnd = seeded(`${it.x}|${it.y}|${W}|${D}`);   // piccole variazioni, diverse per ogni letto e sempre le stesse
+      const rnd = seeded(it.id || `${it.type}|${W}|${D}`);   // variazioni legate all'identità dell'oggetto, non alla sua posizione
       const jit = (a) => (rnd() - 0.5) * 2 * a;
       // piumone: lastra morbida con gli angoli smussati, e il lembo che scende davanti
       soft(W + 0.02, 0.1, len, 0, baseTop + 0.145, D / 2 - 0.06 - len / 2, M.duvet, { pinch: 0.18 });
       bx(W + 0.02, 0.22, 0.05, 0, baseTop - 0.05, D / 2 - 0.08, M.duvet);   // lembo davanti
-      const pillows = W > 1.7 ? 3 : W > 1.2 ? 2 : 1;
-      for (let i = 0; i < pillows; i++) {
-        const x = pillows === 1 ? 0 : (i - (pillows - 1) / 2) * ((W - 0.1) / pillows);
-        soft(Math.min(0.58, (W - 0.1) / pillows - 0.04), 0.17, 0.4, x + jit(0.02), baseTop + 0.2, -D / 2 + 0.3 + jit(0.02), white, { pinch: 0.62, rot: jit(0.1), tilt: 0.2 + jit(0.05) });
+      if (it.integratedPillows !== false) {
+        const pillows = W > 1.7 ? 3 : W > 1.2 ? 2 : 1;
+        for (let i = 0; i < pillows; i++) {
+          const x = pillows === 1 ? 0 : (i - (pillows - 1) / 2) * ((W - 0.1) / pillows);
+          soft(Math.min(0.58, (W - 0.1) / pillows - 0.04), 0.17, 0.4, x + jit(0.02), baseTop + 0.2, -D / 2 + 0.3 + jit(0.02), white, { pinch: 0.62, rot: jit(0.1), tilt: 0.2 + jit(0.05) });
+        }
+        const olive = m('olive', '#7d8050');
+        const sand = m('sand', '#e8dcc3');
+        const front = [[-0.22, olive, 0.18], [0.2, sand, -0.15]];
+        for (const [fx, mt, rot] of front) {
+          soft(Math.min(0.44, W * 0.3), 0.13, 0.3, fx * Math.min(W, 1.8) * 0.9 + jit(0.03), baseTop + 0.235, -D / 2 + 0.6 + jit(0.03), mt, { pinch: 0.6, rot: rot + jit(0.12), tilt: 0.28 + jit(0.06) });
+        }
       }
-      // cuscini davanti (verde e sabbia, appoggiati, un po' storti) e coperta verde drappeggiata con le frange ai piedi
-      const olive = m('olive', '#7d8050', { roughness: 0.95 });
-      const sand = m('sand', '#e8dcc3', { roughness: 0.95 });
-      const front = [[-0.22, olive, 0.18], [0.2, sand, -0.15]];
-      for (const [fx, mt, rot] of front) {
-        soft(Math.min(0.44, W * 0.3), 0.13, 0.3, fx * Math.min(W, 1.8) * 0.9 + jit(0.03), baseTop + 0.235, -D / 2 + 0.6 + jit(0.03), mt, { pinch: 0.6, rot: rot + jit(0.12), tilt: 0.28 + jit(0.06) });
-      }
-      const tw = Math.min(0.4, W * 0.24);
-      const tz0 = -D / 2 + 0.78;
-      const throwLen = D / 2 - 0.06 - tz0;
-      const drop = 0.34;
-      const olive2 = m('throw', '#7d8050', { roughness: 1, side: THREE.DoubleSide });
-      const cloth = place(new THREE.Mesh(drapedThrow(THREE, tw, throwLen, drop, jit(3)), olive2), jit(0.04), baseTop + 0.252, tz0);
-      cloth.rotation.y = jit(0.05);
-      for (let k = 0; k < 9; k++) {   // frange sul bordo basso della coperta
-        const fh = 0.05 + rnd() * 0.025;
-        bx(0.012, fh, 0.008, -tw / 2 + (tw * (k + 0.5)) / 9 + jit(0.004), baseTop + 0.252 - drop - 0.05 - fh + 0.04, tz0 + throwLen + 0.05 + 0.012, olive);
+      if (it.integratedThrow !== false) {
+        const tw = Math.min(0.4, W * 0.24);
+        const tz0 = -D / 2 + 0.78;
+        const throwLen = D / 2 - 0.06 - tz0;
+        const drop = 0.34;
+        const olive = m('throw', '#7d8050', { side: THREE.DoubleSide });
+        const cloth = place(new THREE.Mesh(drapedThrow(THREE, tw, throwLen, drop, jit(3)), olive), jit(0.04), baseTop + 0.252, tz0);
+        cloth.rotation.y = jit(0.05);
+        const fringe = m('olive', '#7d8050');
+        for (let k = 0; k < 9; k++) {
+          const fh = 0.05 + rnd() * 0.025;
+          bx(0.012, fh, 0.008, -tw / 2 + (tw * (k + 0.5)) / 9 + jit(0.004), baseTop + 0.252 - drop - 0.05 - fh + 0.04, tz0 + throwLen + 0.05 + 0.012, fringe);
+        }
       }
       const hz = -D / 2;
       if (style.tuft) {
@@ -1320,6 +1335,103 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         bx(0.04, 0.2, 0.04, sx * 0.25, 0.47, 0.0, darkLine);
         bx(0.05, 0.03, 0.26, sx * 0.25, 0.66, 0.0, fabric);
       }
+      break;
+    }
+    case 'pillow': {
+      const cloth = m('pillow', it.color || theme.accent || '#9b927e');
+      soft(W, 0.15, D, 0, 0.02, 0, cloth, { pinch: 0.68, rot: 0.06, tilt: 0.08 });
+      break;
+    }
+    case 'throw': {
+      const cloth = m('throw', it.color || theme.duvet || '#8b8962', { side: THREE.DoubleSide });
+      const len = Math.max(0.12, D * 0.72);
+      const drop = Math.min(0.22, D * 0.3);
+      const mesh = place(new THREE.Mesh(drapedThrow(THREE, W, len, drop, parseInt(seeded(it.id || `${W}:${D}`)().toString().slice(2, 6), 10) / 1000), cloth), 0, 0.015, -D / 2);
+      mesh.castShadow = true;
+      break;
+    }
+    case 'book_stack': {
+      const colors = [it.color || '#9b6957', '#65745f', '#485c72', '#b58b55', '#725b77'];
+      const count = Math.max(2, Math.min(4, Math.round(W / 0.075)));
+      const bookW = W / count;
+      const page = m('paper', '#e7dec8');
+      for (let i = 0; i < count; i++) {
+        const h = Math.max(0.018, D * (0.18 + ((i * 17) % 5) * 0.025));
+        const z = (i % 2 ? 1 : -1) * Math.min(0.012, D * 0.06);
+        bx(bookW * 0.94, h, Math.max(0.025, D * 0.68), -W / 2 + bookW * (i + 0.5), i * 0.012, z, m(`bookcover${i}`, colors[i % colors.length]));
+        bx(bookW * 0.8, h * 0.84, Math.max(0.02, D * 0.7), -W / 2 + bookW * (i + 0.5), i * 0.012 + 0.003, z + 0.004, page);
+      }
+      break;
+    }
+    case 'vase': {
+      const body = m('ceramicVase', it.color || '#a98467', { roughness: 0.28 });
+      const r = Math.min(W, D) * 0.42;
+      const neck = r * 0.45;
+      const profile = [
+        new THREE.Vector2(r * 0.42, 0), new THREE.Vector2(r * 0.8, 0.05), new THREE.Vector2(r, 0.17),
+        new THREE.Vector2(r * 0.86, 0.32), new THREE.Vector2(neck, 0.42), new THREE.Vector2(neck, 0.55),
+        new THREE.Vector2(neck * 1.18, 0.57), new THREE.Vector2(neck * 1.18, 0.61), new THREE.Vector2(neck * 0.82, 0.61),
+        new THREE.Vector2(neck * 0.82, 0.55), new THREE.Vector2(neck * 0.9, 0.55), new THREE.Vector2(neck * 0.9, 0.42),
+        new THREE.Vector2(r * 0.7, 0.34), new THREE.Vector2(r * 0.82, 0.17), new THREE.Vector2(r * 0.3, 0.05),
+      ];
+      const vase = new THREE.Mesh(new THREE.LatheGeometry(profile, 24), body);
+      place(vase, 0, 0.01, 0);
+      break;
+    }
+    case 'candle': {
+      const wax = m('wax', it.color || '#eee5d3', { roughness: 0.72 });
+      const r = Math.min(W, D) * 0.31;
+      cy(r, r * 0.95, Math.max(0.05, Math.min(0.16, Math.min(W, D) * 1.15)), 0, 0.01, 0, wax, 20);
+      cy(0.006, 0.006, 0.028, 0, 0.13, 0, m('wick', '#3f3830'), 8);
+      const flameMat = m('flame', '#ffd06d', { emissive: '#ff9f33', emissiveIntensity: 1.1, toneMapped: false });
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), flameMat);
+      flame.scale.set(0.7, 1.8, 0.7);
+      place(flame, 0, 0.16, 0);
+      const light = new THREE.PointLight(it.color || '#ffd89a', 0.22, 1.1, 2);
+      light.position.set(0, 0.17, 0);
+      g.add(light);
+      break;
+    }
+    case 'figurine': {
+      const ceramic = m('ceramicFigure', it.color || '#b99a69', { roughness: 0.34 });
+      const r = Math.min(W, D) * 0.3;
+      const base = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), ceramic);
+      base.scale.set(1, 1.25, 0.78);
+      place(base, 0, 0.02 + r, 0);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(r * 0.63, 14, 10), ceramic);
+      place(head, 0, 0.02 + r * 2.35, -r * 0.05);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(r * 0.25, r * 0.54, 8), ceramic);
+      for (const x of [-r * 0.38, r * 0.38]) { const e = ear.clone(); e.position.set(x, 0.02 + r * 2.95, 0); g.add(e); }
+      break;
+    }
+    case 'decor_lamp': {
+      const metal = m('lampMetal', '#b59a73', { metalness: 0.52, roughness: 0.38 });
+      const shade = m('lampShade', it.color || '#e5d6b8', { emissive: it.color || '#e5d6b8', emissiveIntensity: 0.18 });
+      cy(Math.min(W, D) * 0.3, Math.min(W, D) * 0.38, 0.025, 0, 0.01, 0, metal, 16);
+      cy(0.012, 0.014, Math.min(0.18, D * 0.45), 0, 0.03, 0, metal, 10);
+      cy(Math.min(W, D) * 0.39, Math.min(W, D) * 0.16, Math.min(0.19, D * 0.48), 0, Math.min(0.2, D * 0.45), 0, shade, 20);
+      const light = new THREE.PointLight(it.color || '#ffe2ad', 0.55, 2, 2);
+      light.position.set(0, 0.28, 0);
+      g.add(light);
+      break;
+    }
+    case 'wall_shelf': {
+      const board = m('wood', it.color || theme.wood || '#8b7258');
+      const bracket = m('shelfMetal', '#777d80', { metalness: 0.45, roughness: 0.48 });
+      bx(W, 0.055, D, 0, 0.08, 0, board);
+      const inset = Math.min(0.1, W * 0.16);
+      for (const x of [-W / 2 + inset, W / 2 - inset]) {
+        bx(0.025, 0.08, 0.025, x, 0, -D * 0.24, bracket);
+        bx(0.025, 0.025, D * 0.48, x, 0.045, 0, bracket);
+      }
+      break;
+    }
+    case 'led_strip': {
+      const glow = m('led', it.color || '#f1cf9d', { emissive: it.color || '#f1cf9d', emissiveIntensity: 2.2, toneMapped: false });
+      bx(W, 0.012, Math.max(0.012, D), 0, 0.006, 0, glow);
+      const light = new THREE.PointLight(it.color || '#f1cf9d', 0.42, 2.2, 2);
+      light.position.set(0, 0.035, 0);
+      g.add(light);
       break;
     }
     default:

@@ -10,10 +10,15 @@ import { backgroundFor, brightnessById, cameraViews, houseBounds, timeById } fro
 import { clearTextureCache } from './style3d';
 
 function disposeScene(scene) {
+  const materials = new Set();
   scene.traverse((o) => {
     o.geometry?.dispose();
-    if (o.material) [].concat(o.material).forEach((m) => m.dispose());
+    if (o.material) [].concat(o.material).forEach((m) => materials.add(m));
   });
+  for (const material of materials) {
+    material.userData?.pbrTextures?.forEach((t) => t.dispose());
+    material.dispose();
+  }
 }
 
 /* Nome della scheda grafica (se il browser lo dice), per capire dove un render va storto. */

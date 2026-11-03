@@ -118,7 +118,9 @@ export function resizeItem(plan, item, { w, h }, lock = false) {
     x = Math.max(b.x0, Math.min(b.x1 - nw, x));
     y = Math.max(b.y0, Math.min(b.y1 - nh, y));
   }
-  return { ...item, w: +nw.toFixed(3), h: +nh.toFixed(3), x: +x.toFixed(3), y: +y.toFixed(3) };
+  const next = { ...item, w: +nw.toFixed(3), h: +nh.toFixed(3), x: +x.toFixed(3), y: +y.toFixed(3) };
+  if (item.wallMounted) next.mountSize = item.facing === 'E' || item.facing === 'W' ? { w: next.h, h: next.w } : { w: next.w, h: next.h };
+  return next;
 }
 const round2 = (v) => Math.round(v * 100) / 100;
 
@@ -139,14 +141,14 @@ const overlap = (a0, b0) => {
 
 /* Cosa non va nella posizione dell'arredo `index` (eventualmente spostato in `it`): elenco di frasi. */
 export function itemProblems(plan, index, it0 = plan.furniture[index]) {
-  if (!it0 || GROUND.has(it0.type)) return [];
+  if (!it0 || GROUND.has(it0.type) || it0.decor || it0.wallMounted) return [];
   const it = { ...it0, ...itemBox(it0), rot: 0 };   // x, y, w, h = ingombro (già ruotato); `overlap` ricalcola quello degli altri
   const out = [];
   if (it.elev && plan.mezzanine) {
     const b = mezzBox(plan);
     const st = plan.mezzanine.stair;
     if (it.x < b.x0 - 0.02 || it.y < b.y0 - 0.02 || it.x + it.w > b.x1 + 0.02 || it.y + it.h > b.y1 + 0.02) out.push('Esce dal soppalco');
-    const same = plan.furniture.filter((o, i) => i !== index && o.elev && overlap(it, o));
+    const same = plan.furniture.filter((o, i) => i !== index && !o.decor && !o.wallMounted && o.elev && overlap(it, o));
     if (same.length) out.push(`Si sovrappone a ${same.length === 1 ? 'un altro arredo' : `${same.length} arredi`}`);
     // l'arrivo della rampa deve restare libero
     const land = { E: { x: st.x + st.w, y: st.y, w: 0.9, h: st.h }, W: { x: st.x - 0.9, y: st.y, w: 0.9, h: st.h },
@@ -173,7 +175,7 @@ export function itemProblems(plan, index, it0 = plan.furniture[index]) {
     });
     if (hitWin) out.push('La TV non può stare davanti a una finestra');
   }
-  const hits = plan.furniture.filter((o, i) => i !== index && !GROUND.has(o.type) && !o.elev && overlap(it, o));
+  const hits = plan.furniture.filter((o, i) => i !== index && !GROUND.has(o.type) && !o.decor && !o.wallMounted && !o.elev && overlap(it, o));
   if (hits.length) out.push(`Si sovrappone a ${hits.length === 1 ? 'un altro arredo' : `${hits.length} arredi`}`);
   // porte: il vano e la fascia di passaggio (80 cm) da entrambi i lati
   for (const d of plan.doors) {
