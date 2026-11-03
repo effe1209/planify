@@ -382,7 +382,7 @@
 .pf-thumb { border-radius: 16px; border-color: var(--hairline); background: var(--fill); transition: transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out); }
 .pf-thumb:hover { border-color: var(--hairline); box-shadow: var(--shadow-float); }
 .pf-thumb.is-on { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
-.pf-thumb svg { border-radius: 10px; }
+.pf-thumb-open > svg { border-radius: 10px; }
 .pf-thumb-actions .pf-btn-icon { border-radius: 999px; background: var(--glass-strong); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 .pf-thumb-actions { transition: opacity 240ms var(--ease-out); }
 .pf-design-score strong { font-size: 28px; font-weight: 700; }
