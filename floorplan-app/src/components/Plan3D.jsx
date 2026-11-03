@@ -13,6 +13,18 @@ const HEMI_NIGHT = 0.35;
 const SUN_DAY = 2.0;
 const SUN_NIGHT = 0.7;
 
+function disposeTree(root) {
+  const materials = new Set();
+  root.traverse((o) => {
+    o.geometry?.dispose();
+    if (o.material) [].concat(o.material).forEach((m) => materials.add(m));
+  });
+  for (const material of materials) {
+    material.userData?.pbrTextures?.forEach((t) => t.dispose());
+    material.dispose();
+  }
+}
+
 export default function Plan3D({ plan, north = 0, roof = null, overlay = null, project = null, palette = null, materials = null, style = 'modern', lowWalls = false, spread = 0, loftLevel = 'all', cut = null, onReady, onPick = null, selection = null }) {
   const host = useRef(null);
   const [error, setError] = useState(null);
@@ -290,9 +302,14 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             ? buildHouse(THREE, P.project, (f) => themeFor(P.project, f), { lowWalls: P.lowWalls, spread: P.spread })
             : buildScene(THREE, P.plan, themeWithPalette(THEMES[P.style] || THEMES.modern, P.palette, P.materials), { lowWalls: P.lowWalls });
           scene.add(model);
+          import('../lib/pbr').then(({ upgradeMaterials }) => upgradeMaterials(THREE, model, { aniso: renderer.capabilities.getMaxAnisotropy?.() || 8 }))
+            .then(() => {
+              if (model.parent === scene) invalidate(true);
+              else model.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => m.userData?.pbrTextures?.forEach((t) => t.dispose())); });
+            }).catch(() => {});
           if (old) {
             scene.remove(old);
-            old.traverse((o) => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
+            disposeTree(old);
           }
           if (oldGround) {
             scene.remove(oldGround);
@@ -421,10 +438,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           cancelAnimationFrame(raf);
           ro.disconnect();
           controls.dispose();
-          scene.traverse((o) => {
-            o.geometry?.dispose();
-            if (o.material) [].concat(o.material).forEach((m) => m.dispose());
-          });
+          disposeTree(scene);
           renderer.dispose();
           renderer.forceContextLoss();   // libera il contesto WebGL (il browser ne concede pochi: 16 circa)
           renderer.domElement.remove();
@@ -495,13 +509,20 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
     const old = st.model.getObjectByName('tetto');
     if (old) {
       st.model.remove(old);
-      old.traverse((o) => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
+      disposeTree(old);
     }
     st.invalidate?.(true);
     if (!roof) return;
     const top = project ? st.roofFloor(project) : { floor: { plan }, y: plan?.height || st.WALL_H };
     const roofStyle = project ? (top?.floor.meta?.style || style) : style;
-    if (top) st.model.add(st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle, palette: project?.palette || palette, materials: project?.materials || materials }));
+    if (top) {
+      const roofModel = st.buildRoof(st.THREE, top.floor.plan, top.y + (project ? (spread || 0) * top.floor.level : 0), { ...roof, style: roofStyle, palette: project?.palette || palette, materials: project?.materials || materials });
+      st.model.add(roofModel);
+      import('../lib/pbr').then(({ upgradeMaterials }) => upgradeMaterials(st.THREE, roofModel)).then(() => {
+        if (roofModel.parent === st.model) st.invalidate?.(true);
+        else roofModel.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => m.userData?.pbrTextures?.forEach((t) => t.dispose())); });
+      }).catch(() => {});
+    }
   }, [roof, ready, plan, project, palette, materials, spread, style]);
 
   // selezione: un riquadro colorato attorno all'oggetto scelto (arredo, porta, finestra o locale)

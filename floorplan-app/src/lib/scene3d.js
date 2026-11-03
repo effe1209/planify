@@ -32,6 +32,8 @@ const SHAPES = {
   car: [1.45, 'car'], motorbike: [1.1, 'dark'], workbench: [0.9, 'wood'], shelving: [1.8, 'metal'],
   shelving_heavy: [2.0, 'metal'], laundry_basket: [0.5, 'fabric'], vacuum: [0.3, 'dark'],
   hedge: [1.2, 'plant'], fence: [1.0, 'wood'], tree: [3.5, 'plant'], gazebo: [2.5, 'wood'], path: [0.02, 'stone'], ramp: [0.02, 'stone'],
+  pillow: [0.15, 'fabric', 0.5], throw: [0.04, 'fabric', 0.48], book_stack: [0.14, 'wood', 0.8], vase: [0.62, 'ceramic'],
+  candle: [0.18, 'ceramic'], figurine: [0.2, 'ceramic'], decor_lamp: [0.4, 'lamp'], wall_shelf: [0.055, 'wood', 1.58], led_strip: [0.03, 'lamp', 1.5],
 };
 
 /* Quote da terra (m) del volume di un arredo: [base, sommità]. */
@@ -600,6 +602,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     const obj = it.color ? buildObject(THREE, it, tintMaterials(M, it.type, it.color), mat, { ...theme, ...tintTheme(theme, it.type, it.color) }) : buildObject(THREE, it, M, mat, theme);
     if (obj) {
       obj.name = obj.name || `ARREDO_${it.type.toUpperCase()}`;
+      obj.position.y += it.mountHeight ?? it.z?.[0] ?? 0;
       root.add(obj);
       raise(it, from);
       continue;

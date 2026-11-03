@@ -105,52 +105,33 @@ export function Plant({ w, h, t, item }) {
   const cy = h / 2;
   const r = Math.min(w, h) / 2;
   const kind = pick(item, 3);
-  const pot = <circle cx={cx} cy={cy} r={r * 0.5} fill={t.pot} stroke={t.woodLine} strokeWidth="0.8" />;
-  if (kind === 0) {
-    // ficus: chioma a ciuffi
-    return (
-      <g>
-        {pot}
-        {Array.from({ length: 9 }, (_, i) => {
-          const a = (i / 9) * Math.PI * 2;
-          const d = r * (i % 2 ? 0.55 : 0.35);
-          return <circle key={i} cx={cx + Math.cos(a) * d} cy={cy + Math.sin(a) * d} r={r * 0.36}
-            fill={i % 3 ? '#7fae7a' : '#6a9a66'} fillOpacity="0.92" stroke="#4f7a4b" strokeWidth="0.5" />;
-        })}
-      </g>
-    );
-  }
-  if (kind === 1) {
-    // monstera: foglie grandi con il taglio centrale
-    return (
-      <g>
-        {pot}
-        {Array.from({ length: 5 }, (_, i) => {
-          const a = (i / 5) * Math.PI * 2 + 0.4;
-          const lx = cx + Math.cos(a) * r * 0.5;
-          const ly = cy + Math.sin(a) * r * 0.5;
-          return (
-            <g key={i} transform={`rotate(${(a * 180) / Math.PI} ${lx} ${ly})`}>
-              <ellipse cx={lx} cy={ly} rx={r * 0.5} ry={r * 0.3} fill="#5f9a5d" stroke="#3e6b3c" strokeWidth="0.6" />
-              <line x1={lx - r * 0.45} y1={ly} x2={lx + r * 0.45} y2={ly} stroke="#3e6b3c" strokeWidth="0.6" />
-            </g>
-          );
-        })}
-      </g>
-    );
-  }
-  // sansevieria: foglie lunghe e appuntite
+  const leaves = kind === 1 ? 9 : kind === 2 ? 12 : 10;
+  const length = r * (kind === 2 ? 0.76 : 0.7);
+  const width = r * (kind === 1 ? 0.17 : 0.2);
+  const phase = pick(item, 8) * 4.5;
+  const variation = pick(item, 97);
+  const pot = r * 0.25;
   return (
     <g>
-      {pot}
-      {Array.from({ length: 8 }, (_, i) => {
-        const a = (i / 8) * Math.PI * 2;
-        const tip = [cx + Math.cos(a) * r * 0.95, cy + Math.sin(a) * r * 0.95];
-        const l = [cx + Math.cos(a + 0.35) * r * 0.25, cy + Math.sin(a + 0.35) * r * 0.25];
-        const rr = [cx + Math.cos(a - 0.35) * r * 0.25, cy + Math.sin(a - 0.35) * r * 0.25];
-        return <path key={i} d={`M ${l[0]} ${l[1]} L ${tip[0]} ${tip[1]} L ${rr[0]} ${rr[1]} Z`}
-          fill={i % 2 ? '#6f9c5a' : '#8bb36f'} stroke="#4a6b3a" strokeWidth="0.5" />;
+      <ellipse cx={cx} cy={cy + r * 0.08} rx={r * 0.36} ry={r * 0.22} fill="#354c33" fillOpacity="0.12" />
+      {Array.from({ length: leaves }, (_, i) => {
+        const angle = phase + (i * 360) / leaves + (((i * 7 + variation) % 5) - 2) * 5;
+        const len = length * (0.76 + ((i * 11 + variation) % 6) * 0.05);
+        const leaf = `M 0 0 C ${len * 0.18} ${-width * 0.52} ${len * 0.72} ${-width * 0.42} ${len} 0`
+          + ` C ${len * 0.72} ${width * 0.42} ${len * 0.18} ${width * 0.52} 0 0 Z`;
+        const color = ['#5f9255', '#78a967', '#8bb877', '#4f7a4b'][(i + kind) % 4];
+        return (
+          <g key={i} transform={`translate(${cx} ${cy}) rotate(${angle})`}>
+            <path d={leaf} fill={color} fillOpacity="0.94" stroke="#4f7a4b" strokeWidth="0.55" strokeLinejoin="round" />
+            <path d={`M 1 0 Q ${len * 0.48} -0.35 ${len * 0.94} 0`} fill="none" stroke="#d5e3c5" strokeOpacity="0.65" strokeWidth="0.55" />
+            {i % 2 === 0 && <path d={`M ${len * 0.46} 0 Q ${len * 0.58} ${-width * 0.2} ${len * 0.7} ${-width * 0.31} M ${len * 0.46} 0 Q ${len * 0.58} ${width * 0.2} ${len * 0.7} ${width * 0.31}`}
+              fill="none" stroke="#d5e3c5" strokeOpacity="0.45" strokeWidth="0.45" />}
+          </g>
+        );
       })}
+      <circle cx={cx} cy={cy} r={pot} fill={t.pot} stroke={t.woodLine} strokeWidth="0.8" />
+      <circle cx={cx} cy={cy} r={pot * 0.72} fill="#554332" stroke="#44372d" strokeWidth="0.45" />
+      <circle cx={cx - pot * 0.1} cy={cy - pot * 0.12} r={pot * 0.2} fill="#766049" fillOpacity="0.8" />
     </g>
   );
 }
