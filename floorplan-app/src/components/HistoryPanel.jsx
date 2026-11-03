@@ -1,4 +1,4 @@
-import { Star, Trash2 } from 'lucide-react';
+import { Cloud, Star, Trash2 } from 'lucide-react';
 import { SHAPE_NAME, TYPE_NAME } from '../constants';
 import { fmtM } from '../lib/utils';
 import PlanSvg from './PlanSvg';
@@ -13,8 +13,8 @@ const entryTitle = (e) => {
 };
 
 /* Cronologia: miniature con stella (salva in modo permanente) ed eliminazione singola. */
-export default function HistoryPanel({ entries, currentId, persistent, onOpen, onToggleSaved, onRemove, onClear, onManageConsent }) {
-  if (!entries.length) return null;
+export default function HistoryPanel({ entries, currentId, persistent, onOpen, onToggleSaved, onRemove, onClear, onManageConsent, cloudItems = [], onOpenCloud }) {
+  if (!entries.length && !cloudItems.length) return null;
   const saved = entries.filter((e) => e.saved);
   const recent = entries.filter((e) => !e.saved);
 
@@ -25,7 +25,7 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
           <button type="button" className="pf-thumb-open" onClick={() => onOpen(e)}
             title={`${entryTitle(e)} · ${fmtM(activeFloor(e).plan.dimensions.width)} × ${fmtM(activeFloor(e).plan.dimensions.length)} m`}>
             <PlanSvg plan={activeFloor(e).plan} layers={THUMB_LAYERS} thumb style={activeFloor(e).meta?.style} />
-            <span>{entryTitle(e)}</span>
+            <span>{e.cloudId && <Cloud size={11} aria-label="Sul cloud" />} {entryTitle(e)}</span>
           </button>
           <div className="pf-thumb-actions">
             <button type="button" className="pf-thumb-btn is-delete" onClick={() => onRemove(e.id)}
@@ -46,6 +46,19 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
 
   return (
     <section className="pf-sec pf-history">
+      {cloudItems.length > 0 && (
+        <>
+          <h2>Sul cloud</h2>
+          <ul className="pf-cloud-list">
+            {cloudItems.map((it) => (
+              <li key={it.id}>
+                <span><strong>{it.name || 'Senza nome'}</strong> <em>{new Date(it.updated_at).toLocaleDateString('it-IT')}</em></span>
+                <button type="button" className="pf-mini" onClick={() => onOpenCloud?.(it.id)}>Apri</button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {saved.length > 0 && (
         <>
           <h2>Salvate</h2>

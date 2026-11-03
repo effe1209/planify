@@ -1,6 +1,6 @@
 /* Cloud: il modulo si prova con un finto client (lib/cloud.js). */
 import assert from 'node:assert/strict';
-import { cloudTokenFrom, makeCloud, newToken, shareLink } from '../src/lib/cloud.js';
+import { CloudConflict, cloudTokenFrom, makeCloud, newToken, shareLink } from '../src/lib/cloud.js';
 
 const token = newToken();
 assert.match(token, /^[A-Za-z0-9_-]{32}$/);
@@ -13,15 +13,17 @@ assert.equal(shareLink(token, 'https://x.it/app?y=1#a'), `https://x.it/app#cloud
 // finto client: registra le chiamate
 const calls = [];
 const rows = new Map();
+let serverStamp = 't';
 const chain = (table, op, payload) => {
   const c = { eqs: [], select(cols) { c.cols = cols; return c; }, eq(k, v) { c.eqs.push([k, v]); return c; }, order() { return c; },
     single() { return c.then((r) => ({ data: Array.isArray(r.data) ? r.data[0] : r.data, error: r.error })); },
+    maybeSingle() { return c.then((r) => ({ data: r.data, error: r.error })); },
     then(res, rej) {
       calls.push({ table, op, payload, eqs: c.eqs });
       let data = null;
       if (op === 'insert') { data = { id: 'new-id', share_token: null, updated_at: 't', ...payload }; rows.set('new-id', data); }
       if (op === 'select') data = c.eqs.length ? { id: c.eqs[0][1], name: 'P', data: payload?.data ?? rows.get(c.eqs[0][1])?.data, share_token: null, updated_at: 't' } : [...rows.values()];
-      if (op === 'update') data = { id: c.eqs[0]?.[1], share_token: payload.share_token ?? null, updated_at: 't2' };
+      if (op === 'update') data = c.eqs.some(([k, v]) => k === 'updated_at' && v !== serverStamp) ? null : { id: c.eqs[0]?.[1], share_token: payload.share_token ?? null, updated_at: 't2' };
       return Promise.resolve({ data, error: null }).then(res, rej);
     } };
   return c;
@@ -31,7 +33,8 @@ const client = {
   rpc: async (fn, args) => ({ data: fn === 'get_shared_project' && args.token === token
     ? { name: 'Casa', data: { floors: [{ id: 'f1', name: 'T', level: 0, plan: {}, meta: {} }] }, updated_at: 't' } : null, error: null }),
   auth: { signInWithOtp: async (a) => { calls.push({ auth: a }); return { error: null }; }, getSession: async () => ({ data: { session: { user: { id: 'u' } } }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }), signOut: async () => ({ error: null }) },
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }), signOut: async () => ({ error: null }),
+    verifyOtp: async (a) => { calls.push({ otp: a }); return { error: null }; }, signInWithOAuth: async (a) => { calls.push({ oauth: a }); return { error: null }; } },
 };
 const c = makeCloud(client);
 const project = { id: 'local', name: 'Casa', activeFloor: 'f1', floors: [{ id: 'f1', name: 'T', level: 0, plan: { rooms: [] }, meta: {} }], cloudId: undefined, secret: 'non va nel cloud' };
@@ -50,6 +53,18 @@ assert.ok(!('secret' in ins.payload.data), 'nel cloud solo ciò che serve a vede
 await c.save({ ...project, cloudId: 'new-id' });
 const upd = calls.filter((x) => x.op === 'update').at(-1);
 assert.deepEqual(upd.eqs, [['id', 'new-id']]);
+
+// conflitto: il cloud è cambiato dopo l'ultimo salvataggio di questo browser
+await assert.rejects(c.save({ ...project, cloudId: 'new-id', cloudSaved: 'vecchio' }), (e) => e instanceof CloudConflict && e.conflict);
+const forced = await c.save({ ...project, cloudId: 'new-id', cloudSaved: 'vecchio' }, { force: true });
+assert.equal(forced.id, 'new-id');
+const okSave = await c.save({ ...project, cloudId: 'new-id', cloudSaved: 't' });
+assert.equal(okSave.updated_at, 't2');
+
+await c.verifyCode(' a@b.it ', ' 123456 ');
+assert.deepEqual(calls.at(-1).otp, { email: 'a@b.it', token: '123456', type: 'email' });
+await c.signInGoogle('https://x.it/');
+assert.equal(calls.at(-1).oauth.provider, 'google');
 
 const opened = await c.open('new-id');
 assert.equal(opened.cloudId, 'new-id');

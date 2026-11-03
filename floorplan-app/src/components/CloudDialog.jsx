@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Cloud, Copy, FolderOpen, LogOut, Mail, Trash2, Upload, X } from 'lucide-react';
-import { cloud, cloudConfigured, shareLink } from '../lib/cloud';
+import { Check, Cloud, Copy, FolderOpen, KeyRound, LogOut, Mail, Trash2, Upload, X } from 'lucide-react';
+import { shareLink } from '../lib/cloud';
 
 /*
- * Cloud: accesso con email (link magico), salvataggio dei progetti, riapertura e link in sola lettura per i clienti.
- * Lo schema del database e le regole di sicurezza: supabase/migrations/001_cloud_projects.sql.
+ * Cloud: accesso (Google, email con link o con codice), salvataggio dei progetti, riapertura e link in sola lettura per i clienti.
+ * Lo stato (utente, elenco) è in hooks/useCloud.js; lo schema del database in supabase/migrations/001_cloud_projects.sql.
  */
 const when = (iso) => (iso ? new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : '');
 
-export default function CloudDialog({ project, readOnly, onOpen, onSaved, onClose, say }) {
+export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, onClose, say }) {
   const dialogRef = useRef(null);
-  const api = useRef(null);
-  const [ready, setReady] = useState(false);
-  const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
-  const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const configured = cloudConfigured();
+  const { configured, ready, user, items, refresh, api } = cx;
 
   useEffect(() => {
     const el = dialogRef.current;
@@ -41,32 +38,18 @@ export default function CloudDialog({ project, readOnly, onOpen, onSaved, onClos
     }
   }, []);
 
-  const refresh = useCallback(() => run(async () => { setItems(await api.current.list()); }), [run]);
-
-  useEffect(() => {
-    if (!configured) { setReady(true); return undefined; }
-    let off = () => {};
-    let alive = true;
-    cloud().then(async (c) => {
-      api.current = c;
-      const u = await c.user().catch(() => null);
-      if (!alive) return;
-      setUser(u);
-      setReady(true);
-      off = c.onAuth((nu) => { setUser(nu); if (nu) refresh(); });
-      if (u) refresh();
-    });
-    return () => { alive = false; off(); };
-  }, [configured, refresh]);
-
   const sendLink = (e) => {
     e.preventDefault();
     run(async () => { await api.current.signIn(email); setSent(true); });
   };
+  const sendCode = (e) => {
+    e.preventDefault();
+    run(async () => { await api.current.verifyCode(email, code); setCode(''); setSent(false); });
+  };
   const save = () => run(async () => {
     const res = await api.current.save(project);
     onSaved({ cloudId: res.id, cloudShare: res.share_token, cloudSaved: res.updated_at });
-    say?.(project.cloudId ? 'Progetto aggiornato sul cloud' : 'Progetto salvato sul cloud');
+    say?.(project.cloudId ? 'Progetto aggiornato sul cloud' : 'Progetto salvato sul cloud: da ora si salva da solo');
     await refresh();
   });
   const open = (id) => run(async () => {
@@ -111,32 +94,47 @@ export default function CloudDialog({ project, readOnly, onOpen, onSaved, onClos
         )}
         {configured && !ready && <p className="pf-hint">Un attimo…</p>}
         {configured && ready && !user && (
-          <form onSubmit={sendLink} className="pf-cloud-login">
-            <p className="pf-hint">Entra con la tua email: ti mando un link per accedere, senza password.</p>
-            <label className="pf-field-sm">
-              <span>Email</span>
-              <input className="pf-input-sm" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </label>
-            <button type="submit" className="pf-mini is-accent" disabled={busy || !email}><Mail size={13} /> Invia il link</button>
-            {sent && <p className="pf-hint" role="status"><Check size={13} /> Controlla la posta: apri il link da questo browser per entrare.</p>}
-          </form>
+          <div className="pf-cloud-login">
+            <button type="button" className="pf-mini is-accent" disabled={busy} onClick={() => run(() => api.current.signInGoogle())}>
+              Continua con Google
+            </button>
+            <p className="pf-hint">Oppure con la tua email: ti mando un link (e un codice di 6 cifre), senza password.</p>
+            <form onSubmit={sendLink} className="pf-cloud-login">
+              <label className="pf-field-sm">
+                <span>Email</span>
+                <input className="pf-input-sm" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <button type="submit" className="pf-mini" disabled={busy || !email}><Mail size={13} /> Invia il link</button>
+            </form>
+            {sent && (
+              <form onSubmit={sendCode} className="pf-cloud-login">
+                <p className="pf-hint" role="status"><Check size={13} /> Controlla la posta: apri il link da questo browser oppure scrivi qui il codice.</p>
+                <label className="pf-field-sm">
+                  <span>Codice</span>
+                  <input className="pf-input-sm" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,8}" value={code}
+                    onChange={(e) => setCode(e.target.value)} />
+                </label>
+                <button type="submit" className="pf-mini" disabled={busy || code.trim().length < 6}><KeyRound size={13} /> Entra con il codice</button>
+              </form>
+            )}
+          </div>
         )}
         {configured && ready && user && (
           <>
             <div className="pf-cloud-user">
               <span className="pf-hint">{user.email}</span>
-              <button type="button" className="pf-mini" onClick={() => run(async () => { await api.current.signOut(); setItems([]); })}><LogOut size={13} /> Esci</button>
+              <button type="button" className="pf-mini" onClick={() => run(async () => { await api.current.signOut(); })}><LogOut size={13} /> Esci</button>
             </div>
             <section className="pf-cloud-block">
               <h3>Questo progetto</h3>
               {canSave ? (
                 <>
                   <p className="pf-hint">
-                    «{project.name || 'Senza nome'}»{saved ? ` · salvato il ${when(saved.updated_at)}` : ' · non ancora sul cloud'}
+                    «{project.name || 'Senza nome'}»{saved ? ` · salvato il ${when(saved.updated_at)} · si salva da solo` : ' · non ancora sul cloud'}
                   </p>
                   <div className="pf-security-actions">
                     <button type="button" className="pf-mini is-accent" disabled={busy} onClick={save}>
-                      <Upload size={13} /> {project.cloudId ? 'Aggiorna sul cloud' : 'Salva sul cloud'}
+                      <Upload size={13} /> {project.cloudId ? 'Salva ora' : 'Salva sul cloud'}
                     </button>
                     {project.cloudId && !project.cloudShare && (
                       <button type="button" className="pf-mini" disabled={busy} onClick={share}><Copy size={13} /> Crea link in sola lettura</button>
@@ -148,7 +146,7 @@ export default function CloudDialog({ project, readOnly, onOpen, onSaved, onClos
                       </>
                     )}
                   </div>
-                  {project.cloudId && <p className="pf-hint">Il link mostra l'ultima versione salvata: aggiornala dopo ogni modifica.</p>}
+                  {project.cloudId && project.cloudShare && <p className="pf-hint">Il link mostra l'ultima versione salvata, quindi sempre quella aggiornata.</p>}
                 </>
               ) : <p className="pf-hint">Apri un progetto tuo per salvarlo sul cloud.</p>}
             </section>
