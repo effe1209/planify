@@ -463,14 +463,39 @@ async function loadLogo(src) {
  * Tavola tecnica A4 orizzontale: pianta quotata a scala vera (1:100, o più piccola se non entra), legenda dei locali,
  * serramenti del piano, nord, scala grafica e cartiglio con il marchio (logo sostituibile, vedi lib/branding.js).
  */
+/* Immagine in toni di grigio (tavole in bianco e nero); se il browser non sa farlo resta a colori. */
+async function grayscale(dataUrl) {
+  try {
+    const im = new Image();
+    await new Promise((ok, no) => { im.onload = ok; im.onerror = no; im.src = dataUrl; });
+    const cv = document.createElement('canvas');
+    cv.width = im.width;
+    cv.height = im.height;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, cv.width, cv.height);
+    g.filter = 'grayscale(1) contrast(1.15)';
+    g.drawImage(im, 0, 0);
+    return cv.toDataURL('image/png');
+  } catch {
+    return dataUrl;
+  }
+}
+
 async function technicalPage(doc, floor, codes, extra, ctx) {
   const { project, branding, logo, schedule, sheet, sheets } = ctx;
   const F = ctx.format || A4;                       // formato del foglio (di serie A4)
   const wanted = ctx.scale && ctx.scale !== 'auto' ? Number(ctx.scale) : null;   // scala chiesta (1:N), altrimenti la migliore che entra
   const plan = floor.plan;
   const area = drawingArea(F);
-  doc.setDrawColor(INK).setLineWidth(0.5).rect(F.margin, F.margin, F.w - 2 * F.margin, F.h - 2 * F.margin);
+  const st = ctx.style || {};
+  const lw = st.lineScale || 1;
+  const FONT = st.font || 'helvetica';
+  const origLW = doc._lw0 || (doc._lw0 = doc.setLineWidth.bind(doc));   // lo spessore scelto vale per tutte le linee della tavola
+  doc.setLineWidth = (w) => origLW(w * lw);
+  if (st.frame !== false) doc.setDrawColor(INK).setLineWidth(0.5).rect(F.margin, F.margin, F.w - 2 * F.margin, F.h - 2 * F.margin);
   const img = await floorImage(floor, [], { ...extra, codes, bare: true, layers: { ...LAYERS, technical: true, alarm: false } }, 4);
+  if (st.mono) img.data = await grayscale(img.data);
   const fit = ctx.format
     ? fitScale(img.w, img.h, plan.scale, area, wanted ? [wanted, ...SHEET_SCALES.filter((n) => n > wanted)] : SHEET_SCALES.slice(1))
     : fitScale(img.w, img.h, plan.scale, area);
@@ -486,12 +511,12 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   const tip = [cx + Math.sin(north) * 5, 25 - Math.cos(north) * 5];
   doc.setFillColor(INK).triangle(tip[0], tip[1], cx - Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 - Math.sin(north) * 2 + Math.cos(north) * 3.5,
     cx + Math.cos(north) * 2 - Math.sin(north) * 3.5, 25 + Math.sin(north) * 2 + Math.cos(north) * 3.5, 'F');
-  doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text('N', cx, 14.8, { align: 'center' });
+  doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(INK).text('N', cx, 14.8, { align: 'center' });
   // scala grafica alla scala di stampa: 0-1-2-5 m, o più corta se la colonna non basta (1:50 e 1:20)
   const mm = 1000 / fit.n;
   const bx = x0 + 17;
   const marks = 5 * mm <= LEGEND_W - 22 ? [0, 1, 2, 5] : 2 * mm <= LEGEND_W - 22 ? [0, 1, 2] : [0, 0.5, 1];
-  doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(INK);
+  doc.setFont(FONT, 'normal').setFontSize(6.5).setTextColor(INK);
   marks.slice(1).forEach((m1, i) => {
     doc.setFillColor(i % 2 ? '#ffffff' : INK).setDrawColor(INK).setLineWidth(0.2).rect(bx + marks[i] * mm, 22, (m1 - marks[i]) * mm, 2, 'FD');
   });
@@ -501,18 +526,18 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   // legenda locali
   let y = 38;
   const { rooms, total } = roomLegend(plan);
-  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('LOCALI', x0 + 4, y);
+  doc.setFont(FONT, 'bold').setFontSize(8.5).setTextColor(INK).text('LOCALI', x0 + 4, y);
   doc.setDrawColor(INK).setLineWidth(0.2).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
   y += 6;
   const limit = F.h - F.margin - CARTOUCHE_H - 40;
-  doc.setFont('helvetica', 'normal').setFontSize(7.5);
+  doc.setFont(FONT, 'normal').setFontSize(7.5);
   for (const r of rooms) {
     if (y > limit) { doc.setTextColor(MUTED).text('...', x0 + 4, y); y += 4; break; }
     doc.setTextColor(INK).text(safe(r.name), x0 + 4, y);
     doc.text(`${fmt(r.area)} m²`.replace('²', '2'), x1 - 4, y, { align: 'right' });
     y += 4;
   }
-  doc.setFont('helvetica', 'bold').text('Totale', x0 + 4, y + 1);
+  doc.setFont(FONT, 'bold').text('Totale', x0 + 4, y + 1);
   doc.text(`${fmt(total)} m2`, x1 - 4, y + 1, { align: 'right' });
   y += 8;
 
@@ -520,10 +545,10 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   const used = new Set([...(codes?.doors || []), ...(codes?.windows || [])].filter(Boolean));
   const rows = schedule.rows.filter((r) => used.has(r.code));
   if (rows.length && y < limit + 12) {
-    doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(INK).text('SERRAMENTI', x0 + 4, y);
+    doc.setFont(FONT, 'bold').setFontSize(8.5).setTextColor(INK).text('SERRAMENTI', x0 + 4, y);
     doc.setDrawColor(INK).line(x0 + 4, y + 1.5, x1 - 4, y + 1.5);
     y += 6;
-    doc.setFont('helvetica', 'normal').setFontSize(7.5);
+    doc.setFont(FONT, 'normal').setFontSize(7.5);
     for (const r of rows) {
       if (y > limit + 22) break;
       doc.setTextColor(INK).text(safe(r.code), x0 + 4, y);
@@ -542,14 +567,15 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
     const w = Math.min(34, (maxH * logo.w) / logo.h);
     doc.addImage(logo.data, undefined, x0 + 4, cy + 3, w, (w * logo.h) / logo.w, undefined, 'FAST');
   }
-  doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(INK).text(safe(branding.name), x1 - 4, cy + 9, { align: 'right' });
+  doc.setFont(FONT, 'bold').setFontSize(11).setTextColor(INK).text(safe(branding.name), x1 - 4, cy + 9, { align: 'right' });
   doc.line(x0, cy + 16, x1, cy + 16);
   const field = (label, value, yy, bold = false) => {
-    doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(MUTED).text(label, x0 + 4, yy);
-    doc.setFont('helvetica', bold ? 'bold' : 'normal').setFontSize(8).setTextColor(INK).text(safe(value) || '', x0 + 24, yy);
+    doc.setFont(FONT, 'normal').setFontSize(6.5).setTextColor(MUTED).text(label, x0 + 4, yy);
+    doc.setFont(FONT, bold ? 'bold' : 'normal').setFontSize(8).setTextColor(INK).text(safe(value) || '', x0 + 24, yy);
   };
   field('PROGETTO', project.name || 'Progetto', cy + 21, true);
-  field('TAVOLA', `${levelLabel(floor.level)} ${floor.name} - pianta quotata`, cy + 26);
+  field('TAVOLA', st.title || `${levelLabel(floor.level)} ${floor.name} - pianta quotata`, cy + 26);
+  if (st.note) doc.setFont(FONT, 'italic').setFontSize(6.5).setTextColor(MUTED).text(safe(st.note), x0 + 4, F.h - F.margin - 2.5, { maxWidth: LEGEND_W - 8 });
   field('COMMITTENTE', branding.client, cy + 31);
   field('PROGETTISTA', branding.designer, cy + 36);
   field('N. PRATICA', branding.ref, cy + 41);
@@ -557,8 +583,8 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   doc.line(x0 + 25, cy + 43.5, x0 + 25, F.h - F.margin);
   doc.line(x0 + 50, cy + 43.5, x0 + 50, F.h - F.margin);
   const cell = (label, value, xx) => {
-    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(MUTED).text(label, xx + 2, cy + 46.5);
-    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(INK).text(value, xx + 2, cy + 50.5);
+    doc.setFont(FONT, 'normal').setFontSize(6).setTextColor(MUTED).text(label, xx + 2, cy + 46.5);
+    doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(INK).text(value, xx + 2, cy + 50.5);
   };
   cell('SCALA', `1:${fit.n}`, x0);
   cell('FORMATO', F.id, x0 + 25);
@@ -668,20 +694,23 @@ function materialPages(doc, quote) {
  * «Tavole in scala»: solo le tavole tecniche (pianta quotata, legenda, serramenti, cartiglio), una per piano, nel formato
  * scelto (A4, A3, A2, A1) e a una scala vera (1:20, 1:50, 1:100, 1:200, 1:500 o la migliore che entra).
  */
-export async function exportSheetsPdf(project, { format = 'A3', scale = 'auto' } = {}) {
-  const F = sheetFormat(format);
-  const doc = new jsPDF({ unit: 'mm', format: [F.w, F.h], orientation: 'landscape', compress: true });
+export async function exportSheetsPdf(project, opts = {}) {
+  const { format = 'A3', scale = 'auto', portrait = false, margin = 10, frame = true, lineScale = 1, mono = false, font = 'helvetica', title = '', note = '' } = opts;
+  const F = sheetFormat(format, { portrait, margin });
+  const orient = F.w >= F.h ? 'landscape' : 'portrait';
+  const doc = new jsPDF({ unit: 'mm', format: [F.w, F.h], orientation: orient, compress: true });
   doc.setProperties({ title: safe(`${project.name || 'Progetto Planify'} - tavole ${F.id}`), creator: 'Planify' });
   const { byFloor } = projectStairs(project);
   const house = houseFor(project);
   const schedule = scheduleFor(project);
-  const branding = getBranding(project);
+  const own = Object.fromEntries(Object.entries(opts.branding || {}).filter(([, v]) => typeof v === 'string' && v.trim()));
+  const branding = { ...getBranding(project), ...own };
   const logo = await loadLogo(branding.logo);
   const floors = project.floors.filter((x) => x.plan && schedule.codes[x.id] && x.plan.rooms.some((r) => r.kind !== 'garden'));
   let n = 0;
   for (const f of floors) {
-    if (n) doc.addPage([F.w, F.h], 'landscape');
-    await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++n, sheets: floors.length, format: F, scale });
+    if (n) doc.addPage([F.w, F.h], orient);
+    await technicalPage(doc, f, schedule.codes[f.id], { stairs: byFloor[f.id], house }, { project, branding, logo, schedule, sheet: ++n, sheets: floors.length, format: F, scale, style: { frame, lineScale, mono, font, title, note } });
   }
   if (!n) throw new Error('Nessuna pianta da mettere in tavola.');
   const name = (project.name || 'progetto-planify').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

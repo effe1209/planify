@@ -1,20 +1,21 @@
 import { useState } from 'react';
 import { Spline, Undo2, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, DoorOpen, FlipHorizontal2, Merge, PanelTop, RectangleHorizontal, Scissors, Trash2, Unlink, X } from 'lucide-react';
 import { canMerge, checkStair, openingLine, runOf, stairRoom } from '../lib/walls';
+import FinishPicker from './FinishPicker';
 import { PANORAMIC_MAX, isPanoramic } from '../lib/openings';
 
 const STAIR_TYPES = [['straight', 'Rampa'], ['l', 'A L'], ['u', 'A U']];
 const ENTRY = [['N', ArrowUp, 'Parte dal lato nord'], ['E', ArrowRight, 'Parte dal lato est'], ['S', ArrowDown, 'Parte dal lato sud'], ['W', ArrowLeft, 'Parte dal lato ovest']];
 
 /* Strumenti della modifica, nella barra fissa in cima: aggiungere una porta o una finestra, dividere un locale. */
-export function EditTools({ addMode, splitDir, onAdd, onSplitDir }) {
+export function EditTools({ addMode, splitDir, onAdd, onSplitDir, only = null }) {
   const tools = [['door', DoorOpen, 'Porta', 'Aggiungi una porta: clicca sul muro'], ['window', PanelTop, 'Finestra', 'Aggiungi una finestra: clicca su un muro esterno'],
     ['panoramic', RectangleHorizontal, 'Vetrata', 'Aggiungi una vetrata panoramica a tutta altezza: clicca su un muro esterno o verso il balcone'],
     ['split', Scissors, 'Muro', 'Aggiungi un muro: trascina nel locale per tracciarlo, poi tiralo col mouse per spostarlo']];
   return (
     <div className="pf-edittools">
       <div className="pf-segtools" role="group" aria-label="Strumenti di modifica">
-        {tools.map(([id, Icon, label, tip]) => (
+        {tools.filter(([id]) => !only || only.includes(id)).map(([id, Icon, label, tip]) => (
           <button key={id} type="button" className={addMode === id ? 'is-on' : ''} aria-pressed={addMode === id} title={tip} onClick={() => onAdd(id)}>
             <Icon size={13} /> {label}
           </button>
@@ -40,7 +41,7 @@ export function EditTools({ addMode, splitDir, onAdd, onSplitDir }) {
 /* Comandi della modifica diretta (compare con la modifica attiva): aggiungere, dividere, e regolare l'elemento selezionato. */
 export default function EditPlanPanel({
   plan, selected, selectedWall, selectedStair, stairsHere, warning,
-  onResize, onFlip, onRemove, onClose, onMerge, onOpenWall, onStair, onCloseWall, onCloseStair, onType, onColor, onCurve, onStraighten, curving,
+  onResize, onFlip, onRemove, onClose, onMerge, onOpenWall, onStair, onCloseWall, onCloseStair, onType, onColor, onCurve, onStraighten, curving, onWallLook,
 }) {
   const o = selected ? (selected.kind === 'door' ? plan.doors : plan.windows)[selected.index] : null;
   const run = o ? runOf(plan, o) : null;
@@ -70,6 +71,11 @@ export default function EditPlanPanel({
               title="Un solo locale (serve che i due formino un rettangolo)"><Merge size={12} /> Unisci</button>
             <button type="button" className="pf-minibtn" onClick={onOpenWall} title="Il muro sparisce, i locali restano una zona unica"><Unlink size={12} /> Apri muro</button>
           </div>
+          {onWallLook && (
+            <FinishPicker parts={['wall']} title="Colore e materiale del muro"
+              value={plan.wallLooks?.[`${Math.min(selectedWall.a, selectedWall.b)}-${Math.max(selectedWall.a, selectedWall.b)}`] ? { wall: plan.wallLooks[`${Math.min(selectedWall.a, selectedWall.b)}-${Math.max(selectedWall.a, selectedWall.b)}`] } : null}
+              onChange={(v) => onWallLook(v?.wall || null)} />
+          )}
         </div>
       )}
 

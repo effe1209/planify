@@ -12,6 +12,8 @@ import './apple.css';
 import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME, LOFT_MIN, loftTooSmall } from './constants';
 import PlanSvg from './components/PlanSvg';
 import SketchBoard from './components/SketchBoard';
+import SketchEditPanel from './components/SketchEditPanel';
+import * as SK from './lib/sketchEdit';
 import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import FurnishPanel from './components/FurnishPanel';
@@ -52,6 +54,7 @@ import CloudDialog from './components/CloudDialog';
 import CloudSync from './components/CloudSync';
 import InspectorTabs from './components/InspectorTabs';
 import SheetsDialog from './components/SheetsDialog';
+import { cleanTemplate, listTemplates, storedTemplates, storeTemplates } from './lib/sheetTemplates';
 import TourDialog from './components/TourDialog';
 import LibraryDialog, { LibraryPanel } from './components/LibraryDialog';
 import { getLibrary, purchaseQuote, storeLibrary } from './lib/materialLibrary';
@@ -533,7 +536,13 @@ export default function App() {
     }
     setPendingFloor({ name, level });
     if (mode === 'sketch') {
-      setSketch({ shapes: [] });
+      // il piano vicino (quello sotto, o sopra se non c'è) fa da guida tratteggiata sotto il disegno
+      const near = typeof level === 'number' && [...current.floors].filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
+        .sort((a, b) => Math.abs(a.level - level) - Math.abs(b.level - level) || a.level - b.level)[0];
+      const rooms = near?.plan.rooms.filter((r) => !['garden'].includes(r.kind)).map((r) => ({
+        kind: r.kind, name: r.name, poly: r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]],
+      }));
+      setSketch({ shapes: [], ...(rooms?.length && { underlay: { name: near.name, rooms } }) });
     } else {
       // stesse misure del piano accanto, così muri perimetrali e scala si sovrappongono
       const near = typeof level === 'number' && current.floors.find((f) =>
@@ -819,6 +828,15 @@ export default function App() {
   const editWarning = useMemo(() => (selectedOpening && plan ? doorWarning(plan, selectedOpening) : null), [plan, selectedOpening]);
   const editable = !!plan && !readOnly && !plan.rooms.some((r) => r.poly) && !plan.wallLines?.length
     && !['garden'].includes(floor?.meta?.type);
+  // pianta disegnata a mano: stessa modifica attiva, ma sui contorni dei locali (vertici, lati, stanze) e sulle aperture
+  const sketchEditable = !!plan && !readOnly && !editable && SK.isSketchPlan(plan) && !['garden'].includes(floor?.meta?.type);
+  const canEdit = editable || sketchEditable;
+  const applySketchEdit = (next) => {
+    if (!current || !floor || readOnly) return;
+    setError(null);
+    pushUndo();
+    editProject((p) => updateFloor(p, floor.id, (f) => ({ ...f, plan: next, ...(f.sketch && { sketch: SK.syncShapes(f.sketch, next) }) })));
+  };
   // la modifica resta attiva finché non si preme di nuovo il pulsante; cambiando piano o progetto si azzera solo la selezione
   useEffect(() => { setAddMode(null); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }, [current?.id, floor?.id]);
   const toggleEdit = () => {
@@ -831,7 +849,7 @@ export default function App() {
     if (!hit) { setSelectedItem(null); setSelectedId(null); setSelectedOpening(null); return; }
     if (hit.kind === 'item') { setSelectedId(null); setSelectedOpening(null); setSelectedItem(hit.index); }
     else if (hit.kind === 'room') { setSelectedItem(null); setSelectedOpening(null); setSelectedId(hit.roomId); }
-    else if (editable) {   // porte e finestre si modificano nella modalità «Modifica pianta»
+    else if (canEdit) {   // porte e finestre si modificano nella modalità «Modifica pianta»
       setSelectedItem(null); setSelectedId(null);
       if (!wallEdit) setWallEdit(true);
       setSelectedOpening({ kind: hit.kind, index: hit.index });
@@ -1033,7 +1051,7 @@ export default function App() {
       if (wallEdit && !mod && (selectedOpening || addMode)) {
         if (selectedOpening && (e.key === 'Delete' || e.key === 'Backspace')) {
           e.preventDefault();
-          editPlan((p) => removeOpening(p, selectedOpening.kind, selectedOpening.index));
+          editPlan((p) => (SK.isSketchPlan(p) ? SK.removeOpening(p, selectedOpening.kind, selectedOpening.index).plan : removeOpening(p, selectedOpening.kind, selectedOpening.index)));
           setSelectedOpening(null);
         } else if (e.key === 'Escape') { setSelectedOpening(null); setAddMode(null); }
         return;
@@ -1699,7 +1717,7 @@ export default function App() {
     } catch {
       views = null;   // il DXF della pianta esce comunque
     }
-    const sheetOpt = sheet && { ...sheet, project: renderedProject, branding: getBranding(current), floor: `${levelLabel(floor.level)} ${floor.name}` };
+    const sheetOpt = sheet && { ...sheet, project: renderedProject, branding: { ...getBranding(current), ...Object.fromEntries(Object.entries(sheet.branding || {}).filter(([, v]) => v)) }, floor: `${levelLabel(floor.level)} ${floor.name}` };
     saveBlob(new Blob([buildDxf(renderedPlan, { ...opts, views, ...(sheetOpt && { sheet: sheetOpt }) })], { type: 'application/dxf' }), `${name}${sheet ? `-${sheet.format.toLowerCase()}` : ''}.dxf`);
     say(sheet ? `DXF esportato con cornice e cartiglio ${sheet.format}` : devs.length ? 'File CAD esportato con sensori, copertura, prospetti e sezioni' : 'File CAD esportato con prospetti e sezioni');
   };
@@ -2220,7 +2238,7 @@ export default function App() {
           )}
           <div className={`pf-canvas ${panOn.current ? 'is-pannable' : ''} ${panning ? 'is-panning' : ''}`} ref={stageRef}>
             {sketch ? (
-              <SketchBoard key={`sk-${sketch.background?.page || 0}`} initialShapes={sketch.shapes} background={sketch.background}
+              <SketchBoard key={`sk-${sketch.background?.page || 0}`} initialShapes={sketch.shapes} background={sketch.background} underlay={sketch.underlay}
                 onPage={async (n, shapes) => {
                   try {
                     const next = await pdfPageImage(sketch.background.file, { page: n });
@@ -2261,7 +2279,10 @@ export default function App() {
                   style={floor.meta?.style} palette={current?.palette} devices={floorDevices} stairs={floorStairs} house={houseFor(current)}
                   level={plan.mezzanine ? loftLevel : 'all'} onMezzResize={readOnly ? null : resizeMezzanine}
                   editable={!readOnly && !showElectric && !showPlumbing && !wallEdit} selectedItem={selectedItem}
-                  wallEdit={wallEdit && editable && !showElectric && !showPlumbing ? {
+                  wallEdit={wallEdit && sketchEditable && !showElectric && !showPlumbing ? {
+                    sketch: true, selected: selectedOpening, selectedRoom: selectedId, addMode, onSelect: setSelectedOpening, onSelectRoom: (id) => { setSelectedItem(null); setSelectedId(id); },
+                    onApply: applySketchEdit, onError: setError,
+                  } : wallEdit && editable && !showElectric && !showPlumbing ? {
                     selected: selectedOpening, addMode, splitDir, selectedWall, selectedStair, onSelect: setSelectedOpening, onSelectWall: setSelectedWall,
                     onSelectStair: setSelectedStair, onApply: applyPlanEdit, onMoveWall: moveWall, onError: setError, onSplit: splitAt, onStairMove: moveStairs,
                   } : null} codes={schedule?.codes[floor.id]}
@@ -2318,16 +2339,16 @@ export default function App() {
 
         {/* ───────── Dettagli, personalizzazione e cronologia ───────── */}
         <aside className="pf-inspector" aria-hidden={!panels.right} inert={!panels.right}>
-          {(editable || (plan && stats)) && (
+          {(canEdit || (plan && stats)) && (
             <div className="pf-insp-head">
-            {editable && (
+            {canEdit && (
               <div className="pf-editbar">
                 <button type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
                   title="Attiva o disattiva la modifica di muri, aperture, locali e scale: resta attiva finché non la ripremi">
                   <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
                 </button>
                 {wallEdit && (
-                  <EditTools addMode={addMode} splitDir={splitDir}
+                  <EditTools addMode={addMode} splitDir={splitDir} only={sketchEditable ? ['door', 'window'] : null}
                     onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
                     onSplitDir={setSplitDir} />
                 )}
@@ -2367,6 +2388,13 @@ export default function App() {
                   onChange={(patch) => changeDevice(selectedDevice.id, patch)} onRemove={() => removeDevice(selectedDevice.id)}
                   onClose={() => setSelectedDevice(null)} />
               )}
+              {sketchEditable && wallEdit && (
+                <SketchEditPanel plan={plan} selected={selectedOpening}
+                  onResize={(w) => { const r = SK.resizeOpening(plan, selectedOpening.kind, selectedOpening.index, w); if (r.plan) applySketchEdit(r.plan); }}
+                  onFlip={() => { const r = SK.flipOpening(plan, selectedOpening.index); if (r.plan) applySketchEdit(r.plan); }}
+                  onRemove={() => { applySketchEdit(SK.removeOpening(plan, selectedOpening.kind, selectedOpening.index).plan); setSelectedOpening(null); }}
+                  onClose={() => setSelectedOpening(null)} />
+              )}
               {editable && wallEdit && (
                 <EditPlanPanel plan={plan} selected={selectedOpening} selectedWall={selectedWall}
                   selectedStair={selectedStair} stairsHere={stairFloors().length} warning={editWarning}
@@ -2390,7 +2418,14 @@ export default function App() {
                   })}
                   onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}
                   onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
-                  onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />
+                  onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)}
+                  onWallLook={(look) => editPlan((p) => {
+                    const key = `${Math.min(selectedWall.a, selectedWall.b)}-${Math.max(selectedWall.a, selectedWall.b)}`;
+                    const all = { ...(p.wallLooks || {}) };
+                    if (look) all[key] = look; else delete all[key];
+                    const { wallLooks: _old, ...rest } = p;
+                    return Object.keys(all).length ? { ...rest, wallLooks: all } : rest;
+                  })} />
               )}
               {selectedRoom && (
                 <RoomEditor
@@ -2662,7 +2697,16 @@ export default function App() {
       {libraryDialog && <LibraryDialog library={library} quote={quote} onLibrary={changeLibrary} onClose={() => setLibraryDialog(false)} say={say} />}
       {tourDialog && current && <TourDialog project={current} onClose={() => setTourDialog(false)} />}
       {sheetsDialog && (
-        <SheetsDialog busy={sheetsBusy} onClose={() => setSheetsDialog(false)} onPdf={exportSheets}
+        <SheetsDialog busy={sheetsBusy} onClose={() => setSheetsDialog(false)} onPdf={exportSheets} templates={listTemplates(current)}
+          onSaveTemplate={(t) => {
+            editProject((p) => ({ ...p, sheetTemplates: [...(p.sheetTemplates || []).filter((x) => x.id !== t.id), cleanTemplate(t)] }));
+            storeTemplates([...storedTemplates().filter((x) => x.id !== t.id), t]);
+            say(`Modello di tavola «${t.name}» salvato`);
+          }}
+          onDeleteTemplate={(id) => {
+            editProject((p) => (p.sheetTemplates ? { ...p, sheetTemplates: p.sheetTemplates.filter((x) => x.id !== id) } : p));
+            storeTemplates(storedTemplates().filter((x) => x.id !== id));
+          }}
           onDxf={(opts) => { exportDxf(opts); setSheetsDialog(false); }} />
       )}
       {cloudDialog && (

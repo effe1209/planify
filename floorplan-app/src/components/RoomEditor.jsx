@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, Upload, X } from 'lucide-react';
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
 import { forUse } from '../lib/materialLibrary';
+import FinishPicker from './FinishPicker';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
 
@@ -52,6 +53,9 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
           ))}
         </div>
       </div>
+
+      <FinishPicker value={room.look} title="Colore e materiale del locale"
+        onChange={(look) => onChange({ look: look || undefined, ...(look?.floor?.color && { color: look.floor.color }) })} />
 
       {library.length > 0 && ['floor', 'wall'].map((use) => {
         const list = forUse(library, use);

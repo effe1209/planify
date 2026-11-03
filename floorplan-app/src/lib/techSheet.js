@@ -7,7 +7,10 @@ export const SCALES = [100, 200, 500];   // 1:100 di serie; se la pianta non ent
 /* Formati dei fogli (orizzontali, mm) e scale che si possono chiedere per le tavole */
 export const SHEET_FORMATS = { A4: { w: 297, h: 210 }, A3: { w: 420, h: 297 }, A2: { w: 594, h: 420 }, A1: { w: 841, h: 594 } };
 export const SHEET_SCALES = [20, 50, 100, 200, 500];
-export const sheetFormat = (id = 'A4') => ({ id: SHEET_FORMATS[id] ? id : 'A4', ...(SHEET_FORMATS[id] || SHEET_FORMATS.A4), margin: 10 });
+export const sheetFormat = (id = 'A4', { portrait = false, margin = 10 } = {}) => {
+  const f = SHEET_FORMATS[id] || SHEET_FORMATS.A4;
+  return { id: SHEET_FORMATS[id] ? id : 'A4', w: portrait ? f.h : f.w, h: portrait ? f.w : f.h, margin };
+};
 export const LEGEND_W = 74;              // colonna di destra: legenda, abaco, cartiglio
 export const CARTOUCHE_H = 52;
 

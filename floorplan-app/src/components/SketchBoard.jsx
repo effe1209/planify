@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler, Wand2, Hand, ZoomIn, ZoomOut, ScanSearch } from 'lucide-react';
+import { Copy, Maximize2, PenTool, MousePointer2, Undo2, Trash2, X, Sparkles, Link2, FileImage, Ruler, Wand2, Hand, ZoomIn, ZoomOut, ScanSearch } from 'lucide-react';
 import { ROOM_KINDS, ROOM_KIND_NAME, roomColor } from '../constants';
 import * as G from '../lib/geometry';
 import { CORRECTIONS, boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
@@ -49,7 +49,7 @@ const BG_TOOLS = [
  * background = la pagina di un PDF scansionato da ricalcare ({ url, paper: [l, h] in metri sul foglio, scale }):
  * si disegna in scala reale sotto la griglia, si sposta con «Sposta sfondo», scala e trasparenza si regolano.
  */
-export default function SketchBoard({ initialShapes = [], background = null, onGenerate, onClose, onPage }) {
+export default function SketchBoard({ initialShapes = [], background = null, underlay = null, onGenerate, onClose, onPage }) {
   const [bg, setBg] = useState(() => background && { scale: background.scale || 100, opacity: 0.5, x: 0, y: 0, show: true });
   const [doc, setDoc] = useState({ shapes: initialShapes, past: [] });
   const { shapes } = doc;
@@ -385,6 +385,13 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
           <Trash2 size={14} /> Pulisci
         </button>
 
+        {underlay?.rooms?.length > 0 && (
+          <button type="button" className="pf-tool" disabled={!!shapes.length} title={`Parti dai locali di «${underlay.name}»: si spostano e si cambiano a piacere`}
+            onClick={() => { commit(() => underlay.rooms.map((r) => ({ id: newId(), kind: r.kind, name: r.name, poly: r.poly.map((p) => [...p]) }))); setSelectedId(null); }}>
+            <Copy size={14} /> Dal piano {underlay.name}
+          </button>
+        )}
+
         <div className="pf-spacer" />
 
         <button type="button" className="pf-tool" onClick={onClose}>
@@ -477,6 +484,10 @@ export default function SketchBoard({ initialShapes = [], background = null, onG
             <image href={background.url} x={bg.x * PX} y={bg.y * PX} opacity={bg.opacity} preserveAspectRatio="none"
               width={background.paper[0] * bg.scale * PX} height={background.paper[1] * bg.scale * PX} />
           )}
+
+          {underlay?.rooms?.map((r, i) => (
+            <path key={`ul-${i}`} d={toPx(r.poly)} fill="none" stroke="#58760a" strokeOpacity={0.35} strokeWidth={2} strokeDasharray="6 5" strokeLinejoin="round" pointerEvents="none" />
+          ))}
 
           {shapes.map((s) => {
             const poly = shownPoly(s);

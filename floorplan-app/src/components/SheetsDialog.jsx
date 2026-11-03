@@ -1,12 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Ruler, X } from 'lucide-react';
+import { FileText, Ruler, Save, Trash2, X } from 'lucide-react';
 import { SHEET_FORMATS, SHEET_SCALES } from '../lib/techSheet';
+import { DEFAULT_TEMPLATE, FONTS, LINE_WEIGHTS, cleanTemplate, templateOptions } from '../lib/sheetTemplates';
 
-/* Tavole in scala: formato del foglio e scala di stampa, poi PDF (una tavola per piano) o DXF della pianta aperta con cornice e cartiglio. */
-export default function SheetsDialog({ onPdf, onDxf, onClose, busy }) {
+const Seg = ({ label, value, options, onChange }) => (
+  <div className="pf-seg pf-seg-small" role="radiogroup" aria-label={label}>
+    {options.map(([id, text]) => (
+      <button key={String(id)} type="button" role="radio" aria-checked={value === id} className={value === id ? 'is-on' : ''} onClick={() => onChange(id)}>{text}</button>
+    ))}
+  </div>
+);
+
+/*
+ * Tavole in scala: formato, orientamento, scala, cornice, linee, bianco e nero, carattere e cartiglio, poi PDF (una tavola per piano)
+ * o DXF della pianta aperta. Le impostazioni si salvano come modelli (nel progetto e nel browser) e si riprendono con un clic.
+ */
+export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = [], onSaveTemplate, onDeleteTemplate }) {
   const dialogRef = useRef(null);
-  const [format, setFormat] = useState('A3');
-  const [scale, setScale] = useState('auto');
+  const [draft, setDraft] = useState(() => cleanTemplate(templates[0] || DEFAULT_TEMPLATE));
+  const [pickedId, setPickedId] = useState(templates[0]?.id || '');
+  const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
 
   useEffect(() => {
     const el = dialogRef.current;
@@ -16,6 +29,25 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy }) {
     return () => el?.removeEventListener('cancel', onCancel);
   }, [onClose]);
 
+  const pick = (id) => {
+    setPickedId(id);
+    const t = templates.find((x) => x.id === id);
+    setDraft(cleanTemplate(t || DEFAULT_TEMPLATE));
+  };
+  const save = () => {
+    const t = cleanTemplate({ ...draft, id: pickedId && templates.some((x) => x.id === pickedId) && draft.name === templates.find((x) => x.id === pickedId)?.name ? pickedId : undefined });
+    onSaveTemplate?.(t);
+    setPickedId(t.id);
+    setDraft(t);
+  };
+  const text = (key, label, max, ph = '') => (
+    <label className="pf-field-sm">
+      <span>{label}</span>
+      <input type="text" className="pf-input-sm" maxLength={max} value={draft[key]} placeholder={ph} onChange={(e) => set({ [key]: e.target.value })} />
+    </label>
+  );
+  const opts = templateOptions(draft);
+
   return (
     <dialog ref={dialogRef} className="pf-dialog" aria-labelledby="pf-sheets-title">
       <header className="pf-dialog-head">
@@ -23,29 +55,58 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy }) {
         <button type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></button>
       </header>
       <div className="pf-dialog-body">
-        <p className="pf-hint">Pianta quotata, legenda dei locali, serramenti e cartiglio (marchio, committente, progettista, pratica) a una scala vera.</p>
+        <p className="pf-hint">Pianta quotata, legenda dei locali, serramenti e cartiglio a una scala vera. Imposta la grafica della tavola e salvala come modello.</p>
+
         <div className="pf-cloud-block">
-          <h3>Formato del foglio</h3>
-          <div className="pf-seg pf-seg-small" role="radiogroup" aria-label="Formato del foglio">
-            {Object.keys(SHEET_FORMATS).map((id) => (
-              <button key={id} type="button" role="radio" aria-checked={format === id} className={format === id ? 'is-on' : ''} onClick={() => setFormat(id)}>{id}</button>
-            ))}
+          <h3>Modello</h3>
+          <div className="pf-finish-row">
+            <label>
+              <em>Modelli salvati</em>
+              <select className="pf-input-sm" value={pickedId} aria-label="Modelli di tavola salvati" onChange={(e) => pick(e.target.value)}>
+                <option value="">Nuovo (impostazioni di serie)</option>
+                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </label>
+            <button type="button" className="pf-btn-icon is-danger" disabled={!pickedId} title="Elimina il modello" aria-label="Elimina il modello"
+              onClick={() => { onDeleteTemplate?.(pickedId); pick(''); }}><Trash2 size={13} /></button>
           </div>
+          {text('name', 'Nome del modello', 40, 'Es. Studio – esecutivo A3')}
+          <button type="button" className="pf-mini" onClick={save} title="Salva queste impostazioni nel progetto e nel browser"><Save size={13} /> Salva modello</button>
         </div>
+
         <div className="pf-cloud-block">
-          <h3>Scala</h3>
-          <div className="pf-seg pf-seg-small" role="radiogroup" aria-label="Scala di stampa">
-            {['auto', ...SHEET_SCALES.filter((n) => n !== 20 && n !== 500)].map((s) => (
-              <button key={s} type="button" role="radio" aria-checked={scale === s} className={scale === s ? 'is-on' : ''} onClick={() => setScale(s)}>
-                {s === 'auto' ? 'Migliore' : `1:${s}`}
-              </button>
-            ))}
-          </div>
+          <h3>Foglio</h3>
+          <Seg label="Formato del foglio" value={draft.format} options={Object.keys(SHEET_FORMATS).map((id) => [id, id])} onChange={(format) => set({ format })} />
+          <Seg label="Orientamento" value={draft.orientation} options={[['landscape', 'Orizzontale'], ['portrait', 'Verticale']]} onChange={(orientation) => set({ orientation })} />
+          <Seg label="Scala di stampa" value={draft.scale} options={[['auto', 'Migliore'], ...SHEET_SCALES.filter((n) => n !== 20 && n !== 500).map((n) => [n, `1:${n}`])]} onChange={(scale) => set({ scale })} />
           <p className="pf-hint">Se la pianta non entra alla scala scelta si passa alla più piccola che basta, e il cartiglio la riporta.</p>
+          <label className="pf-check"><input type="checkbox" checked={draft.frame} onChange={(e) => set({ frame: e.target.checked })} /><span>Cornice attorno al foglio</span></label>
+          <label className="pf-field-sm">
+            <span>Margine: {draft.margin} mm</span>
+            <input type="range" min={5} max={20} step={1} value={draft.margin} aria-label="Margine del foglio" onChange={(e) => set({ margin: Number(e.target.value) })} />
+          </label>
         </div>
+
+        <div className="pf-cloud-block">
+          <h3>Disegno</h3>
+          <Seg label="Spessore delle linee" value={draft.lines} options={LINE_WEIGHTS.map(([id, label]) => [id, label])} onChange={(lines) => set({ lines })} />
+          <Seg label="Colori" value={draft.mono} options={[[false, 'A colori'], [true, 'Bianco e nero']]} onChange={(mono) => set({ mono })} />
+          <Seg label="Carattere" value={draft.font} options={FONTS} onChange={(font) => set({ font })} />
+        </div>
+
+        <div className="pf-cloud-block">
+          <h3>Cartiglio e testi</h3>
+          {text('studio', 'Studio o marchio', 60, 'Vuoto = quello del progetto')}
+          {text('client', 'Committente', 120)}
+          {text('designer', 'Progettista', 120)}
+          {text('ref', 'N. pratica', 40)}
+          {text('title', 'Titolo della tavola', 60, 'Vuoto = «Piano – pianta quotata»')}
+          {text('note', 'Nota a piè di colonna', 200)}
+        </div>
+
         <div className="pf-security-actions">
-          <button type="button" className="pf-mini is-accent" disabled={busy} onClick={() => onPdf({ format, scale })}><FileText size={13} /> {busy ? 'Preparo…' : 'Scarica PDF (tutti i piani)'}</button>
-          <button type="button" className="pf-mini" disabled={busy} onClick={() => onDxf({ format, scale })} title="Il DXF del piano aperto, con cornice e cartiglio alla scala scelta">
+          <button type="button" className="pf-mini is-accent" disabled={busy} onClick={() => onPdf(opts)}><FileText size={13} /> {busy ? 'Preparo…' : 'Scarica PDF (tutti i piani)'}</button>
+          <button type="button" className="pf-mini" disabled={busy} onClick={() => onDxf(opts)} title="Il DXF del piano aperto, con cornice e cartiglio alla scala scelta">
             DXF con cornice e cartiglio (piano aperto)
           </button>
         </div>

@@ -90,7 +90,7 @@ function opening(a, b, tMid, w, intoPoly) {
  * Muri come polilinee: il contorno di ogni stanza, interrotto dove c'è un'apertura. Su un arco
  * l'apertura sta sulla corda, quindi si toglie anche il tratto di curva che le sta dietro.
  */
-function cutWalls(polys, chords) {
+export function cutWalls(polys, chords) {
   const STEP = 0.02;
   const TOL = ARC_TOL + 0.06;
   const cut = (p) => chords.some(({ start, u, w }) => {

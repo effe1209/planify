@@ -50,6 +50,7 @@ import { buildTimber, rafterTails } from './timber';
 import { stairHoles, stairSteps } from './stairs3d';
 import { buildObject, pillowGeometry, roundedBox } from './furniture3d';
 import { projectStairs } from './stairs';
+import { MATERIALS } from './materials';
 import { kitMaterials, styleKit, texture as kitTexture, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
 
@@ -104,6 +105,36 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   const inside = (px, pz) => rooms.some((r) => (r.poly ? pointInPolygon([px, pz], r.poly)
     : px >= r.x - 0.02 && px <= r.x + r.w + 0.02 && pz >= r.y - 0.02 && pz <= r.y + r.h + 0.02));
 
+  const roomAt = (px, pz) => rooms.find((r) => (r.poly ? pointInPolygon([px, pz], r.poly)
+    : px >= r.x - 0.02 && px <= r.x + r.w + 0.02 && pz >= r.y - 0.02 && pz <= r.y + r.h + 0.02));
+  // finiture scelte a mano per locale (room.look.floor / .wall) e per muro (plan.wallLooks): materiale del catalogo e/o colore
+  const looks = new Map();
+  const lookMat = (kind, l) => {
+    if (!l || (!l.mat && !l.color)) return null;
+    const key = `${kind}|${l.mat || ''}|${l.color || ''}`;
+    if (!looks.has(key)) {
+      let m;
+      if (kind === 'floor') {
+        const spec = MATERIALS.floor.find((x) => x.id === l.mat)?.spec || kit.floor;
+        const a = l.color || spec.a;
+        const map = kitTexture(THREE, spec.kind, a, l.color ? shade(a, -0.07) : spec.b, l.color ? shade(a, -0.3) : spec.joint);
+        m = mat(map ? '#ffffff' : a, { ...(map && { map }), roughness: spec.kind === 'marble' ? 0.3 : 0.7 });
+        m.userData.pbr = spec.kind;
+        m.userData.pbrTint = a;
+      } else {
+        const spec = MATERIALS.walls.find((x) => x.id === l.mat)?.spec || kit.wallIn;
+        const c = l.color || spec.color;
+        const map = kitTexture(THREE, spec.tex, c, l.color ? shade(c, -0.08) : spec.tone);
+        m = mat(map ? '#ffffff' : c, { ...(map && { map }) });
+        m.userData.pbr = spec.tex;
+        m.userData.pbrTint = c;
+      }
+      looks.set(key, m);
+    }
+    return looks.get(key);
+  };
+  const wallLookKey = (a, b) => (a && b ? `${Math.min(a.id, b.id)}-${Math.max(a.id, b.id)}` : null);
+
   // pavimenti dei locali (anche di forma libera)
   for (const r of plan.rooms) {
     const pts = r.poly || [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]];
@@ -129,7 +160,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       fm.userData.pbrTint = fin.color;
       finishFloors.set(finKey, fm);
     }
-    const floorMat = finKey ? finishFloors.get(finKey) : r.kind === 'garden' || r.kind === 'garage' ? mat(color) : r.kind === 'balcony' ? K.deck : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color);
+    const floorMat = lookMat('floor', r.look?.floor) || (finKey ? finishFloors.get(finKey) : r.kind === 'garden' || r.kind === 'garage' ? mat(color) : r.kind === 'balcony' ? K.deck : WOOD_FLOORS.has(r.kind) ? K.floor : TILE_FLOORS.has(r.kind) ? K.wet : mat(color));
     const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.002;
@@ -180,6 +211,15 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     const mats = [K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn, K.wallIn];
     const face = horiz ? (out > 0 ? 4 : 5) : (out > 0 ? 0 : 1);
     if (out) mats[face] = KF.facade;
+    // finiture scelte per un muro o per il locale che sta da quel lato
+    const rLo = horiz ? roomAt(mid, cz - off) : roomAt(cx - off, mid);
+    const rHi = horiz ? roomAt(mid, cz + off) : roomAt(cx + off, mid);
+    const own = plan.wallLooks?.[wallLookKey(rLo, rHi)];
+    for (const [r, f] of [[rHi, horiz ? 4 : 0], [rLo, horiz ? 5 : 1]]) {
+      if (!r || mats[f] === KF.facade) continue;
+      const m = lookMat('wall', own || r.look?.wall);
+      if (m) mats[f] = m;
+    }
     const mesh = box(x0, z0, bw, bd, y0, h, mats);
     if (!mesh) return;
     mesh.userData.layer = 'MURI';
@@ -213,8 +253,13 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
     const mz = plan.mezzanine;
     // esterno = il muro sta sul perimetro (un tramezzo che lo tocca con un'estremità resta interno)
     const ext = horiz ? w.y <= 0.01 || w.y + w.h >= planDims.length - 0.01 : w.x <= 0.01 || w.x + w.w >= planDims.width - 0.01;
-    const wh = mz && !ext && !lowWalls && w.x + w.w / 2 >= mz.x - 0.15 && w.x + w.w / 2 <= mz.x + mz.w + 0.15
-      && w.y + w.h / 2 >= mz.y - 0.15 && w.y + w.h / 2 <= mz.y + mz.h + 0.15 ? mz.elev - mz.slab : wallH;
+    // la parte di muro interno sotto il soppalco arriva al suo solaio; dove il soppalco non c'è il muro sale a tutta altezza
+    const wh = wallH;
+    const lowH = mz ? mz.elev - mz.slab : wallH;
+    const perp = horiz ? w.y + w.h / 2 : w.x + w.w / 2;
+    const alongRange = horiz ? [mz?.x, mz && mz.x + mz.w] : [mz?.y, mz && mz.y + mz.h];
+    const perpRange = horiz ? [mz?.y, mz && mz.y + mz.h] : [mz?.x, mz && mz.x + mz.w];
+    const crossesMezz = !!mz && !ext && !lowWalls && perp >= perpRange[0] - 0.15 && perp <= perpRange[1] + 0.15;
     const a0 = horiz ? w.x : w.y;
     const a1 = horiz ? w.x + w.w : w.y + w.h;
     // una finestra d'angolo buca solo il suo muro: al vertice resta il montante dell'altro muro
@@ -223,25 +268,37 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
       : o.z1 > w.y + 0.01 && o.z0 < w.y + w.h - 0.01 && o.x1 > w.x - 0.01 && o.x0 < w.x + w.w + 0.01))
       .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door, pano: o.pano, sill: o.sill, top: o.top }))
       .sort((p, q) => p.a - q.a);
-    let cur = a0;
     const seg = (a, b, y0, h, m = null) => (m ? (horiz ? box(a, w.y, b - a, w.h, y0, h, m) : box(w.x, a, w.w, b - a, y0, h, m)) : wallPiece(horiz, w, a, b, y0, h));
-    for (const c of cuts) {
-      if (c.a > cur) seg(cur, c.a, 0, wh);
-      if (c.pano) {
-        // vetrata a tutta altezza (fissa o scorrevole): il vetro arriva quasi al pavimento, sopra resta l'architrave
-        if (c.sill > 0.001) seg(c.a, c.b, 0, Math.min(c.sill, wh));
-        seg(c.a + 0.02, c.b - 0.02, c.sill, Math.min(c.top, wh) - c.sill, M.glass);
-        if (wh > c.top) seg(c.a, c.b, c.top, wh - c.top);
-      } else if (c.door) {
-        if (wh > DOOR_H) seg(c.a, c.b, DOOR_H, wh - DOOR_H);
-      } else {
-        seg(c.a, c.b, 0, Math.min(SILL, wh));
-        if (wh > SILL) seg(c.a + 0.02, c.b - 0.02, SILL, Math.min(DOOR_H, wh) - SILL, M.glass);
-        if (wh > DOOR_H) seg(c.a, c.b, DOOR_H, wh - DOOR_H);
-      }
-      cur = Math.max(cur, c.b);
+    // tratti a quota diversa: sotto il soppalco (con un po' di tolleranza agli estremi) e fuori
+    let pieces = [[a0, a1, wh]];
+    if (crossesMezz) {
+      const u0 = Math.max(a0, alongRange[0] - 0.15 <= a0 ? a0 : alongRange[0]);
+      const u1 = Math.min(a1, alongRange[1] + 0.15 >= a1 ? a1 : alongRange[1]);
+      pieces = u1 - u0 > 0.05 ? [[a0, u0, wallH], [u0, u1, lowH], [u1, a1, wallH]].filter(([x, y]) => y - x > 0.01) : pieces;
     }
-    if (cur < a1) seg(cur, a1, 0, wh);
+    for (const [pa, pb, h] of pieces) {
+      const wh2 = h;
+      let cur = pa;
+      for (const c0 of cuts) {
+        if (c0.b <= pa + 0.001 || c0.a >= pb - 0.001) continue;
+        const c = { ...c0, a: Math.max(c0.a, pa), b: Math.min(c0.b, pb) };
+        if (c.a > cur) seg(cur, c.a, 0, wh2);
+        if (c.pano) {
+          // vetrata a tutta altezza (fissa o scorrevole): il vetro arriva quasi al pavimento, sopra resta l'architrave
+          if (c.sill > 0.001) seg(c.a, c.b, 0, Math.min(c.sill, wh2));
+          seg(c.a + 0.02, c.b - 0.02, c.sill, Math.min(c.top, wh2) - c.sill, M.glass);
+          if (wh2 > c.top) seg(c.a, c.b, c.top, wh2 - c.top);
+        } else if (c.door) {
+          if (wh2 > DOOR_H) seg(c.a, c.b, DOOR_H, wh2 - DOOR_H);
+        } else {
+          seg(c.a, c.b, 0, Math.min(SILL, wh2));
+          if (wh2 > SILL) seg(c.a + 0.02, c.b - 0.02, SILL, Math.min(DOOR_H, wh2) - SILL, M.glass);
+          if (wh2 > DOOR_H) seg(c.a, c.b, DOOR_H, wh2 - DOOR_H);
+        }
+        cur = Math.max(cur, c.b);
+      }
+      if (cur < pb) seg(cur, pb, 0, wh2);
+    }
   }
 
   // parapetto di vetro dei balconi: lastre tra i montanti, corrimano in alto

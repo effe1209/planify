@@ -5,6 +5,7 @@
 import { balconyRailings } from '../lib/balcony';
 import { withCornerWindows } from '../lib/cornerWindows';
 import WallEditor from './WallEditor';
+import SketchEditor from './SketchEditor';
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
 import { AJAX_MODELS, DEVICE_STYLE, opening } from '../lib/ajax';
@@ -1682,7 +1683,9 @@ export default function PlanSvg({
               onClick={(e) => e.stopPropagation()} />
           );
         })()}
-        {wallEdit && !thumb && <WallEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />}
+        {wallEdit && !thumb && (wallEdit.sketch
+          ? <SketchEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />
+          : <WallEditor plan={plan} s={s} toMeters={toMeters} edit={wallEdit} onPreview={setPreview} />)}
 
         {electric && <ElectricLayer data={electric} s={s} showLinks={electricLinks && !thumb} />}
         {plumbing && <PlumbingLayer data={plumbing} s={s} generator={generator} showLines={plumbingLines} />}
