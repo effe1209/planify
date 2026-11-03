@@ -30,6 +30,15 @@ const area = (r) => r.area ?? r.w * r.h;
 const perim = (r) => (r.poly ? r.poly.reduce((s, p, i, a) => s + Math.hypot(a[(i + 1) % a.length][0] - p[0], a[(i + 1) % a.length][1] - p[1]), 0)
   : 2 * (r.w + r.h));
 
+/* Pareti di un locale in m²: perimetro per l'altezza, meno porte (2,1 m) e finestre (1,4 m) che vi si aprono. */
+export function roomWallArea(plan, r) {
+  const openings = plan.windows.map((w) => opening(plan, w)).filter((op) => op.room?.id === r.id)
+    .reduce((s, op) => s + op.w * 1.4, 0)
+    + plan.doors.filter((d) => d.kind !== 'gate').map((d) => opening(plan, d)).filter((op) => op.room?.id === r.id)
+      .reduce((s, op) => s + op.w * 2.1, 0);
+  return Math.max(0, perim(r) * H - openings);
+}
+
 /* Quantità di tutto il progetto, prima dei prezzi. */
 export function quantities(project) {
   const q = {};

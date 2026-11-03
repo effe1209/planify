@@ -29,6 +29,7 @@ export function sharePayload(project) {
     ...(project.electric && { electric: project.electric }),
     ...(project.plumbing && { plumbing: project.plumbing }),
     ...(project.estimate && { estimate: project.estimate }),
+    ...(Array.isArray(project.library) && project.library.length && { library: project.library }),
   };
 }
 
@@ -37,7 +38,8 @@ export function projectFromPayload(data, id = 'shared') {
   if (!data || !Array.isArray(data.floors) || !data.floors.length) return null;
   return { id, name: data.name, floors: data.floors, activeFloor: data.activeFloor || data.floors[0].id,
     ...(data.security && { security: data.security }), ...(data.electric && { electric: data.electric }),
-    ...(data.plumbing && { plumbing: data.plumbing }), ...(data.estimate && { estimate: data.estimate }) };
+    ...(data.plumbing && { plumbing: data.plumbing }), ...(data.estimate && { estimate: data.estimate }),
+    ...(Array.isArray(data.library) && data.library.length && { library: data.library }) };
 }
 
 export async function shareUrl(project) {

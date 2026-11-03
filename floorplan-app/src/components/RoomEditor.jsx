@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, X } from 'lucide-react';
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
+import { forUse } from '../lib/materialLibrary';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
 
 /* Pannello di personalizzazione della stanza selezionata: nome, uso, finitura, arredi. */
 const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula']);
 
-export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip, onRemoveItem, onAddItem, onFurnish, busy, onClose, mezz = null }) {
+export default function RoomEditor({ room, furniture, library = [], onChange, onRotate, onFlip, onRemoveItem, onAddItem, onFurnish, busy, onClose, mezz = null }) {
   const [newId, setNewId] = useState('bed_double');
   const groups = [...new Set(FURNITURE.map((f) => f.group))];
 
@@ -49,6 +50,28 @@ export default function RoomEditor({ room, furniture, onChange, onRotate, onFlip
           ))}
         </div>
       </div>
+
+      {library.length > 0 && ['floor', 'wall'].map((use) => {
+        const list = forUse(library, use);
+        const cur = room.finish?.[use];
+        if (!list.length && !cur) return null;
+        return (
+          <label key={use} className="pf-field-sm">
+            <span>{use === 'floor' ? 'Materiale del pavimento' : 'Materiale delle pareti'}</span>
+            <select className="pf-input-sm" value={cur?.id || ''} aria-label={use === 'floor' ? 'Materiale del pavimento' : 'Materiale delle pareti'}
+              onChange={(e) => {
+                const it = list.find((x) => x.id === e.target.value);
+                const finish = { ...(room.finish || {}) };
+                if (it) finish[use] = it; else delete finish[use];
+                onChange({ finish: Object.keys(finish).length ? finish : undefined, ...(use === 'floor' && it?.color && { color: it.color }) });
+              }}>
+              <option value="">Nessuno (come lo stile)</option>
+              {cur && !list.some((x) => x.id === cur.id) && <option value={cur.id}>{cur.name} (non più in libreria)</option>}
+              {list.map((it) => <option key={it.id} value={it.id}>{[it.brand, it.name].filter(Boolean).join(' · ')} · {it.price.toLocaleString('it-IT')} €/{it.unit === 'm2' ? 'm²' : it.unit}</option>)}
+            </select>
+          </label>
+        );
+      })}
 
       </>)}
 
