@@ -27,13 +27,18 @@ export function Grain({ w, h, t, inset = 3 }) {
   );
 }
 
-/* Cuscino: rettangolo morbido con la cucitura. */
+/* Cuscino: forma morbida (angoli ampi, lati appena rigonfi) con la cucitura. */
 export function Cushion({ x, y, w, h, fill, r, seam = true }) {
+  const m = Math.min(w, h);
+  const c = Math.max(r, m * 0.28);
+  const b = Math.min(2.2, m * 0.05);
+  const d = `M ${x + c} ${y} Q ${x + w / 2} ${y - b} ${x + w - c} ${y} Q ${x + w} ${y} ${x + w} ${y + c} Q ${x + w + b} ${y + h / 2} ${x + w} ${y + h - c}`
+    + ` Q ${x + w} ${y + h} ${x + w - c} ${y + h} Q ${x + w / 2} ${y + h + b} ${x + c} ${y + h} Q ${x} ${y + h} ${x} ${y + h - c} Q ${x - b} ${y + h / 2} ${x} ${y + c} Q ${x} ${y} ${x + c} ${y} Z`;
   return (
     <g>
-      <rect x={x} y={y} width={w} height={h} rx={r} fill={fill} stroke={F_SOFT} strokeWidth="0.8" />
-      {seam && <rect x={x + 1.6} y={y + 1.6} width={Math.max(0, w - 3.2)} height={Math.max(0, h - 3.2)} rx={Math.max(0, r - 1)}
-        fill="none" stroke="#fff" strokeOpacity="0.55" strokeWidth="0.6" strokeDasharray="1.4 1.2" />}
+      <path d={d} fill={fill} stroke={F_SOFT} strokeWidth="0.8" strokeLinejoin="round" />
+      {seam && <rect x={x + 2} y={y + 2} width={Math.max(0, w - 4)} height={Math.max(0, h - 4)} rx={Math.max(0, c - 1.5)}
+        fill="none" stroke="#fff" strokeOpacity="0.5" strokeWidth="0.6" strokeDasharray="1.4 1.2" />}
     </g>
   );
 }

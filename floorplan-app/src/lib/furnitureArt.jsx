@@ -8,6 +8,33 @@ import { Arm, Chair, Cushion, F_SOFT, F_STROKE, Feet, Grain, Plant, Throws } fro
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+/* variazione ripetibile per ogni arredo (stessa posizione, stesso risultato), in -1..1 */
+const vary = (item, k) => {
+  const x = Math.sin(((item?.x ?? 0) * 12.9898 + (item?.y ?? 0) * 78.233 + k * 37.719)) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+};
+
+/* Cuscino morbido visto dall'alto: lati leggermente rigonfi e angoli arrotondati, come un cuscino vero (non un rettangolo). */
+const pillowPath = (x, y, w, h) => {
+  const c = Math.min(w, h) * 0.3;
+  const b = Math.min(w, h) * 0.07;
+  return `M ${x + c} ${y} Q ${x + w / 2} ${y - b} ${x + w - c} ${y} Q ${x + w} ${y} ${x + w} ${y + c} Q ${x + w + b} ${y + h / 2} ${x + w} ${y + h - c}`
+    + ` Q ${x + w} ${y + h} ${x + w - c} ${y + h} Q ${x + w / 2} ${y + h + b} ${x + c} ${y + h} Q ${x} ${y + h} ${x} ${y + h - c} Q ${x - b} ${y + h / 2} ${x} ${y + c} Q ${x} ${y} ${x + c} ${y} Z`;
+};
+/* pieghette negli angoli del cuscino */
+const pillowCreases = (x, y, w, h) => {
+  const k = Math.min(w, h) * 0.2;
+  return [[x + k * 0.5, y + k * 0.5, 1, 1], [x + w - k * 0.5, y + k * 0.5, -1, 1], [x + k * 0.5, y + h - k * 0.5, 1, -1], [x + w - k * 0.5, y + h - k * 0.5, -1, -1]]
+    .map(([cx, cy, dx, dy]) => `M ${cx} ${cy} q ${dx * k * 0.5} ${dy * k * 0.15} ${dx * k * 0.9} ${dy * k * 0.6}`).join(' ');
+};
+/* striscia (coperta) con i lati un po' ondulati: x, y = angolo, w, h = misure, `ph` = fase */
+const wavyStrip = (x, y, w, h, ph) => {
+  const n = 14;
+  const left = Array.from({ length: n + 1 }, (_, i) => [x + Math.sin(i * 0.9 + ph) * w * 0.035, y + (h * i) / n]);
+  const right = Array.from({ length: n + 1 }, (_, i) => [x + w + Math.sin(i * 0.8 + ph * 1.7) * w * 0.035, y + h - (h * i) / n]);
+  return `M ${[...left, ...right].map(([px, py]) => `${px.toFixed(1)} ${py.toFixed(1)}`).join(' L ')} Z`;
+};
+
 export const FURNITURE_ART = {
   sofa: (w, h, s, t) => {
     const back = Math.min(h * 0.28, 0.26 * s);
@@ -69,7 +96,7 @@ export const FURNITURE_ART = {
       </g>
     );
   },
-  bed: (w, h, s, t) => {
+  bed: (w, h, s, t, item) => {
     const n = w > 1.3 * s ? 2 : 1;
     const head = t.low ? 0.06 * s : t.tuft ? 0.14 * s : 0.08 * s;
     const plat = t.low ? 0.12 * s : 0;                    // japandi: pedana in legno attorno al materasso
@@ -91,17 +118,23 @@ export const FURNITURE_ART = {
           <circle key={i} cx={4 + i * 9} cy={head / 2} r={0.9} fill={F_STROKE} fillOpacity="0.45" />
         ))}
         <rect x={mx} y={my} width={mw} height={mh} rx={3} fill="#fff" stroke={F_STROKE} strokeWidth="1.1" />
-        {/* cuscini: fila dietro bianca (2-3), davanti due più piccoli verde e sabbia che si sovrappongono */}
-        {Array.from({ length: n2 }, (_, i) => (
-          <g key={i}>
-            <rect x={mx + gap + i * (pw2 + gap)} y={my + 3} width={pw2} height={mh * 0.19} rx={5} fill="#fbfbfd" stroke={F_SOFT} />
-            <line x1={mx + gap + i * (pw2 + gap) + 3} y1={my + 3 + mh * 0.095} x2={mx + gap + i * (pw2 + gap) + pw2 - 3}
-              y2={my + 3 + mh * 0.095} stroke={F_SOFT} strokeWidth="0.5" />
-          </g>
-        ))}
+        {/* cuscini: fila dietro bianca (1-3), forme morbide, ognuno un po' diverso; davanti due più piccoli verde e sabbia */}
+        {Array.from({ length: n2 }, (_, i) => {
+          const px = mx + gap + i * (pw2 + gap) + vary(item, i) * 1.2;
+          const py = my + 3 + vary(item, i + 9) * 1;
+          const ph = mh * 0.19;
+          return (
+            <g key={i} transform={`rotate(${(vary(item, i + 20) * 2.2).toFixed(2)} ${px + pw2 / 2} ${py + ph / 2})`}>
+              <path d={pillowPath(px, py, pw2, ph)} fill="#fbfbfd" stroke={F_SOFT} strokeWidth="0.9" />
+              <path d={pillowCreases(px, py, pw2, ph)} fill="none" stroke={F_SOFT} strokeWidth="0.5" />
+              <path d={`M ${px + pw2 * 0.18} ${py + ph * 0.55} Q ${px + pw2 / 2} ${py + ph * 0.66} ${px + pw2 * 0.82} ${py + ph * 0.55}`} fill="none" stroke={F_SOFT} strokeWidth="0.5" />
+            </g>
+          );
+        })}
         {/* piumone con risvolto del lenzuolo e trapuntatura */}
-        <rect x={mx + 1} y={fold} width={mw - 2} height={my + mh - fold - 1} rx={2} fill={t.duvet} stroke={F_SOFT} />
-        <rect x={mx + 1} y={fold} width={mw - 2} height={mh * 0.06} fill="#fff" stroke={F_SOFT} strokeWidth="0.6" />
+        <rect x={mx + 1} y={fold} width={mw - 2} height={my + mh - fold - 1} rx={Math.min(8, mw * 0.05)} fill={t.duvet} stroke={F_SOFT} />
+        <path d={`M ${mx + 1} ${fold + mh * 0.06} Q ${mx + mw * 0.3} ${fold + mh * 0.075 + vary(item, 41) * 1.5} ${mx + mw * 0.55} ${fold + mh * 0.06} T ${mx + mw - 1} ${fold + mh * 0.06} L ${mx + mw - 1} ${fold} L ${mx + 1} ${fold} Z`}
+          fill="#fff" stroke={F_SOFT} strokeWidth="0.6" />
         <g stroke="#fff" strokeOpacity="0.7" strokeWidth="0.6">
           {Array.from({ length: 4 }, (_, i) => {
             const y = fold + mh * 0.06 + ((my + mh - fold - mh * 0.06) * (i + 1)) / 5;
@@ -111,22 +144,31 @@ export const FURNITURE_ART = {
         {/* cuscini davanti, sopra il piumone */}
         {[[0.2, '#7d8050', -0.05], [0.5, '#e8dcc3', 0.04]].map(([k, c, rot], i) => {
           const cw = Math.min(mw * 0.3, 0.42 * s);
-          const cx = mx + mw * (n2 > 1 ? k + 0.12 : 0.5) - cw / 2;
-          return <rect key={i} x={cx} y={fold - mh * 0.05} width={cw} height={mh * 0.17} rx={4} fill={c} stroke="#5f6240" strokeOpacity="0.45" strokeWidth="0.6"
-            transform={`rotate(${rot * 57} ${cx + cw / 2} ${fold + mh * 0.03})`} />;
+          const cx = mx + mw * (n2 > 1 ? k + 0.12 : 0.5) - cw / 2 + vary(item, 60 + i) * 2;
+          const cy0 = fold - mh * 0.05 + vary(item, 70 + i) * 1.5;
+          const ch = mh * 0.17;
+          return (
+            <g key={i} transform={`rotate(${(rot * 57 + vary(item, 80 + i) * 8).toFixed(1)} ${cx + cw / 2} ${cy0 + ch / 2})`}>
+              <path d={pillowPath(cx, cy0, cw, ch)} fill={c} stroke="#5f6240" strokeOpacity="0.5" strokeWidth="0.7" />
+              <path d={pillowCreases(cx, cy0, cw, ch)} fill="none" stroke="#5f6240" strokeOpacity="0.35" strokeWidth="0.5" />
+            </g>
+          );
         })}
-        {/* coperta verde in lungo sul letto, con le frange ai piedi */}
+        {/* coperta verde drappeggiata in lungo sul letto, con lati ondulati, pieghe e frange irregolari ai piedi */}
         {(() => {
           const sw = Math.min(mw * 0.22, 0.4 * s);
-          const sx = mx + mw / 2 - sw / 2;
+          const sx = mx + mw / 2 - sw / 2 + vary(item, 90) * 1.5;
           const y0 = fold + mh * 0.1;
           const y1 = my + mh - 2;
+          const ph = vary(item, 95) * 3;
+          const folds = [0.22, 0.5, 0.74].map((f, k) => `M ${sx + sw * 0.1} ${y0 + (y1 - y0) * f} q ${sw * 0.4} ${(k % 2 ? -1 : 1) * 2.2} ${sw * 0.8} ${(k % 2 ? 1 : -1) * 0.8}`).join(' ');
           return (
             <g>
-              <rect x={sx} y={y0} width={sw} height={y1 - y0} fill="#7d8050" fillOpacity="0.92" stroke="#5f6240" strokeWidth="0.7" />
-              <line x1={sx + sw * 0.15} y1={y0 + 2} x2={sx + sw * 0.15} y2={y1 - 2} stroke="#d9d6b4" strokeOpacity="0.5" strokeWidth="0.6" />
-              <line x1={sx + sw * 0.85} y1={y0 + 2} x2={sx + sw * 0.85} y2={y1 - 2} stroke="#d9d6b4" strokeOpacity="0.5" strokeWidth="0.6" />
-              <path d={Array.from({ length: 9 }, (_, i) => `M ${sx + (sw * i) / 8} ${y1} v 3`).join(' ')} stroke="#7d8050" strokeWidth="0.8" />
+              <path d={wavyStrip(sx, y0, sw, y1 - y0, ph)} fill="#7d8050" fillOpacity="0.93" stroke="#5f6240" strokeWidth="0.7" strokeLinejoin="round" />
+              <path d={folds} fill="none" stroke="#5f6240" strokeOpacity="0.4" strokeWidth="0.8" />
+              <line x1={sx + sw * 0.15} y1={y0 + 2} x2={sx + sw * 0.15} y2={y1 - 3} stroke="#d9d6b4" strokeOpacity="0.45" strokeWidth="0.6" />
+              <line x1={sx + sw * 0.85} y1={y0 + 2} x2={sx + sw * 0.85} y2={y1 - 3} stroke="#d9d6b4" strokeOpacity="0.45" strokeWidth="0.6" />
+              <path d={Array.from({ length: 9 }, (_, i) => `M ${sx + (sw * i) / 8} ${y1} v ${(2.4 + 1.6 * Math.abs(vary(item, 100 + i))).toFixed(1)}`).join(' ')} stroke="#7d8050" strokeWidth="0.8" />
             </g>
           );
         })()}

@@ -38,6 +38,75 @@ export function materialCategory(key) {
 
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
+/* Numeri pseudo-casuali ripetibili (stesso seme, stessa sequenza): ogni letto ha le sue piccole variazioni, sempre le stesse. */
+export function seeded(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 100000) / 100000; };
+}
+
+/*
+ * Cuscino morbido: un parallelepipedo con spigoli molto arrotondati, schiacciato verso i bordi (al centro è pieno, ai lati sottile)
+ * e con gli angoli pizzicati come un cuscino vero. `pinch` 0 = quasi un blocco, 0.6 = cuscino da letto.
+ */
+const pillowCache = new Map();
+export function pillowGeometry(w, h, d, pinch = 0.5) {
+  const key = [w, h, d, pinch].map((v) => v.toFixed(3)).join('|');
+  if (!pillowCache.has(key)) {
+    const geo = new RoundedBoxGeometry(w, h, d, 5, Math.min(h * 0.49, w * 0.3, d * 0.3));
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const nx = pos.getX(i) / (w / 2);
+      const nz = pos.getZ(i) / (d / 2);
+      const edge = Math.max(Math.abs(nx), Math.abs(nz));
+      const corner = Math.abs(nx * nz);
+      pos.setY(i, pos.getY(i) * (1 - pinch * (0.8 * edge * edge + 0.5 * corner)));
+    }
+    pillowCache.set(key, geo);
+  }
+  return pillowCache.get(key);
+}
+
+/*
+ * Coperta appoggiata sul letto: una striscia larga `width` che segue il piumone per `len` metri e poi cade per `drop` metri sul bordo,
+ * con pieghe morbide e lato un po' ondulato. Il suo sistema: x = larghezza, y = su, z = lungo il letto (0 = inizio, verso i piedi).
+ */
+export function drapedThrow(THREE, width, len, drop, phase = 0) {
+  const nx = 22;
+  const ny = 40;
+  const R = 0.05;   // raccordo sul bordo
+  const total = len + drop;
+  const pos = [];
+  const idx = [];
+  for (let j = 0; j <= ny; j++) {
+    const s = (total * j) / ny;
+    let z = s;
+    let y = 0;
+    if (s > len) {
+      const t = s - len;
+      if (t < (R * Math.PI) / 2) { z = len + R * Math.sin(t / R); y = -R * (1 - Math.cos(t / R)); } else { z = len + R; y = -R - (t - (R * Math.PI) / 2); }
+    }
+    for (let i = 0; i <= nx; i++) {
+      const u0 = i / nx - 0.5;
+      const edge = 1 - Math.pow(Math.abs(u0) * 2, 4);
+      const u = u0 * width * (1 + 0.025 * Math.sin(s * 9 + phase));
+      const fold = 0.009 * Math.sin(u * 26 + s * 5 + phase) * (0.4 + 0.6 * edge) + 0.004 * Math.sin(s * 15 + u * 7 + phase * 2);
+      pos.push(u, y + fold + 0.004 * edge, z);
+    }
+  }
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i;
+      idx.push(a, a + nx + 1, a + 1, a + 1, a + nx + 1, a + nx + 2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 const YAW = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };
 const r2 = (v) => Math.round(v * 100) / 100;
 
@@ -87,6 +156,12 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
     const r = soft ? Math.min(0.04, Math.min(w, h, d) * 0.4) : 0;
     const geo = r > 0.006 ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d);
     return place(new THREE.Mesh(geo, mt), x, y + h / 2, z);
+  };
+  /* cuscino morbido con la base a quota y (vedi pillowGeometry); rot = rotazione attorno a y, tilt = inclinazione in avanti */
+  const soft = (w, h, d, x, y, z, mt, { pinch = 0.5, rot = 0, tilt = 0 } = {}) => {
+    const mesh = place(new THREE.Mesh(pillowGeometry(w, h, d, pinch), mt), x, y + h / 2, z);
+    mesh.rotation.set(tilt, rot, 0, 'YXZ');
+    return mesh;
   };
   /* cilindro verticale con la base a quota y */
   const cy = (rt, rb, h, x, y, z, mt, seg = 24) => place(new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mt), x, y + h / 2, z);
@@ -142,27 +217,34 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       bx(W, low ? 0.2 : 0.22, D - 0.04, 0, low ? 0.06 : 0.12, 0.02, wood);
       bx(W - 0.06, 0.2, D - 0.12, 0, baseTop, 0.02, white);
       const len = (D - 0.12) * 0.64;
-      bx(W + 0.02, 0.09, len, 0, baseTop + 0.15, D / 2 - 0.06 - len / 2, M.duvet);
+      const rnd = seeded(`${it.x}|${it.y}|${W}|${D}`);   // piccole variazioni, diverse per ogni letto e sempre le stesse
+      const jit = (a) => (rnd() - 0.5) * 2 * a;
+      // piumone: lastra morbida con gli angoli smussati, e il lembo che scende davanti
+      soft(W + 0.02, 0.1, len, 0, baseTop + 0.145, D / 2 - 0.06 - len / 2, M.duvet, { pinch: 0.18 });
       bx(W + 0.02, 0.22, 0.05, 0, baseTop - 0.05, D / 2 - 0.08, M.duvet);   // lembo davanti
       const pillows = W > 1.7 ? 3 : W > 1.2 ? 2 : 1;
       for (let i = 0; i < pillows; i++) {
         const x = pillows === 1 ? 0 : (i - (pillows - 1) / 2) * ((W - 0.1) / pillows);
-        bx(Math.min(0.55, (W - 0.1) / pillows - 0.06), 0.14, 0.36, x, baseTop + 0.2, -D / 2 + 0.3, white);
+        soft(Math.min(0.58, (W - 0.1) / pillows - 0.04), 0.17, 0.4, x + jit(0.02), baseTop + 0.2, -D / 2 + 0.3 + jit(0.02), white, { pinch: 0.62, rot: jit(0.1), tilt: -0.2 + jit(0.05) });
       }
-      // cuscini davanti (verde e sabbia, appoggiati) e coperta verde in lungo con le frange ai piedi
+      // cuscini davanti (verde e sabbia, appoggiati, un po' storti) e coperta verde drappeggiata con le frange ai piedi
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
       const sand = m('sand', '#e8dcc3', { roughness: 0.95 });
-      const front = [[-0.22, olive, 0.12], [0.2, sand, -0.1]];
+      const front = [[-0.22, olive, 0.18], [0.2, sand, -0.15]];
       for (const [fx, mt, rot] of front) {
-        const c = bx(Math.min(0.42, W * 0.3), 0.12, 0.28, fx * Math.min(W, 1.8) * 0.9, baseTop + 0.22, -D / 2 + 0.58, mt);
-        c.rotation.y = rot;
-        c.rotation.x = -0.25;
+        soft(Math.min(0.44, W * 0.3), 0.13, 0.3, fx * Math.min(W, 1.8) * 0.9 + jit(0.03), baseTop + 0.235, -D / 2 + 0.6 + jit(0.03), mt, { pinch: 0.6, rot: rot + jit(0.12), tilt: -0.28 + jit(0.06) });
       }
       const tw = Math.min(0.4, W * 0.24);
-      const tz0 = -D / 2 + 0.75;
-      const tz1 = D / 2 - 0.02;
-      bx(tw, 0.02, tz1 - tz0, 0, baseTop + 0.235, (tz0 + tz1) / 2, olive);
-      for (let k = 0; k < 9; k++) bx(0.012, 0.012, 0.06, -tw / 2 + (tw * (k + 0.5)) / 9, baseTop + 0.2, tz1 + 0.02, olive);
+      const tz0 = -D / 2 + 0.78;
+      const throwLen = D / 2 - 0.06 - tz0;
+      const drop = 0.34;
+      const olive2 = m('throw', '#7d8050', { roughness: 1, side: THREE.DoubleSide });
+      const cloth = place(new THREE.Mesh(drapedThrow(THREE, tw, throwLen, drop, jit(3)), olive2), jit(0.04), baseTop + 0.252, tz0);
+      cloth.rotation.y = jit(0.05);
+      for (let k = 0; k < 9; k++) {   // frange sul bordo basso della coperta
+        const fh = 0.05 + rnd() * 0.025;
+        bx(0.012, fh, 0.008, -tw / 2 + (tw * (k + 0.5)) / 9 + jit(0.004), baseTop + 0.252 - drop - 0.05 - fh + 0.04, tz0 + throwLen + 0.05 + 0.012, olive);
+      }
       const hz = -D / 2;
       if (style.tuft) {
         // testiera imbottita e capitonné con bottoni
@@ -259,9 +341,9 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         boucleMap.colorSpace = THREE.SRGBColorSpace;
       }
       const boucle = m('boucle', it.color || '#f1ead9', { roughness: 1, side: THREE.DoubleSide, ...(boucleMap && { map: boucleMap }) });
-      const soft = (geo, x, y, z) => place(new THREE.Mesh(geo, boucle), x, y, z);
-      soft(new RoundedBoxGeometry(W, 0.16, D * 0.96, 6, 0.3), 0, 0.12, 0);                // base
-      soft(new RoundedBoxGeometry(W - 0.12, 0.17, D * 0.7, 6, 0.26), 0, 0.3, D * 0.1);     // seduta
+      const boucleMesh = (geo, x, y, z) => place(new THREE.Mesh(geo, boucle), x, y, z);
+      boucleMesh(new RoundedBoxGeometry(W, 0.16, D * 0.96, 6, 0.3), 0, 0.12, 0);                // base
+      boucleMesh(new RoundedBoxGeometry(W - 0.12, 0.17, D * 0.7, 6, 0.26), 0, 0.3, D * 0.1);     // seduta
       const wrap = new THREE.Group();
       wrap.scale.z = D / W;
       for (const [y, tube] of [[0.4, 0.11], [0.53, 0.1]]) {
@@ -278,7 +360,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       g.add(wrap);
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
-      for (const sx of [-1, 1]) cy(0.13, 0.13, 0.08, sx * W * 0.27, 0.43, -D * 0.12, olive, 24).rotation.x = 0.35;
+      for (const sx of [-1, 1]) soft(0.34, 0.12, 0.34, sx * W * 0.27, 0.42, -D * 0.12, olive, { pinch: 0.58, rot: sx * 0.2, tilt: -0.95 });
       const throwM = bx(0.3, 0.035, 0.5, W / 2 - 0.12, 0.62, -D * 0.08, olive);
       throwM.rotation.z = -0.25;
       break;
@@ -306,7 +388,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       // cuscini tondi oliva ai lati e coperta verde sul bracciolo
       const olive = m('olive', '#7d8050', { roughness: 0.95 });
-      for (const sx of [-1, 1]) cy(0.13, 0.13, 0.08, sx * W * 0.3, 0.42, zOf(0.5 + sx * 0.3) + 0.3, olive, 24).rotation.x = 0.35;
+      for (const sx of [-1, 1]) soft(0.34, 0.12, 0.34, sx * W * 0.3, 0.42, zOf(0.5 + sx * 0.3) + 0.3, olive, { pinch: 0.58, rot: sx * 0.2, tilt: -0.95 });
       bx(0.22, 0.04, 0.5, W / 2 - 0.1, 0.62, zOf(0.97) + 0.3, olive);
       break;
     }
@@ -641,9 +723,8 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const sw = (W - 2 * arm) / n;
       for (let i = 0; i < n; i++) {
         const x = -W / 2 + arm + sw * (i + 0.5);
-        bx(sw - 0.012, 0.15, mainD - backT - 0.02, x, seatY, zb + backT + (mainD - backT) / 2, M.fabric);
-        const bk = bx(sw - 0.012, lowSofa ? 0.32 : 0.42, backT - 0.04, x, seatY + 0.1, zb + backT / 2 + 0.02, M.fabric);
-        bk.rotation.x = -0.1;
+        soft(sw - 0.012, 0.15, mainD - backT - 0.02, x, seatY, zb + backT + (mainD - backT) / 2, M.fabric, { pinch: 0.3 });
+        soft(sw - 0.012, lowSofa ? 0.32 : 0.42, backT - 0.04, x, seatY + 0.1, zb + backT / 2 + 0.02, M.fabric, { pinch: 0.3, tilt: -0.1 });
         if (style.tuft) for (const dx of [-0.2, 0, 0.2].filter((v) => Math.abs(v) < sw / 2 - 0.05)) ball(0.013, x + dx, seatY + 0.34, zb + backT - 0.015, metalMat);
       }
       const armH = lowSofa ? 0.42 : 0.6;
@@ -674,7 +755,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       const pil = m('pillow', theme.accent || '#c9b79c');
       if (it.type !== 'armchair') {
-        for (const sx of [-1, 1]) bx(0.34, 0.34, 0.1, sx * (W / 2 - arm - 0.28), seatY + 0.16, zb + backT + 0.1, pil).rotation.y = sx * 0.3;
+        for (const sx of [-1, 1]) soft(0.38, 0.13, 0.36, sx * (W / 2 - arm - 0.28), seatY + 0.16, zb + backT + 0.12, pil, { pinch: 0.58, rot: sx * 0.3, tilt: -1.15 });
       }
       break;
     }
