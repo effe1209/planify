@@ -19,7 +19,8 @@ const SLAB_T = 0.3;   // solaio tra un piano e l'altro
 /* Altezza (m) e materiale di ogni arredo; `lift` = quota da terra (TV appesa, pensili…). */
 const SHAPES = {
   sofa: [0.8, 'fabric'], sofa_corner: [0.8, 'fabric'], armchair: [0.8, 'fabric'], bed: [0.55, 'duvet'],
-  nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
+  nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], wardrobe_corner: [2.2, 'cabinet'], wardrobe_open: [2.1, 'cabinet'],
+  sofa_round: [0.8, 'fabric'], sofa_curved: [0.8, 'fabric'], chair_design: [0.82, 'wood'], chair_outdoor: [0.85, 'wood'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
   kitchen_peninsula: [0.9, 'counter'], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
   shoe_cabinet: [1.0, 'cabinet'], console: [0.8, 'wood'], floor_lamp: [1.6, 'lamp'], plant: [1.0, 'plant'],

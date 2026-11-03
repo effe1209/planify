@@ -144,6 +144,23 @@ def test_walls_only_as_fill_glazed_facade_and_corner_door():
     assert any("nome dedotto dagli arredi" in n for n in plan["notes"])  # wc e bidet dicono che è il bagno
 
 
+def test_balcony_gets_outdoor_furniture_and_closets_are_open():
+    """Il balcone si arreda con un tavolino tondo, due sedie da esterno e una pianta; la cabina armadio ha armadi aperti a vista."""
+    plan = planner.import_dxf_data(open(os.path.join(HERE, "monolocale_campito.dxf")).read(), furnished=True)
+    balcony = next(r for r in plan["rooms"] if r["kind"] == "balcony")
+    types = sorted(f["type"] for f in plan["furniture"] if f["room"] == balcony["id"])
+    assert types == ["chair_outdoor", "chair_outdoor", "plant", "table_round"], types
+    for f in plan["furniture"]:
+        if f["room"] == balcony["id"]:
+            assert balcony["x"] - 0.01 <= f["x"] and f["x"] + f["w"] <= balcony["x"] + balcony["w"] + 0.01, f
+            assert balcony["y"] - 0.01 <= f["y"] and f["y"] + f["h"] <= balcony["y"] + balcony["h"] + 0.01, f
+    lay = planner.Layout(4.0, 3.0)
+    closet = lay.add_room("Cabina armadio", "closet", 0, 0, 4.0, 3.0)
+    lay.add_entrance(closet.id, "S", 0.8, 0.5)
+    planner.furnish(lay)
+    assert {i.type for i in lay.items} == {"wardrobe_open"}
+
+
 def test_drawing_without_walls_is_refused_not_invented():
     """Mai una pianta di esempio: un DXF senza muri né locali dà un errore chiaro con i layer trovati."""
     dxf = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nQuote\n10\n0\n20\n0\n11\n5\n21\n0\n0\nENDSEC\n0\nEOF\n"

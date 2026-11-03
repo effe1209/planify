@@ -1517,12 +1517,37 @@ def furnish_service(P: Placer, room: Room):
         for side in sides:
             span = inn.w if side in "NS" else inn.h
             if span >= 0.9:
-                P.place_wall(room, "wardrobe", snap(min(span - 0.05, 2.4) - 0.024), 0.55, side, gap=0.0, front=0.6)
+                P.place_wall(room, "wardrobe_open", snap(min(span - 0.05, 2.4) - 0.024), 0.55, side, gap=0.0, front=0.6)
         if not P.placed[room.id]:
-            P.place_wall(room, "wardrobe", snap(min(max(inn.w, inn.h) - 0.05, 2.0) - 0.024), 0.5, "NSEW", gap=0.0)
+            P.place_wall(room, "wardrobe_open", snap(min(max(inn.w, inn.h) - 0.05, 2.0) - 0.024), 0.5, "NSEW", gap=0.0)
     elif room.kind == "entry":
         # scarpiera bassa con lo specchio sopra (lo specchio lo disegna il frontend)
         P.place_wall(room, "shoe_cabinet", 1.0, 0.35, "NSEW", gap=0.05, zone_gap=0.3, front=0.9)
+
+
+def furnish_balcony(P: Placer, room: Room):
+    """Balcone: un tavolino tondo con due sedie da esterno di design, una pianta in un angolo se resta posto."""
+    inn = P.inner(room)
+    if inn.w < 1.2 or inn.h < 0.9:
+        return
+    tw = 0.7 if inn.h >= 1.3 else 0.6
+    along_x = inn.w >= inn.h
+    cx, cy = inn.cx, inn.cy
+    table = Rect(snap(cx - tw / 2), snap(cy - tw / 2), tw, tw)
+    P._put(room, "table_round", table, 0.0, None, "S")
+    chair = 0.55
+    if along_x:
+        # sedie ai due lati del tavolino, rivolte verso di lui
+        for dx, face in ((-(tw / 2 + chair + 0.05), "E"), (tw / 2 + 0.05, "W")):
+            r = Rect(snap(cx + dx), snap(cy - chair / 2), chair, chair)
+            if inn.x - EPS <= r.x and r.x2 <= inn.x2 + EPS and inn.y - EPS <= r.y and r.y2 <= inn.y2 + EPS:
+                P._put(room, "chair_outdoor", r, 0.0, None, face)
+    else:
+        for dy, face in ((-(tw / 2 + chair + 0.05), "S"), (tw / 2 + 0.05, "N")):
+            r = Rect(snap(cx - chair / 2), snap(cy + dy), chair, chair)
+            if inn.x - EPS <= r.x and r.x2 <= inn.x2 + EPS and inn.y - EPS <= r.y and r.y2 <= inn.y2 + EPS:
+                P._put(room, "chair_outdoor", r, 0.0, None, face)
+    P.place_free(room, "plant", 0.45, 0.45, near=(inn.x2 - 0.3, inn.y + 0.3), gap=0.1, step=0.1)
 
 
 PATH_KINDS = ("living", "living_kitchen", "zone_day", "dining", "kitchen", "bed", "study")
@@ -1635,6 +1660,7 @@ def furnish(lay: Layout, only: Optional[set] = None, access: bool = True):
         elif k == "laundry":        furnish_laundry(P, r)
         elif k == "garage" and r.name: furnish_garage(P, r)   # i pezzi di box attorno alla scala restano liberi
         elif k == "garden":         furnish_garden(P, r)
+        elif k == "balcony":        furnish_balcony(P, r)
 
     for r in lay.rooms:
         if only is not None and r.id not in only:

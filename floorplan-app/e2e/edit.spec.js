@@ -1007,3 +1007,28 @@ test('una finestra diventa vetrata panoramica dal pannello di modifica e in 3D i
   expect(await tall()).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
+
+test('armadi ad angolo e aperti, divani tondo e ad arco e sedie di design si aggiungono dal catalogo, in pianta e in 3D', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('radio', { name: 'Open space' }).click();
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 30_000 });
+  await page.locator('.pf-sheet svg [class~="pf-hit"]').first().click({ force: true });
+  const room = page.locator('.pf-customizer');
+  const labels = ['Armadio ad angolo', 'Armadio aperto a vista 150', 'Armadio aperto a vista 100', 'Divano tondo piccolo', 'Divano ad arco piccolo',
+    'Sedia di design (interno)', 'Sedia di design da esterno'];
+  for (const label of labels) {
+    await room.locator('.pf-add-furn select').selectOption({ label });
+    await room.getByRole('button', { name: /Aggiungi/ }).click();
+  }
+  for (const word of ['Armadio ad angolo', 'Armadio aperto', 'Divano tondo', 'Divano ad arco', 'Sedia di design']) {
+    await expect(room.locator('.pf-furn-row', { hasText: word }).first()).toBeVisible();
+  }
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const names = await page.evaluate(() => { const n = new Set(); window.__planify3d.model.traverse((o) => { if (o.userData?.furniture) n.add(o.userData.furniture.type); }); return [...n]; });
+  for (const t of ['wardrobe_corner', 'wardrobe_open', 'sofa_round', 'sofa_curved', 'chair_design', 'chair_outdoor']) expect(names).toContain(t);
+  expect(errors).toEqual([]);
+});

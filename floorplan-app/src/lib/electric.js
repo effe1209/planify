@@ -87,7 +87,7 @@ const COMMAND = new Set(['switch', 'switch_2way', 'switch_inter', 'button']);
 const LIGHTS = new Set(['light', 'light_wall', 'fan']);
 const SOCKETS = new Set(['socket', 'socket_ip', 'dedicated']);
 // arredi davanti ai quali una presa «libera» non serve (o non è ammessa, vicino all'acqua)
-const BLOCKING = new Set(['wardrobe', 'shelving', 'shelving_heavy', 'kitchen_counter', 'bathtub', 'shower',
+const BLOCKING = new Set(['wardrobe', 'wardrobe_corner', 'wardrobe_open', 'shelving', 'shelving_heavy', 'kitchen_counter', 'bathtub', 'shower',
   'shower_walkin', 'shower_round', 'toilet', 'bidet', 'washer', 'dryer', 'utility_sink', 'bed', 'sofa',
   'sofa_corner', 'car', 'workbench', 'minibar', 'bookcase', 'sideboard', 'dresser', 'shoe_cabinet']);
 const WATER = new Set(['bathtub', 'shower', 'shower_walkin', 'shower_round']);

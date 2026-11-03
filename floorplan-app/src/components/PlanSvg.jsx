@@ -525,6 +525,99 @@ const BASE_FURNITURE = {
       </>
     );
   },
+  /* armadio ad angolo: due bracci a L (schiena in alto, braccio laterale a sinistra), ante e taglio obliquo nell'angolo */
+  wardrobe_corner: (w, h, s, t) => {
+    const d = Math.min(0.6 * s, Math.min(w, h) * 0.45);
+    const nTop = Math.max(2, Math.round((w - d) / 36));
+    const nSide = Math.max(1, Math.round((h - d) / 36));
+    return (
+      <>
+        <path d={`M0 0 H${w} V${d} H${d} V${h} H0 Z`} fill={t.cabinet} stroke={F_STROKE} strokeWidth="1.1" strokeLinejoin="round" />
+        {Array.from({ length: nTop - 1 }, (_, i) => {
+          const x = d + ((w - d) / nTop) * (i + 1);
+          return <line key={`t${i}`} x1={x} y1={0} x2={x} y2={d} stroke={F_SOFT} />;
+        })}
+        {Array.from({ length: nSide - 1 }, (_, i) => {
+          const y = d + ((h - d) / nSide) * (i + 1);
+          return <line key={`s${i}`} x1={0} y1={y} x2={d} y2={y} stroke={F_SOFT} />;
+        })}
+        <line x1={0} y1={0} x2={d} y2={d} stroke={F_SOFT} opacity="0.8" />
+      </>
+    );
+  },
+  /* armadio aperto a vista: montanti, ripiani e capi appesi all'asta */
+  wardrobe_open: (w, h, s) => {
+    const n = Math.max(2, Math.round(w / (0.5 * s)));
+    const cloth = ['#cfd6df', '#e8ddd0', '#8f9eb2', '#c9b8a6', '#b5bfa8', '#9a8f86'];
+    const hang = Math.max(6, Math.round(w / 5));
+    return (
+      <>
+        <rect width={w} height={h} fill="#f5f1ea" stroke={F_STROKE} strokeWidth="1.1" />
+        {Array.from({ length: n + 1 }, (_, i) => <rect key={`u${i}`} x={(w - 2) * (i / n)} y={0} width={2} height={h} fill={F_STROKE} fillOpacity="0.55" />)}
+        <line x1={0} y1={h * 0.5} x2={w} y2={h * 0.5} stroke={F_STROKE} strokeWidth="1.4" />
+        {Array.from({ length: hang }, (_, i) => (
+          <rect key={`c${i}`} x={3 + ((w - 8) / hang) * i} y={h * 0.5 - h * 0.34} width={Math.max(2, (w - 8) / hang - 1)} height={h * 0.68} rx={1}
+            fill={cloth[(i * 7 + 3) % cloth.length]} fillOpacity="0.85" />
+        ))}
+        <line x1={0} y1={h - 1.5} x2={w} y2={h - 1.5} stroke={F_STROKE} strokeWidth="1.2" />
+      </>
+    );
+  },
+  /* divano tondo: seduta circolare con schienale ad arco sul lato del muro */
+  sofa_round: (w, h, s, t) => {
+    const r = Math.min(w, h) / 2;
+    const cx = w / 2;
+    const cy = h / 2;
+    return (
+      <>
+        <circle cx={cx} cy={cy} r={r} fill={t.fabricArm} stroke={F_STROKE} strokeWidth="1.2" />
+        <circle cx={cx} cy={cy + r * 0.08} r={r * 0.74} fill={t.fabricSoft} stroke={F_STROKE} strokeWidth="0.8" />
+        {[-1, 0, 1].map((k) => (
+          <line key={k} x1={cx} y1={cy + r * 0.08} x2={cx + Math.sin((k * Math.PI) / 3) * r * 0.74} y2={cy + r * 0.08 + Math.cos((k * Math.PI) / 3) * r * 0.74} stroke={F_SOFT} />
+        ))}
+        <path d={`M ${cx - r * 0.86} ${cy - r * 0.2} A ${r * 0.9} ${r * 0.9} 0 0 1 ${cx + r * 0.86} ${cy - r * 0.2}`} fill="none" stroke={F_STROKE} strokeWidth="1.6" opacity="0.5" />
+      </>
+    );
+  },
+  /* divano ad arco (mezzaluna): fascia curva con la concavità verso il davanti */
+  sofa_curved: (w, h, s, t) => {
+    const b = h * 0.45;                    // freccia dell'arco
+    const depth = h - b;
+    const N = 18;
+    const back = Array.from({ length: N + 1 }, (_, i) => [(w * i) / N, b * (2 * (i / N) - 1) ** 2]);
+    const front = back.map(([x, y]) => [x, y + depth]);
+    const pts = [...back, ...front.reverse()].map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+    const seam = [1, 2].map((k) => {
+      const tt = k / 3;
+      const y0 = b * (2 * tt - 1) ** 2;
+      return [w * tt, y0, w * tt, y0 + depth];
+    });
+    return (
+      <>
+        <polygon points={pts} fill={t.fabric} stroke={F_STROKE} strokeWidth="1.2" strokeLinejoin="round" />
+        <polygon points={[...back.map(([x, y]) => [x, y + depth * 0.32]), ...front.map(([x, y]) => [x, y - 2]).reverse()].map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')}
+          fill={t.fabricSoft} stroke="none" opacity="0.9" />
+        {seam.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={F_SOFT} />)}
+      </>
+    );
+  },
+  /* sedia di design da interno: guscio con schienale curvo e gambe sottili */
+  chair_design: (w, h, s, t) => (
+    <>
+      <rect x={w * 0.08} y={h * 0.08} width={w * 0.84} height={h * 0.84} rx={Math.min(w, h) * 0.3} fill={t.chair} stroke={F_STROKE} strokeWidth="1" />
+      <path d={`M ${w * 0.12} ${h * 0.3} Q ${w / 2} ${-h * 0.08} ${w * 0.88} ${h * 0.3}`} fill="none" stroke={F_STROKE} strokeWidth="2.4" strokeLinecap="round" opacity="0.7" />
+      {[[0.18, 0.18], [0.82, 0.18], [0.2, 0.84], [0.8, 0.84]].map(([x, y]) => <circle key={`${x}${y}`} cx={w * x} cy={h * y} r={1.5} fill={t.woodLine} />)}
+    </>
+  ),
+  /* sedia da esterno di design: seduta intrecciata, schienale ad arco, gambe in metallo */
+  chair_outdoor: (w, h) => (
+    <>
+      <rect x={w * 0.1} y={h * 0.14} width={w * 0.8} height={h * 0.76} rx={Math.min(w, h) * 0.38} fill="#d2b48a" stroke="#8a6a43" strokeWidth="1" />
+      {[0.3, 0.45, 0.6, 0.75].map((y) => <line key={y} x1={w * 0.2} y1={h * y} x2={w * 0.8} y2={h * y} stroke="#8a6a43" strokeOpacity="0.45" />)}
+      <path d={`M ${w * 0.1} ${h * 0.4} A ${w * 0.4} ${h * 0.4} 0 0 1 ${w * 0.9} ${h * 0.4}`} fill="none" stroke="#6b4f2d" strokeWidth="2.6" strokeLinecap="round" />
+      {[[0.18, 0.22], [0.82, 0.22], [0.2, 0.86], [0.8, 0.86]].map(([x, y]) => <circle key={`${x}${y}`} cx={w * x} cy={h * y} r={1.6} fill="#3a3f46" />)}
+    </>
+  ),
   wardrobe: (w, h, s, t) => {
     const n = Math.max(2, Math.round(w / 38));
     return (
