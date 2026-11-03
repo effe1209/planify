@@ -486,7 +486,7 @@ def _cross_face(cross, c, t, end, sign) -> Optional[float]:
     return best
 
 
-def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool):
+def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool, info: Optional[dict] = None):
     """('door', lato dell'anta ±1) | ('window', 0) | ('passage', 0)."""
     c, g0, g1, t = gap
     w = g1 - g0
@@ -510,6 +510,8 @@ def _classify(gap, orient, arcs, boxes, wsegs, k, exterior: bool):
                 continue
         mid = math.radians((a0 + ((a1 - a0) % 360) / 2))
         my = (cy + r * math.sin(mid)) if orient == "h" else (cx + r * math.cos(mid))
+        if info is not None:
+            info["arc"] = True   # c'è l'anta ad arco: porta a battente
         return "door", (1 if my > c else -1)
     for x0, y0, x1, y1, role in boxes:
         x0, y0, x1, y1 = x0 * k, y0 * k, x1 * k, y1 * k
@@ -1671,7 +1673,8 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
         if dup(orient, line, start, start + (g1 - g0)):
             continue
         exterior = ra is None or rb is None
-        kind, side = _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, exterior)
+        info: dict = {}
+        kind, side = _classify((c, g0, g1, t), orient, arcs, boxes, segs, k, exterior, info)
         line = edge_line(orient, line)
         w = round(g1 - g0, 3)
         start = round(start, 3)
@@ -1699,7 +1702,10 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
                 into = rb.id if side > 0 else ra.id
             if kind == "passage":
                 into = rb.id
-        lay.doors.append(Opening(orient, line, start, w, a_id, b_id, into))
+        # porta larga, senza anta ad arco, disegnata come vetro: vetrata scorrevole
+        stype = "sliding" if kind == "door" and w >= 1.4 and not info.get("arc") and ra is not None and rb is not None \
+            and any(q.kind == "balcony" for q in (ra, rb)) else ""
+        lay.doors.append(Opening(orient, line, start, w, a_id, b_id, into, "", stype))
         if kind == "door":
             n_doors += 1
         else:
@@ -1707,6 +1713,12 @@ def import_real_dxf(text: str, Layout, Opening, snap, scan: bool = False, layer_
 
     if not lay.rooms:
         return None
+    # vetrata panoramica: finestra larga (da 2 m) o attaccata a una vetrata scorrevole sullo stesso muro
+    for wop in lay.windows:
+        touches = any(d.type == "sliding" and d.orient == wop.orient and abs(d.line - wop.line) < 0.25
+                      and (abs(d.start - (wop.start + wop.w)) < 0.2 or abs(wop.start - (d.start + d.w)) < 0.2) for d in lay.doors)
+        if wop.w >= 2.0 or touches:
+            wop.type = "panoramic"
     # nessun ingresso disegnato: tra i varchi verso l'esterno senza simbolo, quello largo come una porta (e vicino all'ingresso,
     # al disimpegno o al soggiorno) è la porta di casa
     if guessed_windows and not any(d.room_b is None for d in lay.doors):

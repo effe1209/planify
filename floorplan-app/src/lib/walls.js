@@ -8,6 +8,7 @@
  * spazio per lo stesso tratto, altrimenti si sovrapporrebbero a un terzo locale).
  * Tutte le funzioni sono pure: prendono una pianta e ne danno una nuova (o un errore leggibile).
  */
+import { PANORAMIC_MAX, isPanoramic } from './openings';
 
 export const WALL = 0.2;          // spessore dei muri del motore
 export const SNAP = 0.05;         // passo di aggancio (m)
@@ -485,11 +486,38 @@ export function resizeOpening(plan, kind, index, width) {
   const run = runOf(plan, o);
   if (!run) return plan;
   const { start } = openingLine(o, W, L);
-  const w = Math.max(0.6, Math.min(snap(width), run.hi - run.lo - 2 * OPEN_MARGIN, kind === 'door' ? 2.4 : 4));
+  const w = Math.max(0.6, Math.min(snap(width), run.hi - run.lo - 2 * OPEN_MARGIN, isPanoramic(o) ? PANORAMIC_MAX : kind === 'door' ? 2.4 : 4));
   const resized = { ...o, w: round3(w) };
   const apply = (l) => l.map((x, i) => (i === index ? resized : x));
   const next = kind === 'door' ? { ...plan, doors: apply(plan.doors) } : { ...plan, windows: apply(plan.windows) };
   return moveOpening(next, kind, index, start + o.w / 2 - w / 2);
+}
+
+/*
+ * Cambia il tipo di un'apertura: 'window' (finestra), 'panoramic' (vetrata panoramica fissa), 'sliding' (vetrata scorrevole, una porta),
+ * 'door' (porta a battente). Passando da finestra a porta (o al contrario) l'apertura cambia elenco e resta nello stesso posto.
+ * Ritorna { plan, selected: { kind, index } }.
+ */
+export function setOpeningType(plan, kind, index, type) {
+  const o = (kind === 'door' ? plan.doors : plan.windows)[index];
+  if (!o) return { plan, selected: { kind, index } };
+  const toKind = type === 'sliding' || type === 'door' ? 'door' : 'window';
+  const { type: _t, openDir: _od, entrance: _en, ...rest } = o;
+  const typed = type === 'panoramic' || type === 'sliding' ? { type } : {};
+  if (toKind === kind) {
+    const next = kind === 'door'
+      ? { ...rest, ...typed, openDir: o.openDir, entrance: type === 'sliding' ? false : o.entrance }
+      : { ...rest, ...typed };
+    const key = kind === 'door' ? 'doors' : 'windows';
+    return { plan: { ...plan, [key]: plan[key].map((x, i) => (i === index ? next : x)) }, selected: { kind, index } };
+  }
+  const key = kind === 'door' ? 'doors' : 'windows';
+  const otherKey = toKind === 'door' ? 'doors' : 'windows';
+  const { kind: _dk, ...clean } = rest;
+  const moved = toKind === 'door' ? { ...clean, ...typed, openDir: 1, entrance: false } : { ...clean, ...typed };
+  const next = { ...plan, [key]: plan[key].filter((_, i) => i !== index), [otherKey]: [...plan[otherKey], moved] };
+  next.stats = { ...(plan.stats || {}), doors: next.doors.length, windows: next.windows.length };
+  return { plan: next, selected: { kind: toKind, index: next[otherKey].length - 1 } };
 }
 
 /* Verso di apertura della porta (verso l'altro locale). */
@@ -508,17 +536,21 @@ export function removeOpening(plan, kind, index) {
  * Aggiunge una porta o una finestra sul tratto `run` (da wallRuns) vicino a `at` (m lungo il muro).
  * Finestra: solo sui muri esterni. Porta: tra due locali (si apre verso quello più vicino al centro) o ingresso sul perimetro.
  */
-export function addOpening(plan, kind, run, at) {
+export function addOpening(plan, kind, run, at, type = '') {
   const { width: W, length: L } = plan.dimensions;
-  if (kind === 'window' && !run.exterior) return { error: 'Le finestre vanno sui muri esterni' };
+  // il balcone è fuori: una finestra o una vetrata verso di lui vale come un muro esterno
+  const toBalcony = [run.a, run.b].some((id) => plan.rooms.find((r) => r.id === id)?.kind === 'balcony');
+  if (kind === 'window' && !run.exterior && !toBalcony) return { error: 'Le finestre vanno sui muri esterni' };
   const avail = run.hi - run.lo - 2 * OPEN_MARGIN;
-  const w = round3(Math.min(kind === 'door' ? (run.exterior ? 0.9 : 0.8) : 1.4, avail));
+  const pano = type === 'panoramic' || type === 'sliding';
+  const w = round3(Math.min(kind === 'door' ? (pano ? 1.8 : run.exterior ? 0.9 : 0.8) : pano ? 2.4 : 1.4, avail));
   if (w < 0.55) return { error: 'Muro troppo corto per metterci un\u2019apertura' };
   const room = plan.rooms.find((r) => r.id === run.a);
   const horiz = run.orient === 'h';
   const into = horiz ? (room && room.y + room.h / 2 > run.line ? 1 : -1) : (room && room.x + room.w / 2 > run.line ? 1 : -1);
   const base = placeOpening({ x: 0, y: 0, w, rot: horiz ? 0 : 90 }, run.orient, run.line, 0, W, L);
-  const o = kind === 'door' ? { ...base, openDir: horiz ? into : -into, entrance: run.exterior } : base;
+  const typed = type ? { ...base, type } : base;
+  const o = kind === 'door' ? { ...typed, openDir: horiz ? into : -into, entrance: run.exterior && type !== 'sliding' } : typed;
   const others = neighboursOnWall(plan, null, run);
   const s = nearestFree(run, others, w, snap(at - w / 2));
   if (s === null) return { error: 'Su questo muro non c\u2019è spazio libero per l\u2019apertura' };

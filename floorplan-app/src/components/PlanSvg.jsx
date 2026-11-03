@@ -907,6 +907,36 @@ function HouseMark({ plan, s, house }) {
   );
 }
 
+/* Vetrata panoramica fissa: vetro continuo a tutta lunghezza con i montanti sottili ogni 1,3 m circa. */
+function Panoramic({ w, s, wt }) {
+  const sw = w.w * s;
+  const n = Math.max(1, Math.round(w.w / 1.3));
+  return (
+    <g transform={`translate(${w.x * s},${w.y * s}) rotate(${w.rot})`}>
+      <rect width={sw} height={wt} fill="#fff" stroke={INK} strokeWidth="1" />
+      <rect x={1} y={wt * 0.3} width={sw - 2} height={wt * 0.4} fill="#cfe6fb" stroke="#2f6fe4" strokeWidth="0.9" />
+      {Array.from({ length: n - 1 }, (_, k) => (
+        <line key={k} x1={(sw * (k + 1)) / n} y1={wt * 0.12} x2={(sw * (k + 1)) / n} y2={wt * 0.88} stroke={INK} strokeWidth="1.3" />
+      ))}
+    </g>
+  );
+}
+
+/* Vetrata scorrevole (porta): due ante su binari paralleli, una sopra l'altra a metà, con la freccia di scorrimento. */
+function Sliding({ d, s, wt }) {
+  const sw = d.w * s;
+  const leaf = sw * 0.54;
+  return (
+    <g transform={`translate(${d.x * s},${d.y * s}) rotate(${d.rot})`}>
+      <rect width={sw} height={wt} fill="#fff" stroke={INK} strokeWidth="1" />
+      <rect x={1} y={wt * 0.18} width={leaf} height={wt * 0.28} fill="#cfe6fb" stroke="#2f6fe4" strokeWidth="0.9" />
+      <rect x={sw - leaf - 1} y={wt * 0.54} width={leaf} height={wt * 0.28} fill="#cfe6fb" stroke="#2f6fe4" strokeWidth="0.9" />
+      <path d={`M ${sw * 0.3} ${wt * 0.5} L ${sw * 0.7} ${wt * 0.5} M ${sw * 0.62} ${wt * 0.5 - 2.4} L ${sw * 0.7} ${wt * 0.5} L ${sw * 0.62} ${wt * 0.5 + 2.4}`}
+        fill="none" stroke={d.entrance ? '#d92d20' : '#1f4fd8'} strokeWidth="1" />
+    </g>
+  );
+}
+
 const FLOOR_BY_KIND = {
   living: 'wood', living_kitchen: 'wood', zone_day: 'wood', zone_night: 'wood', bed: 'wood', bed_single: 'wood', study: 'wood',
   kitchen: 'tile', bath: 'tile', wc: 'tile', hotel_room: 'wood', closet: 'wood', entry: 'wood', storage: 'tile', dining: 'wood',
@@ -1322,6 +1352,7 @@ export default function PlanSvg({
               </g>
             );
           }
+          if (d.type === 'sliding') return <Sliding key={`d-${i}`} d={d} s={s} wt={wt} />;
           return (
             <g key={`d-${i}`} transform={`translate(${d.x * s},${d.y * s}) rotate(${d.rot})`}>
               <rect x={0} y={-0.4} width={sw} height={wt + 0.8} fill="#fff" />
@@ -1336,6 +1367,7 @@ export default function PlanSvg({
 
         {plan.windows.map((w, i) => {
           const sw = w.w * s;
+          if (w.type === 'panoramic') return <Panoramic key={`win-${i}`} w={w} s={s} wt={wt} />;
           return (
             <g key={`win-${i}`} transform={`translate(${w.x * s},${w.y * s}) rotate(${w.rot})`}>
               <rect width={sw} height={wt} fill="#fff" stroke={INK} strokeWidth="1" />

@@ -169,6 +169,7 @@ class Door(BaseModel):
     openDir: int
     entrance: bool = False  # True = porta d'ingresso dell'unità
     kind: str = ""          # "" porta | "garage" basculante | "gate" cancello del giardino
+    type: str = ""          # "sliding" = vetrata scorrevole (porta a tutta altezza, per esempio sul balcone)
 
 
 class Window(BaseModel):
@@ -176,6 +177,7 @@ class Window(BaseModel):
     y: float
     w: float
     rot: float
+    type: str = ""          # "panoramic" = vetrata panoramica fissa, a tutta altezza
 
 
 class FurnitureItem(BaseModel):

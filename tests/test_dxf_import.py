@@ -133,6 +133,14 @@ def test_walls_only_as_fill_glazed_facade_and_corner_door():
     assert 2.0 <= bath_door["x"] <= 2.5                                  # sul lato destro del bagno (muro verticale), non sopra
     assert any(d["rot"] == 0 and d["y"] <= balcony["y"] + balcony["h"] + 0.2 and d["w"] > 1.5 for d in inner)   # la porta a nord dà sul balcone
     assert len(plan["windows"]) == 1                                     # la finestra a nord
+    # la facciata vetrata sul balcone: la finestra larga è una vetrata panoramica e la porta senza anta a battente è scorrevole
+    assert plan["windows"][0].get("type") == "panoramic"
+    sliding = [d for d in plan["doors"] if d.get("type") == "sliding"]
+    assert len(sliding) == 1 and sliding[0]["w"] > 1.5 and not sliding[0]["entrance"]
+    assert abs((plan["windows"][0]["x"] + plan["windows"][0]["w"]) - sliding[0]["x"]) < 0.25   # attaccate: vetro continuo
+    import main
+    out = main.PlanResponse(**plan).model_dump()                          # il tipo arriva intatto all'app
+    assert out["windows"][0]["type"] == "panoramic" and [d["type"] for d in out["doors"] if d["type"]] == ["sliding"]
     assert any("nome dedotto dagli arredi" in n for n in plan["notes"])  # wc e bidet dicono che è il bagno
 
 

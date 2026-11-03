@@ -977,3 +977,33 @@ test('un DXF con la facciata ad arco si importa con il muro curvo, in pianta e i
   expect(tilted).toBeGreaterThan(10);
   expect(errors).toEqual([]);
 });
+
+test('una finestra diventa vetrata panoramica dal pannello di modifica e in 3D il vetro arriva a terra', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
+  test.setTimeout(120_000);
+  const errors = await open(page);
+  await page.getByRole('button', { name: /Genera planimetria/ }).click();
+  await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 20_000 });
+  await page.locator('.pf-editbtn').click();
+  const windows = page.locator('.pf-sheet svg g[style*="grab"]');
+  const n = await windows.count();
+  await windows.nth(n - 1).click();
+  const type = page.getByRole('radiogroup', { name: 'Tipo di apertura' });
+  await expect(type).toBeVisible();
+  await type.getByRole('radio', { name: 'Vetrata panoramica' }).click();
+  await expect(page.locator('.pf-editcard header')).toContainText('Vetrata panoramica');
+  await expect(page.getByLabel('Larghezza in metri')).toHaveAttribute('max', /^(\d|\.)+$/);
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.waitForFunction(() => !!window.__planify3d, null, { timeout: 30_000 });
+  const tall = async () => page.evaluate(() => {
+    let n = 0;
+    window.__planify3d.model.traverse((o) => {
+      if (!o.isMesh || o.userData.layer !== 'VETRI') return;
+      const b = new window.__planify3d.THREE.Box3().setFromObject(o);
+      if (b.min.y < 0.1 && b.max.y > 2.2) n++;
+    });
+    return n;
+  });
+  expect(await tall()).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});

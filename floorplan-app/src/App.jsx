@@ -16,7 +16,7 @@ import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
 import RoomEditor from './components/RoomEditor';
 import FurnishPanel from './components/FurnishPanel';
 import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
-import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
+import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setOpeningType, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
 import { itemProblems, rotateItem, snapItem } from './lib/furnitureEdit';
@@ -2140,6 +2140,12 @@ export default function App() {
                   selectedStair={selectedStair} stairsHere={stairFloors().length} warning={editWarning}
                   onResize={(w) => openingEdit((p, o) => resizeOpening(p, o.kind, o.index, w))}
                   onFlip={() => openingEdit((p, o) => flipDoor(p, o.index))}
+                  onType={(type) => {
+                    if (!selectedOpening) return;
+                    const res = setOpeningType(plan, selectedOpening.kind, selectedOpening.index, type);
+                    editPlan(() => res.plan);
+                    setSelectedOpening(res.selected);
+                  }}
                   onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}
                   onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
                   onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />

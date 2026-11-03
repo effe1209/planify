@@ -145,6 +145,7 @@ class Opening:
     room_b: Optional[int]  # None = esterno
     swing_into: Optional[int] = None
     kind: str = ""         # "" porta | "garage" basculante | "gate" cancello del giardino
+    type: str = ""         # finestre: "" finestra | "panoramic" vetrata panoramica fissa; porte: "sliding" vetrata scorrevole
 
 
 @dataclass
@@ -3472,6 +3473,8 @@ def _export_opening(lay: Layout, o: Opening, is_door: bool) -> dict:
         d["entrance"] = o.room_b is None
         if o.kind:
             d["kind"] = o.kind
+    if o.type:
+        d["type"] = o.type
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items()}
 
 
@@ -4360,16 +4363,17 @@ def _opening_from_plan(lay: Layout, d: dict, is_door: bool) -> Optional[Opening]
     lo, hi = probe(-0.2), probe(0.2)   # il locale prima e dopo la linea del muro
     if lo is None and hi is None:
         return None
+    typ = d.get("type", "")
     if not is_door:
         room = lo or hi
-        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, None, "")
+        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, None, "", typ)
     if lo is None or hi is None or d.get("entrance"):
         room = lo or hi
-        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, room.id, d.get("kind", ""))
+        return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), room.id, None, room.id, d.get("kind", ""), typ)
     dirn = d.get("openDir", 1) if horiz else -d.get("openDir", 1)
     into = hi if dirn > 0 else lo
     other = lo if into is hi else hi
-    return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), other.id, into.id, into.id, d.get("kind", ""))
+    return Opening("h" if horiz else "v", line, round(start, 3), round(w, 3), other.id, into.id, into.id, d.get("kind", ""), typ)
 
 
 def layout_from_plan(plan: dict) -> Layout:

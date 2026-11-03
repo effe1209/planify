@@ -65,10 +65,11 @@ function roomsTouching(plan, o, tol = 0.3) {
 /* Una finestra illumina il locale che ha dietro e basta: sul muro tra due locali conta quello da cui si apre. */
 function windowsByRoom(plan) {
   const byRoom = new Map(plan.rooms.map((r) => [r.id, 0]));
-  for (const w of plan.windows || []) {
+  // le vetrate scorrevoli sono porte ma fanno luce come una vetrata
+  for (const w of [...(plan.windows || []), ...(plan.doors || []).filter((d) => d.type === 'sliding')]) {
     const touching = roomsTouching(plan, w);
     if (!touching.length) continue;
-    const share = (w.w * WINDOW_H) / touching.length;
+    const share = (w.w * (w.type === 'panoramic' || w.type === 'sliding' ? 2.4 : WINDOW_H)) / touching.length;
     touching.forEach((r) => byRoom.set(r.id, byRoom.get(r.id) + share));
   }
   return byRoom;

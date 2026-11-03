@@ -8,6 +8,7 @@ import { rugsFor } from './rugs';
 import { decorFor } from './decor';
 import { slideDoor } from './mezz';
 import { balconyRailings } from './balcony';
+import { glassSpan, isPanoramic, isSliding } from './openings';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -129,9 +130,13 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   };
   const list = allOpenings.filter(axisAligned);
   const oblique = allOpenings.filter((o) => !axisAligned(o));
-  const openings = list.map((o) => (o.rot === 0 || !o.rot
-    ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door }
-    : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door }));
+  const openings = list.map((o) => {
+    const gs = glassSpan(o, wallH);
+    const extra = { pano: isPanoramic(o), sill: gs.sill, top: gs.top };
+    return o.rot === 0 || !o.rot
+      ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door, ...extra }
+      : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door, ...extra };
+  });
 
   // muro intero: faccia interna chiara, faccia esterna nel colore e nel materiale della facciata dello stile
   const wallPiece = (horiz, w, a, b, y0, h) => {
@@ -190,13 +195,18 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     const cuts = openings.filter((o) => (horiz
       ? o.x1 > w.x + 0.01 && o.x0 < w.x + w.w - 0.01 && o.z1 > w.y - 0.01 && o.z0 < w.y + w.h + 0.01
       : o.z1 > w.y + 0.01 && o.z0 < w.y + w.h - 0.01 && o.x1 > w.x - 0.01 && o.x0 < w.x + w.w + 0.01))
-      .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door }))
+      .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door, pano: o.pano, sill: o.sill, top: o.top }))
       .sort((p, q) => p.a - q.a);
     let cur = a0;
     const seg = (a, b, y0, h, m = null) => (m ? (horiz ? box(a, w.y, b - a, w.h, y0, h, m) : box(w.x, a, w.w, b - a, y0, h, m)) : wallPiece(horiz, w, a, b, y0, h));
     for (const c of cuts) {
       if (c.a > cur) seg(cur, c.a, 0, wh);
-      if (c.door) {
+      if (c.pano) {
+        // vetrata a tutta altezza (fissa o scorrevole): il vetro arriva quasi al pavimento, sopra resta l'architrave
+        if (c.sill > 0.001) seg(c.a, c.b, 0, Math.min(c.sill, wh));
+        seg(c.a + 0.02, c.b - 0.02, c.sill, Math.min(c.top, wh) - c.sill, M.glass);
+        if (wh > c.top) seg(c.a, c.b, c.top, wh - c.top);
+      } else if (c.door) {
         if (wh > DOOR_H) seg(c.a, c.b, DOOR_H, wh - DOOR_H);
       } else {
         seg(c.a, c.b, 0, Math.min(SILL, wh));
@@ -275,6 +285,15 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     };
     const lintel = (y0) => { const m = piece(0, o.w, 0, t, y0, wallH - y0, K.wallIn); if (m) m.userData.layer = 'MURI'; };
     const fr = 0.045;
+    if (isPanoramic(o)) {
+      const g = glassSpan(o, wallH);
+      if (wallH > g.top) lintel(g.top);
+      piece(0.02, o.w - 0.02, t / 2 - 0.01, t / 2 + 0.01, g.sill, g.top - g.sill, M.glass);
+      for (const [p0, p1, y0, h] of [[0, 0.05, g.sill, g.top - g.sill], [o.w - 0.05, o.w, g.sill, g.top - g.sill], [0, o.w, g.top - 0.05, 0.05], [0, o.w, g.sill, 0.06]]) {
+        piece(p0, p1, -0.01, t + 0.01, y0, h, K.frame);
+      }
+      continue;
+    }
     if (!o.door) {
       const top = Math.min(DOOR_H, wallH);
       if (wallH <= SILL) continue;
@@ -316,6 +335,36 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
     const bar = (aa, bb, y0, h, m) => (horiz ? box(aa, q.z0 - 0.01, bb - aa, th, y0, h, m) : box(q.x0 - 0.01, aa, th, bb - aa, y0, h, m));
     const a0 = horiz ? q.x0 : q.z0;
     const a1 = horiz ? q.x1 : q.z1;
+    if (isPanoramic(o)) {
+      // vetrata panoramica: telaio sottile, montanti ogni 1,3 m circa; scorrevole: due ante su binari paralleli e maniglia
+      const Fm = K.frame;
+      const pf = 0.05;
+      const g = glassSpan(o, wallH);
+      const barOff = (aa, bb, y0, h, m, off, thick) => (horiz
+        ? box(aa, q.z0 + t / 2 - thick / 2 + off, bb - aa, thick, y0, h, m)
+        : box(q.x0 + t / 2 - thick / 2 + off, aa, thick, bb - aa, y0, h, m));
+      bar(a0, a0 + pf, g.sill, g.top - g.sill, Fm);
+      bar(a1 - pf, a1, g.sill, g.top - g.sill, Fm);
+      bar(a0, a1, g.top - pf, pf, Fm);
+      bar(a0, a1, g.sill, 0.06, Fm);   // binario in basso
+      if (isSliding(o)) {
+        const leaf = len * 0.54;
+        const lf = 0.04;
+        const stiles = (from, to, off) => {
+          barOff(from, from + lf, g.sill + 0.06, g.top - g.sill - 0.06 - pf, Fm, off, 0.04);
+          barOff(to - lf, to, g.sill + 0.06, g.top - g.sill - 0.06 - pf, Fm, off, 0.04);
+          barOff(from, to, g.sill + 0.06, lf, Fm, off, 0.04);
+          barOff(from, to, g.top - pf - lf, lf, Fm, off, 0.04);
+        };
+        stiles(a0 + pf, a0 + pf + leaf, -0.035);
+        stiles(a1 - pf - leaf, a1 - pf, 0.035);
+        barOff(a0 + pf + leaf - 0.1, a0 + pf + leaf - 0.07, 1.0, 0.18, K.handle, -0.035, 0.03);
+      } else {
+        const panes = Math.max(1, Math.round(len / 1.3));
+        for (let k = 1; k < panes; k++) bar(a0 + (len * k) / panes - 0.02, a0 + (len * k) / panes + 0.02, g.sill, g.top - g.sill, Fm);
+      }
+      return;
+    }
     if (!o.door) {
       const top = Math.min(DOOR_H, wallH);
       if (wallH <= SILL) return;
