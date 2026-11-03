@@ -1079,6 +1079,18 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       bx(W, 0.04, D, 0, 0.71, 0, wood, 0.018);
       bx(W - 0.12, 0.07, D - 0.12, 0, 0.64, 0, wood);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) leg(sx * (W / 2 - 0.06), sz * (D / 2 - 0.06), 0.64, 0.06);
+      if (Math.min(W, D) >= 0.55) {
+        const scale = Math.min(1, Math.min(W, D) / 0.9);
+        const runner = m('table-cloth', theme.rug || theme.fabric, { roughness: 0.96 });
+        const bowl = m('table-bowl', '#f2eee6', { roughness: 0.42 });
+        const fruit = [m('table-fruit-red', '#bd5946'), m('table-fruit-gold', '#d6a644'), m('table-fruit-green', '#75924d')];
+        bx(W * 0.6, 0.006, Math.min(D * 0.25, 0.22) * scale, 0, 0.75, 0, runner, 0.003);
+        cy(0.065 * scale, 0.082 * scale, 0.025 * scale, 0, 0.756, 0, bowl, 20);
+        for (const [i, x] of [-1, 0, 1].entries()) {
+          const z = i === 1 ? 0.008 : -0.008;
+          ball(0.5, x * 0.032 * scale, 0.756 + 0.049 * scale, z * scale, fruit[i], 0.052 * scale, 0.042 * scale, 0.062 * scale);
+        }
+      }
       break;
     }
     case 'table_round': {
