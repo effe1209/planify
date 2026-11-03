@@ -3,7 +3,7 @@
  * Pianta in metri: x → x, y → z, altezza → y. Muri alti WALL_H con i vani di porte (fino a 2,10 m) e
  * finestre (da 0,90 a 2,10 m, con il vetro); arredi come volumi con altezze reali e i colori dello stile.
  */
-import { frontOf } from './project';
+import { frontOf, gardenOffset } from './project';
 import { rugsFor } from './rugs';
 import { shade, tintMaterials, tintTheme, validColor } from './furnitureColor';
 import { decorFor } from './decor';
@@ -1040,7 +1040,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   const front = garden && frontOf(project);
   if (front) {
     const garage = floors.find((f) => f.level < front.floor.level && f.plan.doors.some((d) => d.kind === 'garage'));
-    house.add(placeGarden(THREE, garden, front, themeFor(garden), garage ? quota(garage.level) - quota(front.floor.level) : 0));
+    house.add(placeGarden(THREE, garden, front, themeFor(garden), garage ? quota(garage.level) - quota(front.floor.level) : 0, gardenOffset(project)));
   }
   return house;
 }
@@ -1050,7 +1050,7 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
  * plan.house.x; si ruota e si sposta perché quel lato combaci con la facciata d'ingresso vera. `drop` = di quanto
  * scende la rampa del garage interrato (negativo), 0 se non c'è.
  */
-function placeGarden(THREE, floor, { facade, W, L }, theme, drop) {
+function placeGarden(THREE, floor, { facade, W, L }, theme, drop, off = { a: 0, d: 0 }) {
   const p = floor.plan;
   const hx = p.house?.x ?? (p.dimensions.width - facade.w) / 2;
   const ramps = drop < 0 ? p.furniture.filter((it) => it.type === 'ramp') : [];
@@ -1099,6 +1099,8 @@ function placeGarden(THREE, floor, { facade, W, L }, theme, drop) {
   }[facade.front];
   g.rotation.y = place[0];
   g.position.set(place[1], 0, place[2]);
+  g.translateX(off.a);   // spostamento a mano: lungo la facciata e verso l'esterno, nel riferimento del giardino
+  g.translateZ(off.d);
   g.userData.floor = { id: floor.id, name: floor.name, level: 'out' };
   return g;
 }

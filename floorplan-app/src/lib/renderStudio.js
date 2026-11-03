@@ -4,7 +4,7 @@
  * x e z come la pianta, y verso l'alto; un piano sta a level × FLOOR_H.
  */
 import { FLOOR_H } from './scene3d';
-import { doorSide, frontOf } from './project';
+import { doorSide, frontOf, gardenOffset } from './project';
 
 export const EYE = 1.6;   // altezza degli occhi nelle viste interne
 
@@ -100,8 +100,9 @@ export function gardenFrame(project) {
   const fw = fr.facade.w;
   const hx = garden.plan.house?.x ?? (gw - fw) / 2;
   const front = fr.facade.front;
+  const { a, d } = gardenOffset(project);   // spostamento a mano del giardino (come in scene3d placeGarden)
   const toWorld = {
-    S: (x, y) => [x - hx, L + y], N: (x, y) => [W + hx - x, -y], E: (x, y) => [W + y, L + hx - x], W: (x, y) => [-y, -hx + x],
+    S: (x, y) => [x - hx + a, L + y + d], N: (x, y) => [W + hx - x - a, -y - d], E: (x, y) => [W + y + d, L + hx - x - a], W: (x, y) => [-y - d, -hx + x + a],
   }[front];
   return { toWorld, gw, gl, hx, fw, front };
 }
