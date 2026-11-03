@@ -809,3 +809,12 @@
 .pf-item-color { display: grid; gap: 6px; margin: 8px 0; }
 .pf-item-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pf-item-swatches input[type="color"] { width: 28px; height: 28px; padding: 0; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: none; }
+
+/* cloud */
+.pf-cloud-login, .pf-cloud-block { display: grid; gap: 8px; margin-bottom: 14px; }
+.pf-cloud-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.pf-cloud-block h3 { margin: 0; font-size: 0.85rem; }
+.pf-cloud-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pf-cloud-list li { display: flex; align-items: center; gap: 8px; }
+.pf-cloud-list li > span { flex: 1; min-width: 0; display: grid; }
+.pf-cloud-list em { font-style: normal; color: var(--pf-muted, #6b7280); font-size: 0.75rem; }
