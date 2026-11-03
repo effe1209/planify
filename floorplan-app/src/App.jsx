@@ -68,7 +68,7 @@ import { aimDevice, coverFloor, doorsFor, optimizeDevices, placeDevice, sensorCo
 import { useCoverage } from './hooks/useCoverage';
 import CoveragePanel from './components/CoveragePanel';
 import DevicePanel from './components/DevicePanel';
-import { activeFloor, addFloor, houseFor, houseFront, houseRequest, levelLabel, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
+import { FLOOR_PRESETS, activeFloor, addFloor, houseFor, houseFront, houseRequest, levelLabel, makeFloor, moveFloor, removeFloor, updateFloor } from './lib/project';
 import { CookieBanner, CookieDialog } from './components/CookieConsent';
 import { Logo, ShapeGlyph, Wordmark } from './components/Icons';
 import { useConsent } from './hooks/useConsent';
@@ -560,6 +560,16 @@ export default function App() {
       }));
       say('Imposta i parametri a sinistra e premi «Genera»');
     }
+  };
+  /* Cambia il livello di un piano (terra, primo…): se aveva il nome di serie del vecchio livello prende quello del nuovo. */
+  const changeFloorLevel = (id, level) => {
+    const f = current?.floors.find((x) => x.id === id);
+    if (!f || f.level === level) return;
+    const old = FLOOR_PRESETS.find((p) => p.level === f.level);
+    const next = FLOOR_PRESETS.find((p) => p.level === level);
+    editProject((p) => updateFloor(p, id, (x) => ({ ...x, level, ...(old && next && x.name === old.name && { name: next.name }) })));
+    const garden = current.floors.some((x) => x.level === 'out');
+    say(level >= 1 && garden ? 'La casa ora sta sopra il giardino: aggiungi la scala esterna dal pannello «Pianta»' : `Piano portato a «${next?.name || level}»`);
   };
   const deleteFloor = (id) => {
     const f = current.floors.find((x) => x.id === id);
@@ -2232,6 +2242,7 @@ export default function App() {
               onMove={(id, d) => editProject((p) => moveFloor(p, id, d))}
               onRemove={deleteFloor}
               onAdd={startNewFloor}
+              onLevel={changeFloorLevel}
               onCancelAdd={() => setPendingFloor(null)}
               onToggleGlobal={() => setGlobalView(!globalView)}
             />

@@ -8,7 +8,7 @@ import { FLOOR_PRESETS, levelLabel } from '../lib/project';
  */
 export default function FloorBar({
   project, activeId, globalView, pending, onSelect, onRename, onMove, onRemove,
-  onAdd, onCancelAdd, onToggleGlobal,
+  onAdd, onCancelAdd, onToggleGlobal, onLevel,
 }) {
   const [editing, setEditing] = useState(null);
   const [menu, setMenu] = useState(false);
@@ -66,6 +66,13 @@ export default function FloorBar({
               )}
               {on && (
                 <span className="pf-floor-actions">
+                  {typeof f.level === 'number' && onLevel && (
+                    <select className="pf-input-sm pf-floor-level" value={f.level} aria-label="Livello del piano"
+                      title="Livello del piano: con «Primo piano» la casa sta sopra il giardino, che resta a terra (scala esterna dal pannello Pianta)"
+                      onChange={(e) => onLevel(f.id, Number(e.target.value))}>
+                      {FLOOR_PRESETS.filter((p) => typeof p.level === 'number').map((p) => <option key={p.level} value={p.level}>{p.name}</option>)}
+                    </select>
+                  )}
                   <button type="button" className="pf-btn-icon" disabled={i === 0} onClick={() => onMove(f.id, -1)}
                     title="Sposta prima" aria-label="Sposta prima"><ChevronLeft size={13} /></button>
                   <button type="button" className="pf-btn-icon" disabled={i === floors.length - 1} onClick={() => onMove(f.id, 1)}
