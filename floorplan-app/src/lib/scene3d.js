@@ -9,6 +9,7 @@ import { decorFor } from './decor';
 import { slideDoor } from './mezz';
 import { balconyRailings } from './balcony';
 import { glassSpan, isPanoramic, isSliding } from './openings';
+import { withCornerWindows } from './cornerWindows';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -48,7 +49,8 @@ import { projectStairs } from './stairs';
 import { kitMaterials, styleKit, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
 
-export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
+export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
+  const plan = withCornerWindows(plan0);   // due finestre vicine in un angolo sono una sola, con il montante
   const root = new THREE.Group();
   const s = plan.scale;
   const t = plan.wallThickness / s;
@@ -132,7 +134,7 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
   const oblique = allOpenings.filter((o) => !axisAligned(o));
   const openings = list.map((o) => {
     const gs = glassSpan(o, wallH);
-    const extra = { pano: isPanoramic(o), sill: gs.sill, top: gs.top };
+    const extra = { pano: isPanoramic(o), sill: gs.sill, top: gs.top, corner: !!o.corner, vert: !(o.rot === 0 || !o.rot) };
     return o.rot === 0 || !o.rot
       ? { x0: o.x, x1: o.x + o.w, z0: o.y, z1: o.y + t, door: o.door, ...extra }
       : { x0: o.x - t, x1: o.x, z0: o.y, z1: o.y + o.w, door: o.door, ...extra };
@@ -192,7 +194,8 @@ export function buildScene(THREE, plan, theme, { lowWalls = false, stairs = null
       && w.y + w.h / 2 >= mz.y - 0.15 && w.y + w.h / 2 <= mz.y + mz.h + 0.15 ? mz.elev - mz.slab : wallH;
     const a0 = horiz ? w.x : w.y;
     const a1 = horiz ? w.x + w.w : w.y + w.h;
-    const cuts = openings.filter((o) => (horiz
+    // una finestra d'angolo buca solo il suo muro: al vertice resta il montante dell'altro muro
+    const cuts = openings.filter((o) => !(o.corner && o.vert === horiz)).filter((o) => (horiz
       ? o.x1 > w.x + 0.01 && o.x0 < w.x + w.w - 0.01 && o.z1 > w.y - 0.01 && o.z0 < w.y + w.h + 0.01
       : o.z1 > w.y + 0.01 && o.z0 < w.y + w.h - 0.01 && o.x1 > w.x - 0.01 && o.x0 < w.x + w.w + 0.01))
       .map((o) => ({ a: Math.max(a0, horiz ? o.x0 : o.z0), b: Math.min(a1, horiz ? o.x1 : o.z1), door: o.door, pano: o.pano, sill: o.sill, top: o.top }))

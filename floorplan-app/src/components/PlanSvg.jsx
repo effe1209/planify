@@ -3,6 +3,7 @@
  * finestre, arredi, quote e cartiglio. Usato per la vista principale, le miniature e l'export.
  */
 import { balconyRailings } from '../lib/balcony';
+import { withCornerWindows } from '../lib/cornerWindows';
 import WallEditor from './WallEditor';
 import { useId, useRef, useState } from 'react';
 import { SHAPE_NAME } from '../constants';
@@ -1365,7 +1366,7 @@ export default function PlanSvg({
           );
         })}
 
-        {plan.windows.map((w, i) => {
+        {withCornerWindows(plan).windows.map((w, i) => {
           const sw = w.w * s;
           if (w.type === 'panoramic') return <Panoramic key={`win-${i}`} w={w} s={s} wt={wt} />;
           return (

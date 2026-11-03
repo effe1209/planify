@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { addOpening, resizeOpening, runOf, setOpeningType, wallRuns } from '../src/lib/walls.js';
+import { addOpening, moveOpening, openingRuns, resizeOpening, runOf, setOpeningType, wallRuns } from '../src/lib/walls.js';
 import { glassSpan, glassHeight, isPanoramic, isSliding } from '../src/lib/openings.js';
 import { scheduleFor } from '../src/lib/schedule.js';
 import { buildScene } from '../src/lib/scene3d.js';
@@ -80,4 +80,27 @@ assert.ok(glassOf(slide).some((bb) => bb.min.y < 0.05 && bb.max.y > 2.3), 'anche
 let leafFrames = 0; let swingLeaves = 0;
 slide.traverse((o) => { if (o.isMesh && o.userData.layer !== 'VETRI' && o.userData.layer !== 'MURI') leafFrames++; if (o.userData.layer === 'PORTE') swingLeaves++; });
 assert.ok(leafFrames >= 10 && swingLeaves === 0, `ante e telaio, nessuna anta a battente (${leafFrames}, ${swingLeaves})`);
+
+// a cavallo di due locali della stessa zona aperta: sul muro esterno davanti a soggiorno e cucina senza muro in mezzo il tratto è uno solo
+const open = plans[4];
+const zone = new Map(open.rooms.map((r) => [r.id, r.zone ?? r.id]));
+const ext = wallRuns(open).filter((r) => r.exterior);
+const first = ext.find((a) => ext.some((b) => b !== a && b.orient === a.orient && a.line === b.line && Math.abs(a.hi - b.lo) < 1e-6 && zone.get(a.a) === zone.get(b.a)));
+assert.ok(first, 'nella pianta di prova due tratti esterni contigui sono della stessa zona');
+const second = ext.find((b) => b !== first && b.orient === first.orient && first.line === b.line && Math.abs(first.hi - b.lo) < 1e-6 && zone.get(first.a) === zone.get(b.a));
+const split = [first, second];
+const joined = openingRuns(open).find((r) => r.exterior && r.orient === split[0].orient && r.line === split[0].line && r.lo <= split[0].lo + 1e-6 && r.hi >= split[1].hi - 1e-6);
+assert.ok(joined && joined.rooms.length >= 2, 'un tratto solo per i due locali');
+const seam = split[0].hi;
+const noOthers = { ...open, windows: [], doors: open.doors.filter((d) => { const r = runOf(open, d); return !(r && r.exterior && r.orient === joined.orient && r.line === joined.line); }) };
+const straddle = addOpening(noOthers, 'window', split[0], seam, 'panoramic');
+assert.ok(!straddle.error, straddle.error);
+const sw = straddle.plan.windows[0];
+assert.ok(sw.x < seam - 0.3 && sw.x + sw.w > seam + 0.3, `la vetrata sta a cavallo del confine a ${seam} m: ${sw.x}…${sw.x + sw.w}`);
+// e si può spostare e allargare sopra il confine
+const moved2 = moveOpening(straddle.plan, 'window', 0, seam - 0.5);
+assert.ok(moved2.windows[0].x < seam && moved2.windows[0].x + moved2.windows[0].w > seam);
+// un muro vero in mezzo (gruppi diversi) resta un limite
+const walled = { ...noOthers, rooms: noOthers.rooms.map((r) => (r.id === split[1].a ? { ...r, zone: 99 } : r)) };
+assert.ok(!openingRuns(walled).some((r) => r.rooms), 'locali di zone diverse: due tratti');
 console.log('panoramic ok');

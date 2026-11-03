@@ -140,11 +140,30 @@ export function wallRuns(plan) {
   return runs;
 }
 
+/*
+ * Tratti di muro per mettere le aperture: come wallRuns, ma un muro esterno che passa davanti a due locali della stessa zona aperta
+ * (senza muro in mezzo, per esempio soggiorno e cucina) è un tratto solo, così una porta o una vetrata può stare a cavallo dei due.
+ * Un muro vero tra i locali, o un altro gruppo di locali, lo interrompe come prima. Per trascinare i muri si usa wallRuns.
+ */
+export function openingRuns(plan) {
+  const zone = new Map(plan.rooms.map((r) => [r.id, group(r)]));
+  const out = [];
+  for (const r of wallRuns(plan)) {
+    const last = out[out.length - 1];
+    if (last && r.exterior && last.exterior && last.orient === r.orient && Math.abs(last.line - r.line) < 1e-6 && Math.abs(last.hi - r.lo) < 1e-6
+      && zone.get(last.a) === zone.get(r.a)) {
+      last.hi = r.hi;
+      last.rooms = [...(last.rooms || [last.a]), r.a];
+    } else out.push({ ...r });
+  }
+  return out;
+}
+
 /* Il tratto di muro che contiene un'apertura (stessa linea e stessa coppia di locali), o null. */
 export function runOf(plan, o) {
   const { orient, line, start } = openingLine(o, plan.dimensions.width, plan.dimensions.length);
   const mid = start + o.w / 2;
-  return wallRuns(plan).find((r) => r.orient === orient && Math.abs(r.line - line) < 0.02 && mid >= r.lo - 0.02 && mid <= r.hi + 0.02) || null;
+  return openingRuns(plan).find((r) => r.orient === orient && Math.abs(r.line - line) < 0.02 && mid >= r.lo - 0.02 && mid <= r.hi + 0.02) || null;
 }
 
 /* ── spostare un muro (interno o esterno) ── */
@@ -536,8 +555,12 @@ export function removeOpening(plan, kind, index) {
  * Aggiunge una porta o una finestra sul tratto `run` (da wallRuns) vicino a `at` (m lungo il muro).
  * Finestra: solo sui muri esterni. Porta: tra due locali (si apre verso quello più vicino al centro) o ingresso sul perimetro.
  */
-export function addOpening(plan, kind, run, at, type = '') {
+export function addOpening(plan, kind, run0, at, type = '') {
   const { width: W, length: L } = plan.dimensions;
+  // sul muro esterno davanti a due locali della stessa zona il tratto è uno solo
+  const run = run0.exterior
+    ? openingRuns(plan).find((x) => x.exterior && x.orient === run0.orient && Math.abs(x.line - run0.line) < 1e-6 && x.lo <= run0.lo + 1e-6 && x.hi >= run0.hi - 1e-6) || run0
+    : run0;
   // il balcone è fuori: una finestra o una vetrata verso di lui vale come un muro esterno
   const toBalcony = [run.a, run.b].some((id) => plan.rooms.find((r) => r.id === id)?.kind === 'balcony');
   if (kind === 'window' && !run.exterior && !toBalcony) return { error: 'Le finestre vanno sui muri esterni' };

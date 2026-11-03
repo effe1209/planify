@@ -1,7 +1,7 @@
 /* Modifica della pianta: muri derivati dai locali, partizioni spostabili, porte e finestre (lib/walls.js). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addOpening, deriveWalls, flipDoor, moveOpening, movePartition, openingLine, partition, removeOpening, resizeOpening, runOf, wallRuns } from '../src/lib/walls.js';
+import { addOpening, deriveWalls, flipDoor, moveOpening, movePartition, openingLine, openingRuns, partition, removeOpening, resizeOpening, runOf, wallRuns } from '../src/lib/walls.js';
 
 const plans = JSON.parse(readFileSync(new URL('./fixtures/plans.json', import.meta.url)));
 const houses = JSON.parse(readFileSync(new URL('./fixtures/houses.json', import.meta.url)));
@@ -111,7 +111,9 @@ assert.ok(moves >= 40 && outer >= 10 && pieces >= 3, `spostamenti ${moves}, este
         placed++;
         const o = res.plan.doors[res.index];
         const q = openingLine(o, p.dimensions.width, p.dimensions.length);
-        assert.ok(q.start >= r.lo + 0.08 - 1e-6 && q.start + o.w <= r.hi - 0.08 + 1e-6, 'dentro il tratto');
+        // il tratto delle aperture può essere più lungo di r: il muro esterno davanti a due locali della stessa zona è uno solo
+        const span = openingRuns(p).find((x) => x.orient === r.orient && Math.abs(x.line - r.line) < 1e-6 && x.lo <= r.lo + 1e-6 && x.hi >= r.hi - 1e-6);
+        assert.ok(q.start >= span.lo + 0.08 - 1e-6 && q.start + o.w <= span.hi - 0.08 + 1e-6, 'dentro il tratto');
         for (const x of [...res.plan.doors.slice(0, -1), ...res.plan.windows]) {
           const y = openingLine(x, p.dimensions.width, p.dimensions.length);
           if (y.orient !== q.orient || Math.abs(y.line - q.line) > 0.02) continue;
