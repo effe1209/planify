@@ -19,7 +19,7 @@ import EditPlanPanel, { EditTools } from './components/EditPlanPanel';
 import { doorWarning, flipDoor, mergeRooms, moveRoom, movePartition, openWall, partition, removeOpening, resizeOpening, roomSlide, setOpeningType, setStair, splitRoom, stairRoom, wallRuns } from './lib/walls';
 import ItemPanel from './components/ItemPanel';
 import Plan3D from './components/Plan3D';
-import { itemProblems, rotateItem, snapItem } from './lib/furnitureEdit';
+import { itemProblems, resizeItem, rotateItem, snapItem } from './lib/furnitureEdit';
 import { mezzAxis, mezzLimits, mezzRatio, resizeMezz } from './lib/mezz';
 import LayoutOptions from './components/LayoutOptions';
 import HouseOptions from './components/HouseOptions';
@@ -724,6 +724,33 @@ export default function App() {
     } finally {
       setFurnishing(false);
     }
+  };
+  /* Incurva una facciata della pianta com'è (il motore sposta stanze, muri, porte e finestre sull'arco); la pianta dritta si tiene per «Raddrizza». */
+  const [curving, setCurving] = useState(false);
+  const curveFacade = async ({ side, bulge, a0, a1 }) => {
+    if (!current || !plan || readOnly || curving) return;
+    if (!base || !engineHas('curve_plan')) {
+      setError('Per curvare un muro serve il motore collegato (aggiornato): controlla «Connessione».');
+      return;
+    }
+    setCurving(true);
+    setError(null);
+    try {
+      const { curveBase: _old, ...straight } = plan;
+      const out = await readJson(await postJson(base, '/curve-plan', { plan: straight, side, bulge, a0, a1 }));
+      editPlan(() => ({ ...out, curveBase: straight }));
+      setSelectedOpening(null);
+      say('Facciata curva');
+    } catch (err) {
+      setError(`Curva non riuscita: ${err.message}`);
+    } finally {
+      setCurving(false);
+    }
+  };
+  const straightenFacade = () => {
+    if (!plan?.curveBase) return;
+    editPlan(() => plan.curveBase);
+    say('Facciata raddrizzata');
   };
   /* ── modifica diretta: muri interni, porte e finestre ── */
   const [wallEdit, setWallEdit] = useState(false);
@@ -2122,6 +2149,13 @@ export default function App() {
               {selectedItem != null && (
                 <ItemPanel plan={plan} index={selectedItem} onRotate={() => rotateFurniture(selectedItem)}
                   onFlip={() => flipFurniture(selectedItem)} onRemove={() => removeFurniture(selectedItem)}
+                  onSize={(dim, lock) => editFurniture((list) => list.map((f, i) => (i === selectedItem ? resizeItem(plan, f, dim, lock) : f)))}
+                  onColor={(c) => editFurniture((list) => list.map((f, i) => {
+                    if (i !== selectedItem) return f;
+                    const next = { ...f, color: c };
+                    if (!c) delete next.color;
+                    return next;
+                  }))}
                   onHeight={(z) => editFurniture((list) => list.map((f, i) => {
                     if (i !== selectedItem) return f;
                     const next = { ...f, z };
@@ -2138,6 +2172,7 @@ export default function App() {
               {editable && wallEdit && (
                 <EditPlanPanel plan={plan} selected={selectedOpening} selectedWall={selectedWall}
                   selectedStair={selectedStair} stairsHere={stairFloors().length} warning={editWarning}
+                  onCurve={!['garden'].includes(floor.meta?.type) ? curveFacade : null} onStraighten={plan.curveBase ? straightenFacade : null} curving={curving}
                   onResize={(w) => openingEdit((p, o) => resizeOpening(p, o.kind, o.index, w))}
                   onFlip={() => openingEdit((p, o) => flipDoor(p, o.index))}
                   onType={(type) => {
@@ -2146,6 +2181,15 @@ export default function App() {
                     editPlan(() => res.plan);
                     setSelectedOpening(res.selected);
                   }}
+                  onColor={(c) => openingEdit((p, o) => {
+                    const key = o.kind === 'door' ? 'doors' : 'windows';
+                    return { ...p, [key]: p[key].map((x, i) => {
+                      if (i !== o.index) return x;
+                      const next = { ...x, color: c };
+                      if (!c) delete next.color;
+                      return next;
+                    }) };
+                  })}
                   onRemove={() => { openingEdit((p, o) => removeOpening(p, o.kind, o.index)); setSelectedOpening(null); }}
                   onClose={() => setSelectedOpening(null)} onMerge={mergeSelected} onOpenWall={openSelected} onStair={applyStair}
                   onCloseWall={() => setSelectedWall(null)} onCloseStair={() => setSelectedStair(false)} />

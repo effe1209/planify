@@ -1,6 +1,8 @@
-import { FlipHorizontal2, RotateCcw, RotateCw, Trash2, TriangleAlert, X } from 'lucide-react';
+import { useState } from 'react';
+import { FlipHorizontal2, Link2, RotateCcw, RotateCw, Trash2, TriangleAlert, Unlink2, X } from 'lucide-react';
 import { FURNITURE_LABEL } from '../constants';
-import { itemProblems } from '../lib/furnitureEdit';
+import { itemProblems, SIZE_MAX, SIZE_MIN } from '../lib/furnitureEdit';
+import { validColor } from '../lib/furnitureColor';
 import { furnitureZ } from '../lib/scene3d';
 import { fmtM } from '../lib/utils';
 
@@ -8,7 +10,10 @@ import { fmtM } from '../lib/utils';
  * Arredo selezionato sulla pianta: misure, altezza (conta per le ombre dei sensori d'allarme e per la vista 3D
  * dei volumi), problemi di posizione e comandi (anche da tastiera).
  */
-export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onHeight, onClose }) {
+const SWATCHES = ['#f1ead9', '#d9c7a1', '#7d8050', '#8fa3a8', '#c58b6d', '#4b4f56', '#9a6b4a', '#ffffff'];
+
+export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onHeight, onSize, onColor, onClose }) {
+  const [lock, setLock] = useState(true);
   const it = plan.furniture[index];
   if (!it) return null;
   const [z0, zTop] = it.z || furnitureZ(it.type);
@@ -23,6 +28,41 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
       <p className="pf-hint">
         {fmtM(it.w)} × {fmtM(it.h)} m{room?.name ? ` · ${room.name}` : ''}
       </p>
+      {onSize && (
+        <div className="pf-row2">
+          <label className="pf-field-sm">
+            <span>Larghezza (m)</span>
+            <input className="pf-input-sm" type="number" min={SIZE_MIN} max={SIZE_MAX} step="0.05" value={+it.w.toFixed(2)}
+              onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v) && v > 0) onSize({ w: v }, lock); }} />
+          </label>
+          <label className="pf-field-sm">
+            <span>Profondità (m)</span>
+            <input className="pf-input-sm" type="number" min={SIZE_MIN} max={SIZE_MAX} step="0.05" value={+it.h.toFixed(2)}
+              onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v) && v > 0) onSize({ h: v }, lock); }} />
+          </label>
+          <button type="button" className="pf-mini" aria-pressed={lock} onClick={() => setLock(!lock)}
+            title={lock ? 'Proporzioni bloccate' : 'Proporzioni libere'}>
+            {lock ? <Link2 size={13} /> : <Unlink2 size={13} />}
+          </button>
+        </div>
+      )}
+      {onColor && (
+        <div className="pf-item-color">
+          <span className="pf-hint">Colore</span>
+          <div className="pf-item-swatches" role="group" aria-label="Colore dell'arredo">
+            {SWATCHES.map((c) => (
+              <button key={c} type="button" className={`pf-swatch-btn${validColor(it.color) === c ? ' is-on' : ''}`}
+                style={{ background: c }} aria-label={`Colore ${c}`} onClick={() => onColor(c)} />
+            ))}
+            <input type="color" aria-label="Altro colore" value={validColor(it.color) || '#cccccc'} onChange={(e) => onColor(e.target.value)} />
+            {it.color && (
+              <button type="button" className="pf-mini" onClick={() => onColor(null)} title="Torna al colore dello stile">
+                <RotateCcw size={13} /> Stile
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {onHeight && (
         <div className="pf-row2">
           <label className="pf-field-sm">

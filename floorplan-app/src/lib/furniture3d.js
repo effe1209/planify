@@ -258,7 +258,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
         boucleMap.repeat.set(3, 3);
         boucleMap.colorSpace = THREE.SRGBColorSpace;
       }
-      const boucle = m('boucle', '#f1ead9', { roughness: 1, side: THREE.DoubleSide, ...(boucleMap && { map: boucleMap }) });
+      const boucle = m('boucle', it.color || '#f1ead9', { roughness: 1, side: THREE.DoubleSide, ...(boucleMap && { map: boucleMap }) });
       const soft = (geo, x, y, z) => place(new THREE.Mesh(geo, boucle), x, y, z);
       soft(new RoundedBoxGeometry(W, 0.16, D * 0.96, 6, 0.3), 0, 0.12, 0);                // base
       soft(new RoundedBoxGeometry(W - 0.12, 0.17, D * 0.7, 6, 0.26), 0, 0.3, D * 0.1);     // seduta
