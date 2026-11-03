@@ -240,7 +240,7 @@
 .pf-thumb { background: var(--bg-canvas); border: 1px solid var(--border); border-radius: 8px; padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; align-items: center; transition: all 0.2s; }
 .pf-thumb:hover { border-color: var(--border-hover); }
 .pf-thumb.is-on { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line); }
-.pf-thumb svg { width: 100%; height: auto; max-height: 80px; border-radius: 4px; background: #fff; }
+.pf-thumb-open > svg { width: 100%; height: auto; max-height: 80px; border-radius: 4px; background: #fff; }
 .pf-thumb span { font-size: 10px; font-weight: 500; color: var(--text-muted); text-align: center; }
 
 /* Customizer Stanza Singola */
