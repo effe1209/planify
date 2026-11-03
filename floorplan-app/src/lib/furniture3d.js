@@ -1423,14 +1423,28 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
     }
     case 'book_stack': {
       const colors = [it.color || '#9b6957', '#65745f', '#485c72', '#b58b55', '#725b77'];
-      const count = Math.max(2, Math.min(4, Math.round(W / 0.075)));
-      const bookW = W / count;
       const page = m('paper', '#e7dec8');
-      for (let i = 0; i < count; i++) {
-        const h = Math.max(0.018, D * (0.18 + ((i * 17) % 5) * 0.025));
-        const z = (i % 2 ? 1 : -1) * Math.min(0.012, D * 0.06);
-        bx(bookW * 0.94, h, Math.max(0.025, D * 0.68), -W / 2 + bookW * (i + 0.5), i * 0.012, z, m(`bookcover${i}`, colors[i % colors.length]));
-        bx(bookW * 0.8, h * 0.84, Math.max(0.02, D * 0.7), -W / 2 + bookW * (i + 0.5), i * 0.012 + 0.003, z + 0.004, page);
+      if (it.bookOrientation === 'upright') {
+        const count = Math.max(3, Math.min(5, Math.round(W / 0.075)));
+        const bookW = W / count;
+        const targetH = Math.max(0.09, Math.min(0.2, (it.z?.[1] ?? 0.14) - (it.z?.[0] ?? 0)));
+        const bookDepth = Math.max(0.08, Math.min(0.15, D * 0.78));
+        for (let i = 0; i < count; i++) {
+          const x = -W / 2 + bookW * (i + 0.5);
+          const h = targetH * (0.84 + ((i * 7) % 4) * 0.045);
+          const cover = bx(bookW * 0.88, h, bookDepth, x, 0.002, 0, m(`bookcover${i}`, colors[i % colors.length]));
+          cover.rotation.z = ((i % 3) - 1) * 0.025;
+          bx(Math.min(0.009, bookW * 0.14), h * 0.9, bookDepth * 1.02, x + bookW * 0.38, 0.002 + h * 0.05, 0, page);
+        }
+      } else {
+        const count = Math.max(2, Math.min(4, Math.round(W / 0.075)));
+        const bookW = W / count;
+        for (let i = 0; i < count; i++) {
+          const h = Math.max(0.025, D * (0.26 + ((i * 17) % 5) * 0.035));
+          const z = (i % 2 ? 1 : -1) * Math.min(0.012, D * 0.06);
+          bx(bookW * 0.94, h, Math.max(0.04, D * 0.68), -W / 2 + bookW * (i + 0.5), i * 0.012, z, m(`bookcover${i}`, colors[i % colors.length]));
+          bx(bookW * 0.8, h * 0.84, Math.max(0.03, D * 0.7), -W / 2 + bookW * (i + 0.5), i * 0.012 + 0.003, z + 0.004, page);
+        }
       }
       break;
     }
@@ -1490,7 +1504,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const board = m('wood', it.color || theme.wood || '#8b7258');
       const bracket = m('shelfMetal', '#777d80', { metalness: 0.45, roughness: 0.48 });
       // `mountHeight` è il piano inferiore della mensola: schiena appoggiata al muro, LED tangente al lato inferiore.
-      bx(W, 0.055, D, 0, 0.0275, 0, board);
+      bx(W, 0.055, D, 0, 0, 0, board);
       const inset = Math.min(0.1, W * 0.16);
       for (const x of [-W / 2 + inset, W / 2 - inset]) {
         bx(0.025, 0.07, 0.025, x, -0.035, -D * 0.27, bracket);
@@ -1502,7 +1516,7 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const glow = m('led', it.color || '#f1cf9d', { emissive: it.color || '#f1cf9d', emissiveIntensity: 2.2, toneMapped: false });
       bx(W, 0.012, Math.max(0.012, D), 0, 0.006, 0, glow);
       const light = new THREE.PointLight(it.color || '#f1cf9d', 0.42, 2.2, 2);
-      light.position.set(0, 0.035, 0);
+      light.position.set(0, 0.012, 0);
       g.add(light);
       break;
     }

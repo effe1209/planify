@@ -110,28 +110,31 @@ function porch(THREE, group, wood, roofColor, plan, y0) {
  * Tutta la struttura in legno: `floors` = [{ plan, y }] (y = quota del piano). Il portico va sul piano più basso con un portoncino
  * al livello della strada. Ritorna un gruppo (vuoto se non c'è niente da fare).
  */
-export function buildTimber(THREE, floors, { roofColor = '#a98558', beams = true, porch: withPorch = true } = {}) {
+export function buildTimber(THREE, floors, { roofColor = '#a98558', beamColor = '#8a6540', postColor = '#6b4a2e', beams = true, porch: withPorch = true } = {}) {
   const g = new THREE.Group();
   g.name = 'STRUTTURA_LEGNO';
-  const beam = woodMat(THREE, '#8a6540');
-  const post = woodMat(THREE, '#6b4a2e');
   for (const f of floors) {
     const H = f.plan.height || 2.7;
+    const beam = woodMat(THREE, f.beamColor || beamColor);
+    const post = woodMat(THREE, f.postColor || postColor);
     cornerPosts(THREE, g, post, f.plan, f.y, H);
     if (beams) ceilingBeams(THREE, g, beam, f.plan, f.y, H);
   }
   const ground = [...floors].sort((a, b) => a.y - b.y).find((f) => f.plan.doors?.some((d) => d.entrance && !d.kind));
-  if (ground && withPorch) porch(THREE, g, post, roofColor, ground.plan, ground.y);
+  const groundPost = ground ? woodMat(THREE, ground.postColor || postColor) : woodMat(THREE, postColor);
+  if (ground && withPorch) porch(THREE, g, groundPost, roofColor, ground.plan, ground.y);
   return g;
 }
 
 /* Travetti sotto la gronda di un'ala a due falde: uno ogni ~70 cm sui lati lunghi, inclinati come la falda. Gruppo da aggiungere al tetto. */
-export function rafterTails(THREE, wings, { slope, overhang }) {
+export function rafterTails(THREE, wings, { slope, overhang, color = '#6b4a2e' }) {
   const g = new THREE.Group();
-  const mat = woodMat(THREE, '#6b4a2e');
+  const mat = woodMat(THREE, color);
   const a = (slope * Math.PI) / 180;
   const len = overhang / Math.cos(a);
   const drop = overhang * Math.tan(a);
+  const inset = 0.006;   // piccolo distacco dalla falda: evita compenetrazioni e z-fighting
+  const normalOffset = 0.07 + inset;
   for (const w of wings) {
     const alongX = w.x1 - w.x0 >= w.y1 - w.y0;
     const [s0, s1] = alongX ? [w.x0, w.x1] : [w.y0, w.y1];
@@ -142,9 +145,15 @@ export function rafterTails(THREE, wings, { slope, overhang }) {
         const base = alongX ? (side < 0 ? w.y0 : w.y1) : (side < 0 ? w.x0 : w.x1);
         const out = base + side * overhang / 2;
         const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 0.09 : len, 0.14, alongX ? len : 0.09), mat);
-        m.position.set(alongX ? s : out, -drop / 2 - 0.1, alongX ? out : s);
+        const underRoof = normalOffset;
+        m.position.set(
+          alongX ? s : out - side * Math.sin(a) * underRoof,
+          -drop / 2 - Math.cos(a) * underRoof,
+          alongX ? out - side * Math.sin(a) * underRoof : s,
+        );
         // la falda scende verso l'esterno: il travetto la segue
-        if (alongX) m.rotation.x = side < 0 ? a : -a; else m.rotation.z = side < 0 ? -a : a;
+        // L'asse lungo segue la pendenza; lo spessore resta sotto il piano delle tegole.
+        if (alongX) m.rotation.x = side < 0 ? -a : a; else m.rotation.z = side < 0 ? a : -a;
         m.castShadow = true;
         m.userData.layer = 'STRUTTURA';
         g.add(m);

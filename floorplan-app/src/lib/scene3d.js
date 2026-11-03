@@ -706,7 +706,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   }
   // casa in legno: pilastri, travi a vista e portico (nella casa intera li mette buildHouse, una volta sola)
   if (timber && theme.materials?.structure === 'wood') {
-    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beams: false, porch: theme.materials.porch !== false }));
+    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beamColor: kit.wallIn.color, postColor: kit.wallIn.color, beams: true, porch: theme.materials.porch !== false }));
   }
   return root;
 }
@@ -815,7 +815,7 @@ function floorVoids(stairs) {
     .flatMap((st) => stairHoles(st, WALL_H + SLAB_T));
 }
 
-export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0, ceiling = false } = {}) {
+export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0, ceiling = false, timberBeams = true } = {}) {
   const house = new THREE.Group();
   house.userData.grade = 0;
   const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
@@ -864,7 +864,13 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
   // casa in legno: pilastri d'angolo, travi a vista e portico, una volta per tutta la casa
   const homeTheme = themeFor(floors.find((f) => f.level === 0) || floors[0]);
   if (homeTheme.materials?.structure === 'wood') {
-    house.add(buildTimber(THREE, floors.map((f) => ({ plan: f.plan, y: quota(f.level) })), { roofColor: styleKit(homeTheme.id, homeTheme.palette, homeTheme.materials).roof.color, beams: ceiling, porch: homeTheme.materials.porch !== false }));
+    const homeKit = styleKit(homeTheme.id, homeTheme.palette, homeTheme.materials);
+    const timberFloors = floors.map((f) => {
+      const floorTheme = themeFor(f);
+      const floorKit = styleKit(floorTheme.id, floorTheme.palette, floorTheme.materials);
+      return { plan: f.plan, y: quota(f.level), beamColor: floorKit.wallIn.color, postColor: floorKit.wallIn.color };
+    });
+    house.add(buildTimber(THREE, timberFloors, { roofColor: homeKit.roof.color, beamColor: homeKit.wallIn.color, postColor: homeKit.wallIn.color, beams: timberBeams, porch: homeTheme.materials.porch !== false }));
   }
   // soffitto del piano più alto (render): senza, da dentro si vedrebbe il tetto da sotto o il cielo; i piani sotto hanno già il solaio sopra
   if (ceiling) {
@@ -997,7 +1003,7 @@ export function buildRoof(THREE, plan, y, opts = {}) {
       continue;
     }
     const { tris } = gableTriangles(w, { slope, overhang });
-    if (materials?.structure === 'wood') g.add(rafterTails(THREE, [w], { slope, overhang }));
+    if (materials?.structure === 'wood') g.add(rafterTails(THREE, [w], { slope, overhang, color: kit.wallIn.color }));
     const geo = new THREE.BufferGeometry();
     const flat = tris.flat(2);
     geo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
