@@ -126,13 +126,12 @@ export function buildTimber(THREE, floors, { roofColor = '#a98558', beamColor = 
   return g;
 }
 
-/* Travetti sotto la gronda di un'ala a due falde: uno ogni ~70 cm sui lati lunghi, inclinati come la falda. Gruppo da aggiungere al tetto. */
-export function rafterTails(THREE, wings, { slope, overhang, color = '#6b4a2e' }) {
+/* Travetti continui da colmo a gronda, uno ogni ~70 cm; i lati condivisi tra ali non hanno sporto né travetti duplicati. */
+export function rafterTails(THREE, wings, { slope, overhang, overhangs = null, shared = null, color = '#6b4a2e' }) {
   const g = new THREE.Group();
   const mat = woodMat(THREE, color);
   const a = (slope * Math.PI) / 180;
-  const len = overhang / Math.cos(a);
-  const drop = overhang * Math.tan(a);
+  const edge = (key) => Math.max(0, overhangs?.[key] ?? overhang);
   const inset = 0.006;   // piccolo distacco dalla falda: evita compenetrazioni e z-fighting
   const normalOffset = 0.07 + inset;
   for (const w of wings) {
@@ -140,16 +139,27 @@ export function rafterTails(THREE, wings, { slope, overhang, color = '#6b4a2e' }
     const [s0, s1] = alongX ? [w.x0, w.x1] : [w.y0, w.y1];
     const n = Math.max(2, Math.round((s1 - s0) / 0.7));
     for (let i = 0; i <= n; i++) {
+      if (alongX && ((i === 0 && shared?.x0) || (i === n && shared?.x1))) continue;
+      if (!alongX && ((i === 0 && shared?.y0) || (i === n && shared?.y1))) continue;
       const s = s0 + ((s1 - s0) * i) / n;
       for (const side of [-1, 1]) {
         const base = alongX ? (side < 0 ? w.y0 : w.y1) : (side < 0 ? w.x0 : w.x1);
-        const out = base + side * overhang / 2;
+        const over = edge(alongX ? (side < 0 ? 'y0' : 'y1') : (side < 0 ? 'x0' : 'x1'));
+        const half = (alongX ? w.y1 - w.y0 : w.x1 - w.x0) / 2;
+        const ridgeGap = 0.015;
+        const run = Math.max(0.1, half + over - ridgeGap);
+        const len = run / Math.cos(a);
+        const yRidge = half * Math.tan(a);
+        const yEave = -over * Math.tan(a);
+        const yAtStart = yRidge - ridgeGap * Math.tan(a);
+        const crossCenter = base - side * (half - over - ridgeGap) / 2;
+        const roofCenterY = (yAtStart + yEave) / 2;
         const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 0.09 : len, 0.14, alongX ? len : 0.09), mat);
         const underRoof = normalOffset;
         m.position.set(
-          alongX ? s : out - side * Math.sin(a) * underRoof,
-          -drop / 2 - Math.cos(a) * underRoof,
-          alongX ? out - side * Math.sin(a) * underRoof : s,
+          alongX ? s : crossCenter - side * Math.sin(a) * underRoof,
+          roofCenterY - Math.cos(a) * underRoof,
+          alongX ? crossCenter - side * Math.sin(a) * underRoof : s,
         );
         // la falda scende verso l'esterno: il travetto la segue
         // L'asse lungo segue la pendenza; lo spessore resta sotto il piano delle tegole.

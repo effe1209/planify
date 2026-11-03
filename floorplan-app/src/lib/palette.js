@@ -83,7 +83,7 @@ export function kitWithPalette(kit, palette) {
   if (p?.floor) out.floor = { ...kit.floor, a: p.floor, b: shade(p.floor, 0.07), joint: shade(p.floor, 0.3) };
   // Il tetto conserva il materiale dello stile, ma ne riprende una parte del sottotono del pavimento.
   const floorTone = p?.floor || kit.floor?.a;
-  if (floorTone && kit.roof) out.roof = { ...kit.roof, color: mix(kit.roof.color, floorTone, 0.18), tone: mix(kit.roof.tone, floorTone, 0.14) };
+  if (floorTone && kit.roof) out.roof = { ...kit.roof, color: mix(kit.roof.color, floorTone, 0.4), tone: mix(kit.roof.tone, floorTone, 0.3) };
   return out;
 }
 

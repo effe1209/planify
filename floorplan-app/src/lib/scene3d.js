@@ -53,7 +53,7 @@ import { projectStairs } from './stairs';
 import { kitMaterials, styleKit, texture as kitTexture, uvMeters } from './style3d';
 import { pointInPolygon } from './geometry';
 
-export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true } = {}) {
+export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true, timberBeams = false } = {}) {
   const plan = withCornerWindows(plan0);   // due finestre vicine in un angolo sono una sola, con il montante
   const root = new THREE.Group();
   // ogni pezzo costruito mentre `curTag` è acceso porta quell'etichetta (arredo o apertura di origine): serve a riconoscere cosa si clicca nel 3D
@@ -706,7 +706,7 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
   }
   // casa in legno: pilastri, travi a vista e portico (nella casa intera li mette buildHouse, una volta sola)
   if (timber && theme.materials?.structure === 'wood') {
-    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beamColor: kit.wallIn.color, postColor: kit.wallIn.color, beams: true, porch: theme.materials.porch !== false }));
+    root.add(buildTimber(THREE, [{ plan, y: 0 }], { roofColor: kit.roof.color, beamColor: kit.wallIn.color, postColor: kit.wallIn.color, beams: timberBeams, porch: theme.materials.porch !== false }));
   }
   return root;
 }
@@ -815,7 +815,7 @@ function floorVoids(stairs) {
     .flatMap((st) => stairHoles(st, WALL_H + SLAB_T));
 }
 
-export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0, ceiling = false, timberBeams = true } = {}) {
+export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread = 0, ceiling = false, timberBeams = ceiling } = {}) {
   const house = new THREE.Group();
   house.userData.grade = 0;
   const floors = project.floors.filter((f) => typeof f.level === 'number' && f.plan?.rooms?.length)
@@ -990,32 +990,57 @@ export function buildRoof(THREE, plan, y, opts = {}) {
   g.position.y = y;
   const kit = styleKit(style, palette, materials);
   const mk = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
-  const tile = kitMaterials(THREE, mk, kit).roof;
+  const roofMaterials = kitMaterials(THREE, mk, kit);
   const slab = mk(kit.plinth);
-  for (const w of roofWings(plan)) {
+  const wings = roofWings(plan);
+  const eps = 0.025;
+  const overlap = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > 0.1;
+  const edgeInfo = (w) => {
+    const shared = {
+      x0: wings.some((o) => o !== w && Math.abs(o.x1 - w.x0) < eps && overlap(o.y0, o.y1, w.y0, w.y1)),
+      x1: wings.some((o) => o !== w && Math.abs(o.x0 - w.x1) < eps && overlap(o.y0, o.y1, w.y0, w.y1)),
+      y0: wings.some((o) => o !== w && Math.abs(o.y1 - w.y0) < eps && overlap(o.x0, o.x1, w.x0, w.x1)),
+      y1: wings.some((o) => o !== w && Math.abs(o.y0 - w.y1) < eps && overlap(o.x0, o.x1, w.x0, w.x1)),
+    };
+    return { shared, overhangs: Object.fromEntries(Object.entries(shared).map(([key, inside]) => [key, inside ? 0 : overhang])) };
+  };
+  const makeMesh = (triangles, material, uvAt) => {
+    if (!triangles.length) return;
+    const geo = new THREE.BufferGeometry();
+    const flat = triangles.flat(2);
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
+    const uvs = [];
+    for (let i = 0; i < flat.length; i += 3) uvs.push(...uvAt(flat[i], flat[i + 1], flat[i + 2]));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.layer = 'TETTO';
+    g.add(mesh);
+  };
+  for (const w of wings) {
+    const { shared, overhangs } = edgeInfo(w);
     if (type === 'flat') {
-      const o = overhang / 2;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(w.x1 - w.x0 + 2 * o, 0.25, w.y1 - w.y0 + 2 * o), slab);
-      box.position.set((w.x0 + w.x1) / 2, 0.125, (w.y0 + w.y1) / 2);
+      const width = w.x1 - w.x0 + overhangs.x0 + overhangs.x1;
+      const depth = w.y1 - w.y0 + overhangs.y0 + overhangs.y1;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(width, 0.25, depth), slab);
+      box.position.set((w.x0 + w.x1 + overhangs.x1 - overhangs.x0) / 2, 0.125, (w.y0 + w.y1 + overhangs.y1 - overhangs.y0) / 2);
       box.castShadow = box.receiveShadow = true;
       box.userData.layer = 'TETTO';
       g.add(box);
       continue;
     }
-    const { tris } = gableTriangles(w, { slope, overhang });
-    if (materials?.structure === 'wood') g.add(rafterTails(THREE, [w], { slope, overhang, color: kit.wallIn.color }));
-    const geo = new THREE.BufferGeometry();
-    const flat = tris.flat(2);
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
-    // UV in metri sulla falda: lungo il colmo e lungo la linea di massima pendenza
-    const uvs = [];
-    for (let i = 0; i < flat.length; i += 3) uvs.push(flat[i] + flat[i + 2] * 0.3, flat[i + 1] / Math.max(0.2, Math.sin((slope * Math.PI) / 180)) + flat[i + 2] * 0.7);
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, tile);
-    mesh.castShadow = mesh.receiveShadow = true;
-    mesh.userData.layer = 'TETTO';
-    g.add(mesh);
+    const { tris } = gableTriangles(w, { slope, overhang, overhangs });
+    if (materials?.structure === 'wood') g.add(rafterTails(THREE, [w], { slope, overhang, overhangs, shared, color: kit.wallIn.color }));
+    const alongX = w.x1 - w.x0 >= w.y1 - w.y0;
+    const ridge = alongX ? (w.y0 + w.y1) / 2 : (w.x0 + w.x1) / 2;
+    const slopeCos = Math.cos((slope * Math.PI) / 180);
+    // Coordinate metriche sul piano inclinato: evita texture stirate e giunte diagonali tra le due falde.
+    makeMesh(tris.slice(0, 4), roofMaterials.roof, (x, _y, z) => alongX ? [x, Math.abs(z - ridge) / slopeCos] : [z, Math.abs(x - ridge) / slopeCos]);
+    const capEdges = alongX ? ['x0', 'x1'] : ['y0', 'y1'];
+    const caps = tris.slice(4).filter((_, i) => !shared[capEdges[i]]);
+    // I timpani sono parete esterna, non scandole; i lati condivisi con un'altra ala restano aperti.
+    makeMesh(caps, roofMaterials.facade, (x, y, z) => alongX ? [z, y] : [x, y]);
   }
   return g;
 }

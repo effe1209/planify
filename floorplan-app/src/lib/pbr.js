@@ -14,7 +14,7 @@ const SETS = {
   tile: { dir: 'tile', rep: 0.9, tint: 0.2, gain: 1.05 },
   marble: { dir: 'marble', rep: 0.55, tint: 0.15, gain: 1.05 },
   travertine: { dir: 'travertine', rep: 0.55, tint: 0.2, gain: 1.05 },
-  tileroof: { dir: 'roof', rep: 0.6, tint: 0.3, gain: 1.0 },
+  tileroof: { dir: 'roof', rep: 0.6, tint: 0.65, gain: 1.0 },
   woodlap: { dir: 'boards', rep: 0.5, tint: 0.5, gain: 2.1 },    // doghe e tronchi: assi vere di legno, schiarite e tinte dal colore scelto
   logwall: { dir: 'boards', rep: 0.5, tint: 0.5, gain: 2.1 },
   cladding: { dir: 'boards', rep: 0.5, tint: 0.5, gain: 2.1 },

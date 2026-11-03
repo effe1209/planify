@@ -299,8 +299,9 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           const old = st.model;
           const oldGround = st.ground;
           const model = P.project
-            ? buildHouse(THREE, P.project, (f) => themeFor(P.project, f), { lowWalls: P.lowWalls, spread: P.spread })
-            : buildScene(THREE, P.plan, themeWithPalette(THEMES[P.style] || THEMES.modern, P.palette, P.materials), { lowWalls: P.lowWalls });
+            ? buildHouse(THREE, P.project, (f) => themeFor(P.project, f), { lowWalls: P.lowWalls, spread: P.spread, timberBeams: true })
+            : buildScene(THREE, P.plan, themeWithPalette(THEMES[P.style] || THEMES.modern, P.palette, P.materials), { lowWalls: P.lowWalls, timberBeams: true });
+          model.traverse((o) => { if (o.userData?.layer === 'TRAVI' || o.userData?.layer === 'TETTO') o.visible = !!P.roof; });
           scene.add(model);
           import('../lib/customModels').then(({ hydrateCustomModels }) => hydrateCustomModels(THREE, model))
             .then(() => import('../lib/pbr'))
@@ -402,12 +403,12 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           // GLB per Blender: la scena com'è (tetto, impianto e sensori visibili), con tutte le luci vere e il sole
           glb: async (extra = {}) => {
             const { plan, project, style, palette, materials, north } = propsRef.current;
+            const rf = roofRef.current;
             const fresh = project
-              ? buildHouse(THREE, project, (f) => themeFor(project, f))
-              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
+              ? buildHouse(THREE, project, (f) => themeFor(project, f), { timberBeams: !!rf })
+              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials), { timberBeams: !!rf });
             const { hydrateCustomModels } = await import('../lib/customModels');
             await hydrateCustomModels(THREE, fresh);
-            const rf = roofRef.current;
             if (rf) {
               const top = project ? roofFloor(project) : { floor: { plan }, y: plan?.height || WALL_H };
               if (top) fresh.add(buildRoof(THREE, top.floor.plan, top.y, { ...rf, style: project ? (top.floor.meta?.style || style) : style, palette: project?.palette || palette, materials: project?.materials || materials }));
@@ -430,8 +431,8 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
             const { plan, project, style, palette, materials, spread, lowWalls } = propsRef.current;
             if (!spread && !lowWalls) return sceneToDxf(THREE, sceneRef.current.model);
             const fresh = project
-              ? buildHouse(THREE, project, (f) => themeFor(project, f))
-              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials));
+              ? buildHouse(THREE, project, (f) => themeFor(project, f), { timberBeams: !!roofRef.current })
+              : buildScene(THREE, plan, themeWithPalette(THEMES[style] || THEMES.modern, palette, materials), { timberBeams: !!roofRef.current });
             attachRef.current(sceneRef.current, fresh, 0);   // sensori e impianto visibili vanno nel DXF anche con la vista esplosa o i muri bassi
             return sceneToDxf(THREE, fresh);
           },
@@ -515,6 +516,9 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
       st.model.remove(old);
       disposeTree(old);
     }
+    st.model.traverse((o) => {
+      if (o.userData?.layer === 'TRAVI' || o.userData?.layer === 'TETTO') o.visible = !!roof;
+    });
     st.invalidate?.(true);
     if (!roof) return;
     const top = project ? st.roofFloor(project) : { floor: { plan }, y: plan?.height || st.WALL_H };
