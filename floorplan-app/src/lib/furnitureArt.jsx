@@ -260,14 +260,23 @@ export const FURNITURE_ART = {
       <circle cx={w - 0.16 * s} cy={h * 0.32} r={0.03 * s} fill="#f2c94c" />
     </g>
   ),
-  nightstand: (w, h, s, t) => (
-    <g>
-      <rect width={w} height={h} rx={t.round} fill={t.wood} stroke={t.legs === 'metal' ? t.metal : t.woodLine} strokeWidth="1" />
-      <line x1={2} y1={h * 0.82} x2={w - 2} y2={h * 0.82} stroke={t.woodLine} strokeOpacity="0.5" />
-      <circle cx={w / 2} cy={h * 0.42} r={Math.min(w, h) * 0.3} fill="#fff8de" fillOpacity="0.9" stroke={t.woodLine} strokeWidth="0.7" />
-      <circle cx={w / 2} cy={h * 0.42} r={Math.min(w, h) * 0.1} fill="#f2c94c" />
-    </g>
-  ),
+  nightstand: (w, h, s, t, item) => {
+    const p = Math.min(w, h) * 0.36;
+    const lampX = w * 0.72;
+    const lampY = h * 0.34;
+    const lampR = Math.min(w, h) * 0.18;
+    return (
+      <g>
+        <rect width={w} height={h} rx={t.round} fill={t.wood} stroke={t.legs === 'metal' ? t.metal : t.woodLine} strokeWidth="1" />
+        <g transform={`translate(${w * 0.1} ${h * 0.08})`}><Plant w={p} h={p} t={t} item={item} /></g>
+        <circle cx={lampX} cy={lampY} r={lampR} fill="#fff8de" fillOpacity="0.9" stroke={t.woodLine} strokeWidth="0.7" />
+        <circle cx={lampX} cy={lampY} r={lampR * 0.62} fill="none" stroke="#d8c99e" strokeOpacity="0.75" strokeWidth="0.65" />
+        <circle cx={lampX} cy={lampY} r={lampR * 0.24} fill="#f2c94c" />
+        <line x1={2} y1={h * 0.82} x2={w - 2} y2={h * 0.82} stroke={t.woodLine} strokeOpacity="0.5" />
+        <line x1={w * 0.43} y1={h * 0.91} x2={w * 0.57} y2={h * 0.91} stroke={t.woodLine} strokeWidth="1.2" strokeLinecap="round" />
+      </g>
+    );
+  },
   wardrobe: (w, h, s, t) => {
     const n = Math.max(2, Math.round(w / (0.5 * s)));
     const dw = w / n;

@@ -970,6 +970,27 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       bx(W - 0.05, 0.14, 0.014, 0, 0.19, D / 2 + 0.006, wood);
       pull(0, 0.26, D / 2 + 0.006, false);
       bx(W + 0.02, 0.03, D + 0.02, 0, 0.52, 0, wood);
+      // piantina da comodino: vaso e tre foglie lanceolate, dentro il piano esistente
+      const px = -W * 0.24;
+      const pz = -D * 0.14;
+      const pr = Math.min(W, D) * 0.105;
+      const pot = m('nightstand-pot', theme.pot || '#e9e4dc', { roughness: 0.82 });
+      const soil = m('nightstand-soil', '#49382c', { roughness: 1 });
+      const leaf = m('nightstand-leaf', '#73985d', { roughness: 0.9, side: THREE.DoubleSide });
+      const leafDark = m('nightstand-leaf-dark', '#4f7547', { roughness: 0.92, side: THREE.DoubleSide });
+      cy(pr * 0.82, pr * 0.66, 0.075, px, 0.55, pz, pot, 16);
+      cy(pr * 0.68, pr * 0.68, 0.008, px, 0.625, pz, soil, 16);
+      const rnd = seeded(`${it.x}|${it.y}|nightstand-plant`);
+      for (let i = 0; i < 3; i++) {
+        const a = (i * Math.PI * 2) / 3 + (rnd() - 0.5) * 0.22;
+        const dir = new THREE.Vector3(Math.cos(a) * 0.55, 0.78, Math.sin(a) * 0.55).normalize();
+        const stem = cy(0.004, 0.006, 0.055, px + dir.x * 0.018, 0.63, pz + dir.z * 0.018, leafDark, 6);
+        stem.rotation.x = -dir.z * 0.35;
+        stem.rotation.z = dir.x * 0.35;
+        const lf = ball(0.5, px + dir.x * 0.046, 0.68 + dir.y * 0.046, pz + dir.z * 0.046,
+          i % 2 ? leafDark : leaf, 0.05, 0.012, 0.1);
+        lf.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+      }
       break;
     }
     case 'desk': {
