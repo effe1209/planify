@@ -748,6 +748,8 @@
 .pf-editbar { display: flex; flex-direction: column; gap: 8px; }
 .pf-editbtn { min-height: 34px; font-size: 12.5px; }
 .pf-edittools { display: flex; flex-direction: column; gap: 6px; }
+.pf-edittools .pf-segtools { flex-wrap: wrap; }
+.pf-edittools .pf-segtools button { flex: 1 1 auto; white-space: nowrap; }
 .pf-segtools { display: flex; gap: 2px; padding: 2px; border-radius: var(--radius-sm, 10px); background: var(--fill); }
 .pf-segtools button {
   flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 28px; padding: 0 8px;

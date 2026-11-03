@@ -251,7 +251,7 @@ const AXIS = 1e-3;
 
 /*
  * Balcone sul muro esterno più vicino a `p`: un locale «Balcone» appoggiato al muro (profondità `depth`, larghezza fino a `width`),
- * con una vetrata scorrevole che lo collega al locale. Solo su muri dritti orizzontali o verticali.
+ * con una finestra sul muro (si cambia poi in porta, vetrata scorrevole o panoramica dal pannello dell'apertura). Solo su muri dritti orizzontali o verticali.
  */
 export function addBalcony(plan, p, { depth = 1.2, width = 3 } = {}) {
   const e = nearestEdge(plan, p, 1.5);
@@ -280,10 +280,10 @@ export function addBalcony(plan, p, { depth = 1.2, width = 3 } = {}) {
   }
   const id = Math.max(0, ...plan.rooms.map((r) => r.id)) + 1;
   const room = { id, name: 'Balcone', kind: 'balcony', zone: id, color: '#e6ecef', poly };
-  const sw = Math.min(1.8, bw - 0.2);
-  const door = place(plan, e.a, e.b, t0 / len, sw, 'door', { openDir: probeIn ? 1 : -1, entrance: false }, 'sliding');
+  const ww = Math.min(1.2, bw - 0.2);
+  const win = place(plan, e.a, e.b, t0 / len, ww, 'window');
   const withRoom = { ...plan, rooms: [...plan.rooms, room] };
-  const next = rebuild(withRoom, new Map([[id, poly]]), { doors: [...plan.doors, door] });
+  const next = rebuild(withRoom, new Map([[id, poly]]), { windows: [...plan.windows, win] });
   return { plan: next, room: id };
 }
 

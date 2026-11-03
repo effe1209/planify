@@ -12,7 +12,7 @@ export function EditTools({ addMode, splitDir, onAdd, onSplitDir, only = null })
   const tools = [['door', DoorOpen, 'Porta', 'Aggiungi una porta: clicca sul muro'], ['window', PanelTop, 'Finestra', 'Aggiungi una finestra: clicca su un muro esterno'],
     ['panoramic', RectangleHorizontal, 'Vetrata', 'Aggiungi una vetrata panoramica a tutta altezza: clicca su un muro esterno o verso il balcone'],
     ['sliding', RectangleHorizontal, 'Scorrevole', 'Aggiungi una vetrata scorrevole a tutta altezza: clicca su un muro, anche verso il balcone', true],
-    ['balcony', PanelTop, 'Balcone', 'Aggiungi un balcone: clicca su un muro esterno, nasce un balcone con la vetrata scorrevole', true],
+    ['balcony', PanelTop, 'Balcone', 'Aggiungi un balcone: clicca su un muro esterno, nasce un balcone con una finestra sul muro', true],
     ['split', Scissors, 'Muro', 'Aggiungi un muro: trascina nel locale per tracciarlo, poi tiralo col mouse per spostarlo']];
   return (
     <div className="pf-edittools">
@@ -33,7 +33,7 @@ export function EditTools({ addMode, splitDir, onAdd, onSplitDir, only = null })
       {addMode && (
         <p className="pf-tip">
           {addMode === 'split' ? 'Trascina nel locale lungo la linea del muro (la direzione si capisce dal gesto) oppure clicca per usare la direzione scelta. Le due parti restano collegate da una porta; il muro nuovo si sposta poi col mouse. Esc per annullare.'
-            : addMode === 'balcony' ? 'Clicca su un muro esterno: il balcone nasce lì (1,2 m di profondità) con la vetrata scorrevole; poi trascina i suoi lati per ridimensionarlo. Esc per annullare.'
+            : addMode === 'balcony' ? 'Clicca su un muro esterno: il balcone nasce lì (1,2 m di profondità) con una finestra sul muro, che poi cambi in porta o vetrata dal pannello; trascina i lati del balcone per ridimensionarlo. Esc per annullare.'
             : `Clicca sul muro dove metterla${addMode === 'window' ? ' (solo muri esterni)' : addMode === 'panoramic' ? ' (muri esterni o verso il balcone)' : addMode === 'sliding' ? ' (anche tra due locali o verso il balcone)' : ''}. Esc per annullare.`}
         </p>
       )}
