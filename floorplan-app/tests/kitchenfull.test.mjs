@@ -21,7 +21,10 @@ const counter = { type: 'kitchen_counter', x: 1.6, y: t, w: 2.4, h: 0.6, rot: 0,
 const r = completeKitchen(mk(counter), 1);
 assert.ok(r.plan && r.added > 0, 'si aggiunge qualcosa');
 const types = r.plan.furniture.map((f) => f.type);
-for (const ty of ['kitchen_fridge_tall', 'kitchen_oven_tall', 'kitchen_washer_tall']) assert.equal(types.filter((x) => x === ty).length, 1, ty);
+for (const ty of ['kitchen_fridge_tall', 'kitchen_oven_tall', 'kitchen_dishwasher']) assert.equal(types.filter((x) => x === ty).length, 1, ty);
+assert.ok(!types.includes('kitchen_washer_tall'), 'niente lavatrice in cucina');
+assert.equal(r.plan.furniture.find((f) => f.type === 'kitchen_dishwasher').builtIn, true, 'incassata di serie');
+assert.equal(r.plan.furniture.find((f) => f.type === 'kitchen_counter').noDishwasher, true);
 assert.ok(types.includes('wall_cabinet'), 'pensili');
 assert.equal(r.plan.rooms[0].kitchenStyle, 'full');
 assert.equal(r.plan.furniture.find((f) => f.type === 'kitchen_counter').noFridge, true);
@@ -33,7 +36,7 @@ for (let i = 0; i < floorItems.length; i++) for (let j = i + 1; j < floorItems.l
 }
 // tutto dentro il locale e lontano dalla porta d'ingresso e dalla finestra
 for (const f of r.plan.furniture) { assert.ok(f.x >= 0 && f.x + f.w <= 6 && f.y >= 0 && f.y + f.h <= 4, `${f.type} fuori dal locale`); }
-for (const f of r.plan.furniture.filter((q) => q.type === 'kitchen_fridge_tall' || q.type === 'kitchen_oven_tall' || q.type === 'kitchen_washer_tall')) assert.ok(f.x + f.w <= 2.6 || f.x >= 3.6, 'colonna davanti alla finestra');
+for (const f of r.plan.furniture.filter((q) => q.type === 'kitchen_fridge_tall' || q.type === 'kitchen_oven_tall' || q.type === 'kitchen_dishwasher')) assert.ok(f.x + f.w <= 2.6 || f.x >= 3.6, 'colonna davanti alla finestra');
 // i pensili non coprono la finestra né la cappa
 const hood = 1.6 + 2.4 * 0.75;
 for (const c of r.plan.furniture.filter((q) => q.type === 'wall_cabinet')) {
@@ -48,21 +51,28 @@ const back = baseKitchen(r.plan, 1).plan;
 assert.deepEqual(back.furniture, [counter]);
 assert.equal(back.rooms[0].kitchenStyle, undefined);
 const sum = kitchenSummary(r.plan, 1);
-assert.equal(sum.columns.length, 3);
+assert.equal(sum.columns.length, 2);
+assert.equal(sum.dishwasher, true);
+// a vista: frontale in acciaio
+const vis = completeKitchen({ ...mk(counter), rooms: [{ ...mk(counter).rooms[0], kitchenDishwasher: 'visible' }] }, 1);
+assert.equal(vis.plan.furniture.find((f) => f.type === 'kitchen_dishwasher').builtIn, false);
+// la lavastoviglie sta dal lato del lavello (a destra della finestra sul muro: lavello al 58% del piano)
+const dw = r.plan.furniture.find((f) => f.type === 'kitchen_dishwasher');
+assert.ok(dw.x >= counter.x + counter.w - 0.001 || dw.x + dw.w <= counter.x + 0.001, 'accanto al piano');
 
 // piano che occupa tutta la parete: si accorcia per fare posto alle colonne
 const wide = mk({ ...counter, x: 0.1, w: 5.8 }, { doors: [], windows: [] });
 const w2 = completeKitchen(wide, 1);
 const ctr = w2.plan.furniture.find((f) => f.type === 'kitchen_counter');
 assert.ok(ctr.w < 5.8 && ctr.kitchenOrig, 'piano accorciato');
-assert.ok(w2.plan.furniture.filter((f) => f.type.endsWith('_tall')).length >= 2);
+assert.ok(w2.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher').length >= 2);
 assert.deepEqual(baseKitchen(w2.plan, 1).plan.furniture.find((f) => f.type === 'kitchen_counter').w, 5.8);
 
 // facciate diverse: contro il muro est e ovest le colonne seguono lo stesso muro
 for (const [facing, x, y, w, h] of [['W', 5.3, 0.8, 0.6, 2.4], ['E', 0.1, 0.8, 0.6, 2.4], ['N', 1.6, 3.3, 2.4, 0.6]]) {
   const c = { type: 'kitchen_counter', x, y, w, h, rot: 0, facing, room: 1 };
   const q = completeKitchen(mk(c, { doors: [], windows: [] }), 1);
-  const cols = q.plan.furniture.filter((f) => f.type.endsWith('_tall'));
+  const cols = q.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher');
   assert.ok(cols.length >= 2, `${facing}: colonne`);
   for (const f of cols) assert.ok(facing === 'N' ? Math.abs(f.y - y) < 1e-6 : Math.abs(f.x - x) < 1e-6, `${facing}: colonna allineata al piano`);
 }
@@ -71,10 +81,14 @@ for (const [facing, x, y, w, h] of [['W', 5.3, 0.8, 0.6, 2.4], ['E', 0.1, 0.8, 0
 const scene = buildScene(THREE, r.plan, THEMES.modern);
 const names = new Set();
 scene.traverse((o) => { if (o.name) names.add(o.name); });
-for (const n of ['COLONNA_FRIGO', 'COLONNA_FORNO', 'COLONNA_LAVATRICE', 'PENSILE']) assert.ok(names.has(n), n);
+for (const n of ['COLONNA_FRIGO', 'COLONNA_FORNO', 'LAVASTOVIGLIE', 'PENSILE']) assert.ok(names.has(n), n);
 const project = { name: 'p', floors: [{ id: 'a', level: 0, name: 'T', plan: r.plan, meta: { style: 'modern' } }] };
 const tags = planElectric(project).floors.a.points.filter((p) => p.kind === 'dedicated').map((p) => p.tag);
-for (const tg of ['FR', 'FO', 'LV']) assert.ok(tags.includes(tg), `presa ${tg}`);
+for (const tg of ['FR', 'FO', 'LS']) assert.ok(tags.includes(tg), `presa ${tg}`);
+assert.equal(tags.filter((x) => x === 'LS').length, 1, 'una sola presa lavastoviglie');
+assert.ok(!tags.includes('LV'), 'nessuna presa lavatrice in cucina');
 assert.equal(tags.filter((x) => x === 'FR').length, 1, 'un solo frigo');
-assert.ok(planPlumbing(project).floors.a.fixtures.some((f) => f.type === 'washer'), 'lavatrice allacciata');
+const fx = planPlumbing(project).floors.a.fixtures;
+assert.equal(fx.filter((f) => f.type === 'dishwasher').length, 1, 'una sola lavastoviglie allacciata');
+assert.ok(!fx.some((f) => f.type === 'washer'), 'niente lavatrice');
 console.log('kitchenfull ok');

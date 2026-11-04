@@ -18,7 +18,7 @@ export const OBJECT_NAMES = {
   kitchen_counter: 'CUCINA', kitchen_peninsula: 'PENISOLA', shoe_cabinet: 'SCARPIERA', console: 'CONSOLE', floor_lamp: 'LAMPADA',
   bath_column: 'COLONNA_BAGNO', towel_radiator: 'SCALDASALVIETTE', utility_sink: 'LAVATOIO', minibar: 'MINIBAR',
   workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
-  kitchen_fridge_tall: 'COLONNA_FRIGO', kitchen_oven_tall: 'COLONNA_FORNO', kitchen_washer_tall: 'COLONNA_LAVATRICE', wall_cabinet: 'PENSILE',
+  kitchen_fridge_tall: 'COLONNA_FRIGO', kitchen_oven_tall: 'COLONNA_FORNO', kitchen_dishwasher: 'LAVASTOVIGLIE', wall_cabinet: 'PENSILE',
   wardrobe_corner: 'ARMADIO_ANGOLO', wardrobe_open_corner: 'GUARDAROBA_APERTO_ANGOLO', wardrobe_open: 'ARMADIO_APERTO', sofa_round: 'DIVANO_TONDO', sofa_curved: 'DIVANO_ARCO',
   chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO', armchair_rattan: 'POLTRONA_RATTAN', table_rattan: 'TAVOLINO_RATTAN',
   pillow: 'CUSCINO', throw: 'COPERTA', book_stack: 'LIBRI', vase: 'VASO', candle: 'CANDELA', figurine: 'STATUINA',
@@ -1081,22 +1081,22 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       pull(W / 2 - 0.08, 1.46, zf + 0.008, true);
       break;
     }
-    case 'kitchen_washer_tall': {
-      // colonna con lavatrice da incasso in basso (oblò) e ante alte sopra
+    case 'kitchen_dishwasher': {
+      // lavastoviglie da cucina, alta come il piano (0,90 m): incassata (frontale come i mobili, maniglia in alto) o a vista (frontale
+      // in acciaio con pannello comandi); il piano di lavoro prosegue sopra
+      const builtIn = it.builtIn !== false;
       bx(W, 0.1, D - 0.04, 0, 0, -0.01, darkLine);
-      bx(W - 0.012, 2.0, D - 0.02, 0, 0.1, -0.01, M.cabinet);
+      bx(W - 0.012, 0.74, D - 0.02, 0, 0.1, -0.01, M.cabinet);
       const zf = D / 2 - 0.01 + 0.01;
-      bx(W - 0.04, 0.86, 0.018, 0, 0.12, zf, m('appliancefront', '#f2f4f6', { roughness: 0.35 }));
-      const r = Math.min(W, 0.6) * 0.29;
-      const ring = cy(r, r, 0.03, 0, 0.5, zf + 0.012, m('ringwasher', '#8e99a6', { metalness: 0.6, roughness: 0.3 }), 28);
-      ring.rotation.x = Math.PI / 2;
-      const door = cy(r * 0.78, r * 0.78, 0.034, 0, 0.5, zf + 0.014, m('portholewasher', '#1c2a36', { roughness: 0.1, transparent: true, opacity: 0.85 }), 28);
-      door.rotation.x = Math.PI / 2;
-      bx(W - 0.1, 0.09, 0.012, 0, 0.84, zf + 0.012, m('panelwasher', '#d9dde3'));
-      bx(W - 0.04, 1.0, 0.016, 0, 1.0, zf, wood);                              // ante alte
-      bx(0.01, 0.98, 0.018, 0, 1.0, zf + 0.002, darkLine);                     // giunto tra le due ante
-      pull(-0.03, 1.5, zf + 0.008, true);
-      pull(0.03, 1.5, zf + 0.008, true);
+      if (builtIn) {
+        bx(W - 0.04, 0.68, 0.016, 0, 0.14, zf, wood);
+        pull(0, 0.76, zf + 0.008, false);
+      } else {
+        bx(W - 0.04, 0.68, 0.018, 0, 0.14, zf, m('steeldish', '#cfd4da', { metalness: 0.55, roughness: 0.3 }));
+        bx(W - 0.1, 0.014, 0.024, 0, 0.74, zf + 0.022, chrome);
+        bx(W - 0.1, 0.07, 0.01, 0, 0.78, zf + 0.012, m('dishpanel', '#1c2127', { emissive: '#4fa8ff', emissiveIntensity: 0.12 }));
+      }
+      bx(W + 0.01, 0.04, D + 0.03, 0, 0.84, 0, M.counter);
       break;
     }
     case 'wall_cabinet': {

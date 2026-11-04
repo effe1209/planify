@@ -90,9 +90,17 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
             items={[{ value: 'base', label: 'Base' }, { value: 'full', label: 'Completa' }]} onValueChange={kitchen.onStyle} />
           <p className="pf-hint">
             {kitchen.style === 'full'
-              ? `Cucina completa: ${kitchen.columns.length ? `colonne con ${kitchen.columns.join(', ')}` : 'nessuna colonna'}${kitchen.cabinets ? ` e ${kitchen.cabinets} pensili` : ''}.`
-              : 'Base: piano con lavello, cottura e cappa. «Completa» aggiunge colonne per frigo, forno e microonde, lavatrice, e i pensili.'}
+              ? `Cucina completa: ${kitchen.columns.length ? `colonne con ${kitchen.columns.join(', ')}` : 'nessuna colonna'}${kitchen.dishwasher ? ', lavastoviglie' : ''}${kitchen.cabinets ? ` e ${kitchen.cabinets} pensili` : ''}.`
+              : 'Base: piano con lavello, cottura e cappa. «Completa» aggiunge colonne per frigo, forno e microonde, la lavastoviglie e i pensili.'}
           </p>
+          {kitchen.style === 'full' && (
+            <>
+              <span>Lavastoviglie</span>
+              <SegmentedControl className="pf-gseg" aria-label="Lavastoviglie" value={kitchen.dishwasherMode}
+                style={{ '--lg-tab-width': '130px', '--lg-tab-height': '28px' }}
+                items={[{ value: 'built_in', label: 'Incassata' }, { value: 'visible', label: 'A vista (inox)' }]} onValueChange={kitchen.onDishwasher} />
+            </>
+          )}
           {kitchen.notes?.map((n) => <p key={n} className="pf-warn" role="status">{n}</p>)}
         </div>
       )}

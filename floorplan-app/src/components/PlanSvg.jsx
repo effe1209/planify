@@ -254,11 +254,13 @@ const BASE_FURNITURE = {
       <rect x={w * 0.14} y={h * 0.6} width={w * 0.72} height={h * 0.18} rx={1.5} fill="#5a626c" fillOpacity="0.85" stroke={F_STROKE} strokeWidth="0.8" />
     </>
   ),
-  kitchen_washer_tall: (w, h) => (
+  kitchen_dishwasher: (w, h) => (
     <>
       <rect width={w} height={h} rx={1.5} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />
-      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.3} fill="#e3eefb" stroke={F_SOFT} />
-      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.2} fill="none" stroke={F_SOFT} />
+      <line x1={w * 0.15} y1={h * 0.3} x2={w * 0.85} y2={h * 0.3} stroke={F_SOFT} />
+      <line x1={w * 0.15} y1={h * 0.5} x2={w * 0.85} y2={h * 0.5} stroke={F_SOFT} />
+      <line x1={w * 0.15} y1={h * 0.7} x2={w * 0.85} y2={h * 0.7} stroke={F_SOFT} />
+      <text x={w / 2} y={h * 0.2} textAnchor="middle" fontSize={Math.max(5, w * 0.2)} fontWeight="700" fill={F_STROKE}>LS</text>
     </>
   ),
   wall_cabinet: (w, h) => (

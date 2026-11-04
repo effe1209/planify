@@ -109,7 +109,8 @@ function fixturesOf(plan) {
       case 'shower': case 'shower_walkin': push('shower', len / 2, center(f)); break;
       case 'shower_round': push('shower', len * 0.3, back(f, len * 0.3, len * 0.3)); break;
       case 'bathtub': push('bathtub', len / 2, back(f, len / 2, 0.25)); break;
-      case 'washer': case 'kitchen_washer_tall': push('washer', len / 2, back(f, len / 2, 0.05)); break;
+      case 'washer': push('washer', len / 2, back(f, len / 2, 0.05)); break;
+      case 'kitchen_dishwasher': push('dishwasher', len / 2, back(f, len / 2, 0.08)); break;
       case 'utility_sink': push('utility_sink', len / 2, back(f, len / 2, 0.05)); break;
       case 'kitchen_counter': {
         if (out.some((x) => x.type === 'kitchen_sink' && x.room.id === room.id)) break;
@@ -119,7 +120,7 @@ function fixturesOf(plan) {
         const sinkX = f.parts?.sink ?? f0 + usable * 0.58 + Math.min(usable * 0.3, 0.8) / 2;
         push('kitchen_sink', sinkX, back(f, sinkX, 0.08));
         const dw = Math.min(len - 0.3, sinkX + Math.min(usable * 0.3, 0.8) / 2 + 0.3);
-        push('dishwasher', dw, back(f, dw, 0.08));
+        if (!f.noDishwasher) push('dishwasher', dw, back(f, dw, 0.08));   // con la cucina completa la lavastoviglie è un arredo a parte
         break;
       }
       default: break;

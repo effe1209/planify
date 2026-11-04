@@ -782,6 +782,14 @@ export default function App() {
     editPlan(() => res.plan);
     say(style === 'full' ? 'Cucina completa: colonne e pensili aggiunti' : 'Cucina base');
   };
+  /* Lavastoviglie della cucina completa: incassata (frontale come i mobili) o a vista (acciaio). */
+  const setKitchenDishwasher = (roomId, mode) => {
+    if (!plan) return;
+    const withMode = { ...plan, rooms: plan.rooms.map((r) => (r.id === roomId ? { ...r, kitchenDishwasher: mode } : r)) };
+    const res = completeKitchen(withMode, roomId);
+    setKitchenNotes(res.notes || []);
+    editPlan(() => res.plan);
+  };
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
   const editFurniture = (fn) => editPlan((p) => {
@@ -2480,7 +2488,7 @@ export default function App() {
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
                   onImportModel={(file) => importCustomModel(selectedRoom.id, file)}
                   kitchen={!selectedRoom.mezz && !readOnly && isKitchenRoom(selectedRoom) && hasKitchenCounter(plan, selectedRoom.id)
-                    ? { style: selectedRoom.kitchenStyle === 'full' ? 'full' : 'base', ...kitchenSummary(plan, selectedRoom.id), notes: kitchenNotes, onStyle: (style) => setKitchenStyle(selectedRoom.id, style) } : null}
+                    ? { style: selectedRoom.kitchenStyle === 'full' ? 'full' : 'base', ...kitchenSummary(plan, selectedRoom.id), notes: kitchenNotes, dishwasherMode: selectedRoom.kitchenDishwasher === 'visible' ? 'visible' : 'built_in', onStyle: (style) => setKitchenStyle(selectedRoom.id, style), onDishwasher: (mode) => setKitchenDishwasher(selectedRoom.id, mode) } : null}
                   mezz={selectedRoom.mezz && !readOnly ? { ...mezzLimits(plan), label: mezzAxis(plan).label, ratio: (s) => mezzRatio(plan, s), onSize: resizeMezzanine } : null}
                   onFurnish={engineHas('furnish_plan') && !readOnly && !selectedRoom.mezz ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
                   busy={furnishing}
