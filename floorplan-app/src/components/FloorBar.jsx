@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Copy, Layers, PenTool, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { FLOOR_PRESETS, levelLabel } from '../lib/project';
 import { GButton, Glass } from '../glass';
@@ -91,8 +92,9 @@ export default function FloorBar({
         <GButton ref={addBtn} type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu} title="Aggiungi un piano">
           <Plus size={14} /> <span className="pf-tl">Piano</span>
         </GButton>
-        {menu && (
-          <div className="pf-floor-menu" role="dialog" aria-label="Aggiungi piano" style={menuPos ? { position: 'fixed', ...menuPos } : undefined}>
+        {menu && createPortal(
+          /* fuori dalla barra: il vetro della barra farebbe da riferimento al «fixed» e il menu finirebbe lontano dal tasto */
+          <div className="pf-floor-menu" role="dialog" aria-label="Aggiungi piano" style={{ position: 'fixed', zIndex: 60, ...(menuPos || { top: -9999, left: 0 }) }}>
             <label className="pf-field-sm">
               <span>Livello</span>
               <select className="pf-input-sm" value={preset} onChange={(e) => setPreset(Number(e.target.value))}>
@@ -109,7 +111,8 @@ export default function FloorBar({
             </GButton>
             <GButton type="button" className="pf-tool" onClick={() => start('sketch')}><PenTool size={13} /> Disegna a mano</GButton>
             <GButton type="button" className="pf-tool" onClick={() => start('duplicate')}><Copy size={13} /> Duplica il piano attuale</GButton>
-          </div>
+          </div>,
+          addBtn.current?.closest('.pf-app') || document.body,
         )}
       </div>
 
