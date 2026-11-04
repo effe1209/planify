@@ -89,7 +89,7 @@ const COMMAND = new Set(['switch', 'switch_2way', 'switch_inter', 'button']);
 const LIGHTS = new Set(['light', 'light_wall', 'fan']);
 const SOCKETS = new Set(['socket', 'socket_ip', 'dedicated']);
 // arredi davanti ai quali una presa «libera» non serve (o non è ammessa, vicino all'acqua)
-const BLOCKING = new Set(['wardrobe', 'wardrobe_corner', 'wardrobe_open_corner', 'wardrobe_open', 'shelving', 'shelving_heavy', 'kitchen_counter', 'bathtub', 'shower',
+const BLOCKING = new Set(['wardrobe', 'wardrobe_corner', 'wardrobe_open_corner', 'wardrobe_open', 'shelving', 'shelving_heavy', 'kitchen_counter', 'kitchen_fridge_tall', 'kitchen_oven_tall', 'kitchen_washer_tall', 'bathtub', 'shower',
   'shower_walkin', 'shower_round', 'toilet', 'bidet', 'washer', 'dryer', 'utility_sink', 'bed', 'sofa',
   'sofa_corner', 'car', 'workbench', 'minibar', 'bookcase', 'sideboard', 'dresser', 'shoe_cabinet']);
 const WATER = new Set(['bathtub', 'shower', 'shower_walkin', 'shower_round']);
@@ -353,7 +353,7 @@ function planFloor(project, floor, level, stairRole, main) {
           break;
         }
         case 'kitchen_counter': {
-          const fridge = len >= 3 && !points.some((p) => p.tag === 'FR');
+          const fridge = len >= 3 && !f.noFridge && !points.some((p) => p.tag === 'FR');
           const f0 = fridge ? 0.62 : 0;
           const usable = len - f0;
           const sinkW = Math.min(usable * 0.3, 0.8);
@@ -381,6 +381,10 @@ function planFloor(project, floor, level, stairRole, main) {
           break;
         }
         case 'washer': sock('dedicated', nearestWall(r, itemPoint(f, len / 2, 0), 0.9, sockets), { tag: 'LV' }); break;
+        // colonne della cucina completa: una presa dedicata ciascuna
+        case 'kitchen_fridge_tall': sock('dedicated', nearestWall(r, itemPoint(f, len / 2, 0), 0.9, sockets), { tag: 'FR' }); break;
+        case 'kitchen_oven_tall': sock('dedicated', nearestWall(r, itemPoint(f, len / 2, 0), 0.9, sockets), { tag: 'FO' }); break;
+        case 'kitchen_washer_tall': sock('dedicated', nearestWall(r, itemPoint(f, len / 2, 0), 0.9, sockets), { tag: 'LV' }); break;
         case 'dryer': sock('dedicated', nearestWall(r, itemPoint(f, len / 2, 0), 0.9, sockets), { tag: 'AS' }); break;
         case 'workbench': sock('socket', nearestWall(r, itemPoint(f, len / 2, 0), 1.0, sockets)); break;
         case 'sink':

@@ -304,7 +304,7 @@ export const FURNITURE_ART = {
     );
   },
   kitchen_counter: (w, h, s, t, item) => {
-    const fridge = w >= 3 * s;
+    const fridge = w >= 3 * s && !item?.noFridge;   // con la cucina completa il frigo è una colonna a parte
     const f0 = fridge ? 0.62 * s : 0;
     const usable = w - f0;
     const sinkW = Math.min(usable * 0.3, 0.8 * s);

@@ -18,7 +18,7 @@ export const DEFAULT_PRICES = {
   el_point: 72, el_signal: 95, el_dedicated: 130, el_panel: 650, el_subpanel: 380, el_ev: 1300, el_extra: 90,
   pl_fixture: 380, pl_manifold: 420, pl_stack: 65, pl_sewer: 85, pl_heatpump: 3400, pl_gas: 2600, pl_electric: 450,
   sa_toilet: 420, sa_bidet: 340, sa_sink: 320, sa_shower: 950, sa_bathtub: 850, sa_kitchen_sink: 260,
-  kitchen: 650,
+  kitchen: 650, kitchen_tall: 1100,
 };
 
 const WOOD = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study', 'entry', 'corridor', 'closet', 'hotel_room', 'stairs',
@@ -90,6 +90,8 @@ export function quantities(project) {
         add('kitchen', len);
         add('splash', len * 0.6);
       }
+      // cucina completa: ogni colonna con elettrodomestico incassato (i pensili sono già nel prezzo al metro della cucina)
+      if (['kitchen_fridge_tall', 'kitchen_oven_tall', 'kitchen_washer_tall'].includes(it.type)) add('kitchen_tall', 1);
     }
   }
 
@@ -161,6 +163,7 @@ const ITEMS = [
   ['sa_bathtub', 'Impianto idraulico', 'Vasca con miscelatore', 'pz'],
   ['sa_kitchen_sink', 'Impianto idraulico', 'Lavello e miscelatore cucina', 'pz'],
   ['kitchen', 'Cucina', 'Cucina componibile (basi, pensili, piano)', 'm'],
+  ['kitchen_tall', 'Cucina', 'Colonna con elettrodomestico incassato (frigo, forno e microonde, lavatrice)', 'pz'],
 ];
 
 /* Preventivo: voci con prezzi (quelli dell'utente sopra i predefiniti), totali per categoria e complessivo. */

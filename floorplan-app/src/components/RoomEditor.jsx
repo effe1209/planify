@@ -3,14 +3,14 @@ import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, Upl
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
 import { forUse } from '../lib/materialLibrary';
 import FinishPicker from './FinishPicker';
-import { GButton, GRange, GText } from '../glass';
+import { GButton, GRange, GText, SegmentedControl } from '../glass';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
 
 /* Pannello di personalizzazione della stanza selezionata: nome, uso, finitura, arredi. */
 const ASYMMETRIC = new Set(['sofa_corner', 'shower_round', 'shower_walkin', 'kitchen_peninsula', 'wardrobe_corner', 'wardrobe_open_corner']);
 
-export default function RoomEditor({ room, furniture, library = [], onChange, onRotate, onFlip, onRemoveItem, onAddItem, onImportModel, onFurnish, busy, onClose, mezz = null }) {
+export default function RoomEditor({ room, furniture, library = [], onChange, onRotate, onFlip, onRemoveItem, onAddItem, onImportModel, onFurnish, busy, onClose, mezz = null, kitchen = null }) {
   const [newId, setNewId] = useState('bed_double');
   const [importBusy, setImportBusy] = useState(false);
   const modelInput = useRef(null);
@@ -81,6 +81,21 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
       })}
 
       </>)}
+
+      {kitchen && (
+        <div className="pf-field-sm pf-kitchen-style">
+          <span>Tipo di cucina</span>
+          <SegmentedControl className="pf-gseg" aria-label="Tipo di cucina" value={kitchen.style}
+            style={{ '--lg-tab-width': '130px', '--lg-tab-height': '28px' }}
+            items={[{ value: 'base', label: 'Base' }, { value: 'full', label: 'Completa' }]} onValueChange={kitchen.onStyle} />
+          <p className="pf-hint">
+            {kitchen.style === 'full'
+              ? `Cucina completa: ${kitchen.columns.length ? `colonne con ${kitchen.columns.join(', ')}` : 'nessuna colonna'}${kitchen.cabinets ? ` e ${kitchen.cabinets} pensili` : ''}.`
+              : 'Base: piano con lavello, cottura e cappa. «Completa» aggiunge colonne per frigo, forno e microonde, lavatrice, e i pensili.'}
+          </p>
+          {kitchen.notes?.map((n) => <p key={n} className="pf-warn" role="status">{n}</p>)}
+        </div>
+      )}
 
       {mezz && <MezzSize mezz={mezz} area={room.w * room.h} />}
 

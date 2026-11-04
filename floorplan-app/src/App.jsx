@@ -16,6 +16,7 @@ import SketchBoard from './components/SketchBoard';
 import SketchEditPanel from './components/SketchEditPanel';
 import ExtStairPanel from './components/ExtStairPanel';
 import GardenMovePanel from './components/GardenMovePanel';
+import { baseKitchen, completeKitchen, hasKitchenCounter, isKitchenRoom, kitchenSummary } from './lib/kitchenFull';
 import { moveGardenPart } from './lib/gardenEdit';
 import { removeExtStair, setExtStair } from './lib/extStair';
 import * as SK from './lib/sketchEdit';
@@ -772,6 +773,15 @@ export default function App() {
     const p = f.wallMounted ? snapWallMountedItem(plan, f, x, y) : snapItem(plan, f, x, y);
     return { ...f, x: p.x, y: p.y, room: p.room, facing: p.facing || f.facing };
   }));
+  const [kitchenNotes, setKitchenNotes] = useState([]);
+  /* Cucina base o completa (colonne con elettrodomestici e pensili) del locale. */
+  const setKitchenStyle = (roomId, style) => {
+    if (!plan) return;
+    const res = style === 'full' ? completeKitchen(plan, roomId) : baseKitchen(plan, roomId);
+    setKitchenNotes(res.notes || []);
+    editPlan(() => res.plan);
+    say(style === 'full' ? 'Cucina completa: colonne e pensili aggiunti' : 'Cucina base');
+  };
   const updateRoom = (roomId, patch) =>
     editPlan((p) => ({ ...p, rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) }));
   const editFurniture = (fn) => editPlan((p) => {
@@ -794,12 +804,19 @@ export default function App() {
       const res = await readJson(await postJson(base, '/furnish-plan',
         { plan, style: floor.meta?.style || form.style, room_ids: roomIds, clear }));
       const colors = new Map(res.rooms.map((r) => [r.id, r.color]));
-      editPlan((p) => ({
-        ...p,
-        furniture: res.furniture,
-        rooms: p.rooms.map((r) => (colors.has(r.id) && (!roomIds || roomIds.includes(r.id)) ? { ...r, color: colors.get(r.id), kind: res.rooms.find((x) => x.id === r.id).kind } : r)),
-        notes: res.notes?.length ? res.notes : p.notes,
-      }));
+      editPlan((p) => {
+        let next = {
+          ...p,
+          furniture: res.furniture,
+          rooms: p.rooms.map((r) => (colors.has(r.id) && (!roomIds || roomIds.includes(r.id)) ? { ...r, color: colors.get(r.id), kind: res.rooms.find((x) => x.id === r.id).kind } : r)),
+          notes: res.notes?.length ? res.notes : p.notes,
+        };
+        // le cucine «complete» si rifanno sul nuovo arredo (colonne e pensili non sono del motore); con «svuota» tornano base
+        for (const r of p.rooms.filter((q) => q.kitchenStyle === 'full' && (!roomIds || roomIds.includes(q.id)))) {
+          next = clear ? baseKitchen(next, r.id).plan : completeKitchen(next, r.id).plan;
+        }
+        return next;
+      });
       say(clear ? 'Arredi tolti' : roomIds ? 'Locale arredato' : 'Pianta arredata');
     } catch (err) {
       setError(`Arredo non riuscito: ${err.message}`);
@@ -2462,6 +2479,8 @@ export default function App() {
                   onRemoveItem={removeFurniture}
                   onAddItem={(type) => addFurniture(selectedRoom.id, type)}
                   onImportModel={(file) => importCustomModel(selectedRoom.id, file)}
+                  kitchen={!selectedRoom.mezz && !readOnly && isKitchenRoom(selectedRoom) && hasKitchenCounter(plan, selectedRoom.id)
+                    ? { style: selectedRoom.kitchenStyle === 'full' ? 'full' : 'base', ...kitchenSummary(plan, selectedRoom.id), notes: kitchenNotes, onStyle: (style) => setKitchenStyle(selectedRoom.id, style) } : null}
                   mezz={selectedRoom.mezz && !readOnly ? { ...mezzLimits(plan), label: mezzAxis(plan).label, ratio: (s) => mezzRatio(plan, s), onSize: resizeMezzanine } : null}
                   onFurnish={engineHas('furnish_plan') && !readOnly && !selectedRoom.mezz ? (clear) => furnishPlan({ roomIds: [selectedRoom.id], clear }) : null}
                   busy={furnishing}

@@ -18,6 +18,7 @@ export const OBJECT_NAMES = {
   kitchen_counter: 'CUCINA', kitchen_peninsula: 'PENISOLA', shoe_cabinet: 'SCARPIERA', console: 'CONSOLE', floor_lamp: 'LAMPADA',
   bath_column: 'COLONNA_BAGNO', towel_radiator: 'SCALDASALVIETTE', utility_sink: 'LAVATOIO', minibar: 'MINIBAR',
   workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
+  kitchen_fridge_tall: 'COLONNA_FRIGO', kitchen_oven_tall: 'COLONNA_FORNO', kitchen_washer_tall: 'COLONNA_LAVATRICE', wall_cabinet: 'PENSILE',
   wardrobe_corner: 'ARMADIO_ANGOLO', wardrobe_open_corner: 'GUARDAROBA_APERTO_ANGOLO', wardrobe_open: 'ARMADIO_APERTO', sofa_round: 'DIVANO_TONDO', sofa_curved: 'DIVANO_ARCO',
   chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO', armchair_rattan: 'POLTRONA_RATTAN', table_rattan: 'TAVOLINO_RATTAN',
   pillow: 'CUSCINO', throw: 'COPERTA', book_stack: 'LIBRI', vase: 'VASO', candle: 'CANDELA', figurine: 'STATUINA',
@@ -1047,6 +1048,67 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       const knob = cy(0.035, 0.035, 0.02, -W / 4, 0.75, D / 2 + 0.016, M.metal, 16);
       knob.rotation.x = Math.PI / 2;
       bx(0.12, 0.035, 0.008, W / 4, 0.72, D / 2 + 0.014, m('display', '#2a3a4a', { emissive: '#4fa8ff', emissiveIntensity: 0.25 }));
+      break;
+    }
+    case 'kitchen_fridge_tall': {
+      // colonna con frigorifero e congelatore da incasso: zoccolo, due ante in acciaio con maniglie a barra, cassetto in alto
+      const steel = m('steelfridge', '#cfd4da', { metalness: 0.55, roughness: 0.3 });
+      bx(W, 0.1, D - 0.04, 0, 0, -0.01, darkLine);
+      bx(W - 0.012, 2.0, D - 0.02, 0, 0.1, -0.01, M.cabinet);
+      bx(W - 0.03, 0.62, 0.02, 0, 0.14, D / 2 - 0.01 + 0.01, steel);          // congelatore
+      bx(W - 0.03, 1.2, 0.02, 0, 0.78, D / 2 - 0.01 + 0.01, steel);           // frigorifero
+      bx(W - 0.03, 0.12, 0.02, 0, 1.99, D / 2 - 0.01 + 0.01, wood);           // anta pensile sopra
+      bx(0.018, 0.5, 0.025, W / 2 - 0.07, 1.3, D / 2 + 0.02, chrome);         // maniglie a barra
+      bx(0.018, 0.34, 0.025, W / 2 - 0.07, 0.3, D / 2 + 0.02, chrome);
+      break;
+    }
+    case 'kitchen_oven_tall': {
+      // colonna con cassetto scaldavivande, forno, microonde e anta in alto: tutti incassati nello stesso fronte
+      bx(W, 0.1, D - 0.04, 0, 0, -0.01, darkLine);
+      bx(W - 0.012, 2.0, D - 0.02, 0, 0.1, -0.01, M.cabinet);
+      const zf = D / 2 - 0.01 + 0.01;
+      bx(W - 0.04, 0.26, 0.016, 0, 0.14, zf, wood);                           // cassetto in basso
+      pull(0, 0.34, zf + 0.008, false);
+      const glassApp = m('glassapp', '#10151b', { roughness: 0.08, metalness: 0.4 });
+      bx(W - 0.04, 0.5, 0.018, 0, 0.44, zf, m('steelfront', '#2b3036', { metalness: 0.5, roughness: 0.35 }));
+      bx(W - 0.14, 0.32, 0.012, 0, 0.5, zf + 0.012, glassApp);                // forno: vetro
+      bx(W - 0.1, 0.018, 0.022, 0, 0.88, zf + 0.025, chrome);                 // maniglia
+      bx(W - 0.1, 0.04, 0.01, 0, 0.9, zf + 0.012, m('ovenpanel', '#1c2127'));
+      bx(W - 0.04, 0.36, 0.018, 0, 1.0, zf, m('steelmicro', '#2b3036', { metalness: 0.5, roughness: 0.35 }));
+      bx(W * 0.58, 0.24, 0.012, -W * 0.12, 1.06, zf + 0.012, glassApp);       // microonde: oblò
+      bx(W * 0.2, 0.24, 0.012, W * 0.3, 1.06, zf + 0.012, m('microdisplay', '#212a33', { emissive: '#4fa8ff', emissiveIntensity: 0.18 }));
+      bx(W - 0.04, 0.64, 0.016, 0, 1.4, zf, wood);                            // anta in alto
+      pull(W / 2 - 0.08, 1.46, zf + 0.008, true);
+      break;
+    }
+    case 'kitchen_washer_tall': {
+      // colonna con lavatrice da incasso in basso (oblò) e ante alte sopra
+      bx(W, 0.1, D - 0.04, 0, 0, -0.01, darkLine);
+      bx(W - 0.012, 2.0, D - 0.02, 0, 0.1, -0.01, M.cabinet);
+      const zf = D / 2 - 0.01 + 0.01;
+      bx(W - 0.04, 0.86, 0.018, 0, 0.12, zf, m('appliancefront', '#f2f4f6', { roughness: 0.35 }));
+      const r = Math.min(W, 0.6) * 0.29;
+      const ring = cy(r, r, 0.03, 0, 0.5, zf + 0.012, m('ringwasher', '#8e99a6', { metalness: 0.6, roughness: 0.3 }), 28);
+      ring.rotation.x = Math.PI / 2;
+      const door = cy(r * 0.78, r * 0.78, 0.034, 0, 0.5, zf + 0.014, m('portholewasher', '#1c2a36', { roughness: 0.1, transparent: true, opacity: 0.85 }), 28);
+      door.rotation.x = Math.PI / 2;
+      bx(W - 0.1, 0.09, 0.012, 0, 0.84, zf + 0.012, m('panelwasher', '#d9dde3'));
+      bx(W - 0.04, 1.0, 0.016, 0, 1.0, zf, wood);                              // ante alte
+      bx(0.01, 0.98, 0.018, 0, 1.0, zf + 0.002, darkLine);                     // giunto tra le due ante
+      pull(-0.03, 1.5, zf + 0.008, true);
+      pull(0.03, 1.5, zf + 0.008, true);
+      break;
+    }
+    case 'wall_cabinet': {
+      // pensile a muro (la quota da terra la dà z): corpo, anta in legno con maniglia, fondo con listello
+      bx(W, 0.7, D, 0, 0, 0, M.cabinet);
+      const n = W > 0.75 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const x = -W / 2 + (W * (i + 0.5)) / n;
+        bx(W / n - 0.02, 0.66, 0.016, x, 0.02, D / 2 + 0.006, wood);
+        bx(0.012, 0.16, 0.014, x + (i % 2 ? -1 : 1) * (W / n / 2 - 0.05), 0.04, D / 2 + 0.022, chrome);
+      }
+      bx(W - 0.02, 0.02, D - 0.04, 0, -0.012, 0, darkLine);
       break;
     }
     case 'vacuum': {

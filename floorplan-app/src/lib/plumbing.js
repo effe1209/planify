@@ -109,12 +109,12 @@ function fixturesOf(plan) {
       case 'shower': case 'shower_walkin': push('shower', len / 2, center(f)); break;
       case 'shower_round': push('shower', len * 0.3, back(f, len * 0.3, len * 0.3)); break;
       case 'bathtub': push('bathtub', len / 2, back(f, len / 2, 0.25)); break;
-      case 'washer': push('washer', len / 2, back(f, len / 2, 0.05)); break;
+      case 'washer': case 'kitchen_washer_tall': push('washer', len / 2, back(f, len / 2, 0.05)); break;
       case 'utility_sink': push('utility_sink', len / 2, back(f, len / 2, 0.05)); break;
       case 'kitchen_counter': {
         if (out.some((x) => x.type === 'kitchen_sink' && x.room.id === room.id)) break;
         // come nel disegno del piano di lavoro (PlanSvg): frigo a sinistra se lungo, lavello al 58%
-        const f0 = len >= 3 ? 0.62 : 0;
+        const f0 = len >= 3 && !f.noFridge ? 0.62 : 0;
         const usable = len - f0;
         const sinkX = f.parts?.sink ?? f0 + usable * 0.58 + Math.min(usable * 0.3, 0.8) / 2;
         push('kitchen_sink', sinkX, back(f, sinkX, 0.08));

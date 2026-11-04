@@ -239,6 +239,34 @@ const BASE_FURNITURE = {
       <circle cx={w / 2} cy={h / 2} r={2.2} fill="#7a5a3a" />
     </>
   ),
+  kitchen_fridge_tall: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={1.5} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />
+      <line x1={0} y1={h * 0.42} x2={w} y2={h * 0.42} stroke={F_SOFT} />
+      <line x1={w - 5} y1={h * 0.5} x2={w - 5} y2={h * 0.85} stroke={F_STROKE} strokeWidth="1.2" strokeLinecap="round" />
+      <text x={w / 2} y={h * 0.3} textAnchor="middle" fontSize={Math.max(6, w * 0.26)} fontWeight="700" fill={F_STROKE}>F</text>
+    </>
+  ),
+  kitchen_oven_tall: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={1.5} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />
+      <rect x={w * 0.14} y={h * 0.2} width={w * 0.72} height={h * 0.34} rx={1.5} fill="#3a4047" fillOpacity="0.85" stroke={F_STROKE} strokeWidth="0.8" />
+      <rect x={w * 0.14} y={h * 0.6} width={w * 0.72} height={h * 0.18} rx={1.5} fill="#5a626c" fillOpacity="0.85" stroke={F_STROKE} strokeWidth="0.8" />
+    </>
+  ),
+  kitchen_washer_tall: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={1.5} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />
+      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.3} fill="#e3eefb" stroke={F_SOFT} />
+      <circle cx={w / 2} cy={h * 0.55} r={Math.min(w, h) * 0.2} fill="none" stroke={F_SOFT} />
+    </>
+  ),
+  wall_cabinet: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={1} fill="#f6f4ef" fillOpacity="0.75" stroke={F_STROKE} strokeWidth="0.9" strokeDasharray="4 3" />
+      <line x1={w / 2} y1={1} x2={w / 2} y2={h - 1} stroke={F_SOFT} strokeDasharray="3 3" />
+    </>
+  ),
   washer: (w, h) => (
     <>
       <rect width={w} height={h} rx={2} fill="#f4f6f8" stroke={F_STROKE} strokeWidth="1.1" />
