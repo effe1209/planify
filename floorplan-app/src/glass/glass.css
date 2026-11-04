@@ -56,6 +56,15 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+/* Scorrimento e pressione fluidi nei pannelli: strato proprio per lo scorrimento; le manopole di interruttori e cursori senza le tre ombre
+   sfumate da 24 px (si ridisegnano a ogni fotogramma dell'animazione) e senza la luce che segue il puntatore sui pulsanti */
+.pf-app .pf-rail, .pf-app .pf-inspector { will-change: scroll-position; overscroll-behavior: contain; }
+.pf-app .pf-rail .lg-switch-thumb, .pf-app .pf-inspector .lg-switch-thumb, .pf-dialog .lg-switch-thumb,
+.pf-app .pf-rail .lg-slider-thumb, .pf-app .pf-inspector .lg-slider-thumb, .pf-dialog .lg-slider-thumb {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+.pf-app .pf-rail .lg-glass::after, .pf-app .pf-inspector .lg-glass::after, .pf-dialog .lg-glass::after { display: none; }
+.pf-app .pf-rail .lg-button, .pf-app .pf-inspector .lg-button { transition: none; }
 .pf-dialog {
   background: var(--pf-glass-strong, rgba(255, 255, 255, 0.78));
   -webkit-backdrop-filter: blur(28px) saturate(1.8);
@@ -88,7 +97,7 @@
   padding: 3px;
   gap: 2px;
 }
-.pf-app .lg-glass.pf-floorbar { padding: 4px 10px; }
+.pf-app .lg-glass.pf-floorbar { padding: 4px 10px; position: relative; z-index: 40; }   /* sopra la tavola: il menù «Piano» esce sulla pianta */
 
 /* ── Pulsanti: compatti, in vetro; «is-on» come selezione ───────────────────────────────────── */
 .pf-app .lg-button.pf-gb, .pf-dialog .lg-button.pf-gb, .pf-cookie-banner .lg-button.pf-gb {
