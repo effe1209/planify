@@ -333,6 +333,10 @@ Le specifiche e i piani di lavoro stanno in [`docs/`](docs):
 - [Normativa](docs/PIANO_NORMATIVA.md)
 - [Copertura e allarme](docs/PIANO_COPERTURA.md)
 
+## Licenza
+
+Copyright © 2026 Francesco Fiaschi. **Tutti i diritti riservati** (*All Rights Reserved*): il codice è visibile ma non si può usare, copiare, modificare, distribuire né pubblicare senza permesso scritto. Il testo completo è in [`LICENSE`](LICENSE). Le librerie e le texture di terzi restano sotto le loro licenze.
+
 ---
 
 <div align="center">

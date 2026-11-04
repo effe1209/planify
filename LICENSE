@@ -1,0 +1,28 @@
+Copyright (c) 2026 Francesco Fiaschi. All Rights Reserved.
+
+This software and its source code, documentation, designs and assets
+("Planify") are proprietary and confidential. No license or right of any
+kind is granted to any person, except where the copyright holder has given
+written permission.
+
+Without the prior written permission of the copyright holder, you may not:
+
+  - use, run or deploy the software, in whole or in part;
+  - copy, reproduce or redistribute it;
+  - modify it, adapt it or create derivative works from it;
+  - sublicense, sell, rent, lease or otherwise commercialise it;
+  - publish, host or make it available to third parties in any form;
+  - use it to train or fine-tune machine learning models.
+
+Viewing the source code in this repository does not grant any of the
+rights above.
+
+Third-party components (npm and Python dependencies, fonts, icons and
+textures) remain under their own licenses, which continue to apply to them
+and are not changed by this notice.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
