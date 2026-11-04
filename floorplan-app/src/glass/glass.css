@@ -1,0 +1,136 @@
+/*
+ * Liquid Glass sull'app, sopra apple.css e App.css (libreria glisse: https://github.com/0kzh/glisse).
+ * Controlli: Button, Slider, Switch, Input, SegmentedControl e TabBar di glisse, ridimensionati per un pannello compatto.
+ * Contenitori: Glass (rifrazione del bordo) per le barre fluttuanti; vetro sfocato per pannelli, finestre e menu.
+ */
+
+/* ── Sfondo: macchie di colore morbide, così il vetro ha qualcosa da rifrangere ─────────────────── */
+.pf-app {
+  --pf-tint-a: color-mix(in srgb, var(--accent) 22%, transparent);
+  --pf-tint-b: rgba(10, 132, 255, 0.16);
+  --pf-tint-c: rgba(191, 90, 242, 0.12);
+  background:
+    radial-gradient(900px 520px at 88% -8%, var(--pf-tint-a), transparent 62%),
+    radial-gradient(760px 520px at -6% 108%, var(--pf-tint-b), transparent 60%),
+    radial-gradient(640px 420px at 52% 120%, var(--pf-tint-c), transparent 60%),
+    var(--bg-canvas);
+}
+.pf-app[data-theme="dark"] {
+  --pf-tint-b: rgba(10, 132, 255, 0.2);
+  --pf-tint-c: rgba(191, 90, 242, 0.16);
+}
+
+/* ── Materiale: vetro sfocato per superfici grandi ───────────────────────────────────────────── */
+.pf-app {
+  --pf-glass: rgba(255, 255, 255, 0.55);
+  --pf-glass-strong: rgba(255, 255, 255, 0.78);
+  --pf-rim: rgba(255, 255, 255, 0.7);
+  --pf-blur: blur(22px) saturate(1.7);
+}
+.pf-app[data-theme="dark"] {
+  --pf-glass: rgba(34, 34, 38, 0.5);
+  --pf-glass-strong: rgba(40, 40, 46, 0.78);
+  --pf-rim: rgba(255, 255, 255, 0.16);
+}
+.pf-app .pf-top,
+.pf-app .pf-rail,
+.pf-app .pf-inspector {
+  background: var(--pf-glass);
+  -webkit-backdrop-filter: var(--pf-blur);
+  backdrop-filter: var(--pf-blur);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--pf-rim), inset 0 0 0 0.5px var(--pf-rim);
+}
+.pf-app .pf-sec {
+  background: var(--pf-glass-strong);
+  border: 1px solid var(--hairline);
+  box-shadow: inset 0 1px 0 var(--pf-rim);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+}
+.pf-dialog {
+  background: var(--pf-glass-strong, rgba(255, 255, 255, 0.78));
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--hairline);
+}
+.pf-dialog::backdrop { background: rgba(20, 20, 30, 0.28); backdrop-filter: blur(6px) saturate(1.2); }
+.pf-floor-menu, .pf-export-menu, .pf-cookie-banner, .pf-loader, .pf-sketch-panel {
+  background: var(--pf-glass-strong);
+  -webkit-backdrop-filter: var(--pf-blur);
+  backdrop-filter: var(--pf-blur);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--pf-rim);
+}
+.pf-app select, .pf-dialog select, .pf-app textarea, .pf-dialog textarea {
+  background: var(--pf-glass-strong);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 var(--pf-rim);
+}
+
+/* ── Barre fluttuanti: componente Glass (il bordo rifrange la luce) ──────────────────────────── */
+.pf-app .lg-glass.pf-group,
+.pf-app .lg-glass.pf-floorbar,
+.pf-app .lg-glass.pf-sketch-bar,
+.pf-app .lg-glass.pf-sketch-kinds {
+  border: 0;
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.pf-app .lg-glass.pf-floorbar { padding: 4px 10px; }
+
+/* ── Pulsanti: compatti, in vetro; «is-on» come selezione ───────────────────────────────────── */
+.pf-app .lg-button.pf-gb, .pf-dialog .lg-button.pf-gb, .pf-cookie-banner .lg-button.pf-gb {
+  --pf-ico: 14px;
+  height: auto;
+  min-height: 28px;
+  padding: 5px 12px;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.lg-button.pf-gb > svg { width: var(--pf-ico, 14px); height: var(--pf-ico, 14px); }
+.pf-app .lg-button.pf-gb[data-icon="only"] { width: 30px; min-width: 30px; padding: 0; }
+.pf-app .pf-top .lg-button.pf-gb { min-height: 36px; font-size: 13px; }
+.pf-app .pf-top .lg-button.pf-gb.pf-icon-btn { width: 36px; padding: 0; }
+.pf-app .lg-button.pf-gb.pf-tool, .pf-app .pf-group .lg-button.pf-gb { background-color: transparent; }
+.pf-app .lg-button.pf-gb.pf-tool:hover, .pf-app .pf-group .lg-button.pf-gb:hover { background-color: var(--lg-glass-active); }
+.pf-app .lg-button.pf-gb.is-on, .pf-app .lg-button.pf-gb[aria-pressed="true"] {
+  background-color: var(--lg-selection, rgba(0, 0, 0, 0.1));
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.pf-app .lg-button.pf-gb.pf-sq { width: 30px; padding: 0; }
+.pf-app .lg-button.pf-gb.is-danger { color: var(--lg-destructive); }
+.pf-app .lg-button.pf-gb.pf-btn-add { width: 100%; min-height: 34px; font-size: 13px; font-weight: 600; color: var(--accent-ink, #172100); }
+.pf-app .lg-button.pf-gb[data-variant="filled"] { --lg-button-fill: var(--accent); color: var(--accent-ink, #172100); }
+.pf-app .lg-button.pf-gb.pf-mini { min-height: 24px; padding: 3px 9px; font-size: 11px; }
+.pf-app .lg-button.pf-gb.pf-btn-icon, .pf-app .lg-button.pf-gb.pf-minibtn.is-icon { width: 26px; min-height: 26px; padding: 0; }
+.pf-app .lg-button.pf-gb:disabled { opacity: 0.4; }
+
+/* ── Cursori e interruttori ─────────────────────────────────────────────────────────────────── */
+.pf-app .lg-slider.pf-gslider, .pf-dialog .lg-slider.pf-gslider { width: 100%; --lg-fill: var(--accent); }
+.pf-app .lg-switch.pf-gswitch, .pf-dialog .lg-switch.pf-gswitch, .pf-cookie-banner .lg-switch.pf-gswitch { --lg-on: var(--accent); flex: none; }
+.pf-check { display: flex; align-items: center; gap: 10px; }
+
+/* ── Campi di testo ─────────────────────────────────────────────────────────────────────────── */
+.pf-app .lg-input.pf-ginput, .pf-dialog .lg-input.pf-ginput { width: 100%; min-height: 32px; font-size: 13px; }
+.pf-app .pf-ginput input, .pf-dialog .pf-ginput input { font-size: 13px; }
+
+/* ── Schede del pannello (TabBar) e scelte (SegmentedControl) ───────────────────────────────── */
+.pf-insp-tabs-wrap { display: flex; justify-content: center; width: 100%; }
+.pf-insp-tabbar { --lg-tab-width: 76px; --lg-tab-height: 30px; max-width: 100%; }
+.pf-insp-tabbar .lg-tab { font-size: 11.5px; }
+.pf-gseg { max-width: 100%; align-self: flex-start; width: fit-content; }
+.pf-gseg .lg-tab, .pf-gseg [role="radio"] { font-size: 12px; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .pf-app .pf-top, .pf-app .pf-rail, .pf-app .pf-inspector, .pf-app .pf-sec, .pf-dialog { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-panel); }
+}

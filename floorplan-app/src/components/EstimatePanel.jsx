@@ -1,5 +1,6 @@
 import { Calculator, RotateCcw, Trash2 } from 'lucide-react';
 import { DEFAULT_PRICES } from '../lib/estimate';
+import { GButton } from '../glass';
 
 const eur = (v) => `${Math.round(v).toLocaleString('it-IT')} €`;
 const qtyFmt = (v) => v.toLocaleString('it-IT', { maximumFractionDigits: 1 });
@@ -18,7 +19,7 @@ export default function EstimatePanel({ config, data, onStart, onChange, onClear
           ricavate dalle piante e prezzi unitari che puoi modificare.
         </p>
         <div className="pf-security-actions">
-          <button type="button" className="pf-btn-add" onClick={onStart}><Calculator size={14} /> Calcola preventivo</button>
+          <GButton type="button" className="pf-btn-add" onClick={onStart}><Calculator size={14} /> Calcola preventivo</GButton>
         </div>
       </section>
     );
@@ -79,12 +80,12 @@ export default function EstimatePanel({ config, data, onStart, onChange, onClear
       </table>
       <div className="pf-security-actions">
         {edited && (
-          <button type="button" className="pf-mini" onClick={() => onChange({ prices: {} })} title="Torna ai prezzi predefiniti">
+          <GButton type="button" className="pf-mini" onClick={() => onChange({ prices: {} })} title="Torna ai prezzi predefiniti">
             <RotateCcw size={13} /> Prezzi predefiniti
-          </button>
+          </GButton>
         )}
-        <button type="button" className="pf-mini" onClick={onClear} title="Rimuovi il preventivo dal progetto"
-          aria-label="Rimuovi il preventivo"><Trash2 size={13} /></button>
+        <GButton type="button" className="pf-mini" onClick={onClear} title="Rimuovi il preventivo dal progetto"
+          aria-label="Rimuovi il preventivo"><Trash2 size={13} /></GButton>
       </div>
       <p className="pf-hint pf-el-disclaimer">
         Prezzi medi indicativi (fornitura e posa, IVA esclusa): variano per zona, finiture e impresa. Arredi,

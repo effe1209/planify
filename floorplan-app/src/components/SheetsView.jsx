@@ -3,6 +3,7 @@ import { Download } from 'lucide-react';
 import { elevation, levelMarks, section, stack } from '../lib/elevation';
 import { fmt } from '../lib/utils';
 import { serializeSvg } from '../lib/sheet';
+import { GButton, GRange } from '../glass';
 
 const S = 38;          // pixel per metro
 const PAD = 54;
@@ -113,13 +114,13 @@ export default function SheetsView({ project, north = 0, roof = null, plan }) {
   return (
     <div className="pf-sheets">
       <div className="pf-sheets-bar">
-        <label>Taglio A–A <input type="range" min="0.1" max="0.9" step="0.05" value={cut.a} aria-label="Posizione del taglio A–A"
+        <label>Taglio A–A <GRange min="0.1" max="0.9" step="0.05" value={cut.a} aria-label="Posizione del taglio A–A"
           onChange={(e) => setCut({ ...cut, a: Number(e.target.value) })} /></label>
-        <label>Taglio B–B <input type="range" min="0.1" max="0.9" step="0.05" value={cut.b} aria-label="Posizione del taglio B–B"
+        <label>Taglio B–B <GRange min="0.1" max="0.9" step="0.05" value={cut.b} aria-label="Posizione del taglio B–B"
           onChange={(e) => setCut({ ...cut, b: Number(e.target.value) })} /></label>
-        <button type="button" className="pf-tool" onClick={download} title="Scarica prospetti e sezioni in un solo SVG">
+        <GButton type="button" className="pf-tool" onClick={download} title="Scarica prospetti e sezioni in un solo SVG">
           <Download size={15} /> <span>SVG</span>
-        </button>
+        </GButton>
       </div>
       <div className="pf-sheets-grid">
         {sheets.map((d) => <Drawing key={d.title} d={d} marks={marks} />)}

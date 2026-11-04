@@ -1,5 +1,6 @@
 import { RotateCcw } from 'lucide-react';
 import { LOOKS, MATERIALS, MATERIAL_ROWS, STRUCTURES, cleanMaterials } from '../lib/materials';
+import { GButton, GCheck } from '../glass';
 
 /* Materiali della casa: per facciata, tetto, pareti e pavimenti si sceglie il tipo; la struttura in legno aggiunge pilastri, travi e portico.
    Le combinazioni pronte impostano materiali e colori insieme. */
@@ -38,7 +39,7 @@ export default function MaterialsPanel({ materials, onChange, onLook }) {
         {cur.structure === 'wood' && (
           <li>
             <label className="pf-check">
-              <input type="checkbox" checked={cur.porch !== false} aria-label="Portico d'ingresso"
+              <GCheck checked={cur.porch !== false} aria-label="Portico d'ingresso"
                 onChange={(e) => onChange(cleanMaterials({ ...cur, porch: e.target.checked ? undefined : false }))} />
               <span>Portico d&apos;ingresso <em>(la tettoia sopra il portoncino)</em></span>
             </label>
@@ -46,9 +47,9 @@ export default function MaterialsPanel({ materials, onChange, onLook }) {
         )}
       </ul>
       <div className="pf-row">
-        <button type="button" className="pf-btn-add" disabled={!Object.keys(cur).length} onClick={() => onChange(null)}>
+        <GButton type="button" className="pf-btn-add" disabled={!Object.keys(cur).length} onClick={() => onChange(null)}>
           <RotateCcw size={13} /> Torna ai materiali dello stile
-        </button>
+        </GButton>
       </div>
     </section>
   );

@@ -5,6 +5,7 @@ import { GROUNDS } from '../lib/environment';
 import { FLOOR_H } from '../lib/scene3d';
 import { saveBlob } from '../lib/utils';
 import { SAMPLE_PRESETS } from '../lib/pathTrace';
+import { GButton, GCheck } from '../glass';
 
 /*
  * Pannello Render sopra la vista 3D: inquadratura (automatica, per locale, o la telecamera com'è adesso),
@@ -106,7 +107,7 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
         </select>
       </label>
       <label className="pf-render-check">
-        <input type="checkbox" checked={!!roofOn} onChange={(e) => onRoof?.(e.target.checked)} aria-label="Tetto nel render" />
+        <GCheck checked={!!roofOn} onChange={(e) => onRoof?.(e.target.checked)} aria-label="Tetto nel render" />
         <span>Tetto <em>(si accende da solo nelle viste da fuori, si spegne nella pianta dall'alto)</em></span>
       </label>
       <label>
@@ -164,14 +165,14 @@ export default function RenderPanel({ project, three, whole, level = 0, roofOn, 
           <i style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
       )}
-      <button type="button" className="pf-tool pf-tool-accent" onClick={save} disabled={busy}>
+      <GButton type="button" className="pf-tool pf-tool-accent" onClick={save} disabled={busy}>
         {busy ? <><Loader2 size={14} className="pf-spin" /> {quality === 'high' ? `Path tracing ${Math.round(progress * 100)}%` : 'Render in corso…'}</> : <><Camera size={14} /> Salva render PNG</>}
-      </button>
-      <button type="button" className="pf-tool" onClick={toBlender} disabled={busy}
+      </GButton>
+      <GButton type="button" className="pf-tool" onClick={toBlender} disabled={busy}
         title="ZIP con il modello (tetto, luci, allarme, camere), lo script che prepara Cycles all'ora scelta e le istruzioni">
         <Download size={14} /> Esporta per Blender (ZIP)
-      </button>
-      {busy && quality === 'high' && <button type="button" className="pf-tool" onClick={() => abort.current?.abort()}>Interrompi</button>}
+      </GButton>
+      {busy && quality === 'high' && <GButton type="button" className="pf-tool" onClick={() => abort.current?.abort()}>Interrompi</GButton>}
     </aside>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, FileDown, Library, Trash2, Upload, X } from 'lucide-react';
 import { CATEGORIES, libraryTemplateCsv, libraryToCsv, parseLibraryCsv, quoteToCsv } from '../lib/materialLibrary';
 import { saveBlob } from '../lib/utils';
+import { GButton, GCheck, GText } from '../glass';
 
 const eur = (v) => `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 const csvBlob = (text) => new Blob(['﻿', text], { type: 'text/csv;charset=utf-8' });   // con il BOM, Excel legge gli accenti
@@ -47,7 +48,7 @@ export default function LibraryDialog({ library, quote, onLibrary, onClose, say 
     <dialog ref={dialogRef} className="pf-dialog pf-dialog-wide" aria-labelledby="pf-lib-title">
       <header className="pf-dialog-head">
         <h2 id="pf-lib-title"><Library size={18} /> Libreria materiali</h2>
-        <button type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></button>
+        <GButton type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></GButton>
       </header>
       <div className="pf-dialog-body">
         <p className="pf-hint">
@@ -56,17 +57,17 @@ export default function LibraryDialog({ library, quote, onLibrary, onClose, say 
         </p>
         <div className="pf-security-actions">
           <input ref={fileRef} type="file" accept=".csv,text/csv,.txt" hidden onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
-          <button type="button" className="pf-mini is-accent" onClick={() => fileRef.current?.click()}><Upload size={13} /> Importa CSV</button>
-          <button type="button" className="pf-mini" onClick={() => saveBlob(csvBlob(libraryTemplateCsv()), 'libreria-materiali-esempio.csv')}
-            title="Un file d'esempio con le colonne giuste, da compilare con i tuoi materiali"><FileDown size={13} /> File d'esempio</button>
+          <GButton type="button" className="pf-mini is-accent" onClick={() => fileRef.current?.click()}><Upload size={13} /> Importa CSV</GButton>
+          <GButton type="button" className="pf-mini" onClick={() => saveBlob(csvBlob(libraryTemplateCsv()), 'libreria-materiali-esempio.csv')}
+            title="Un file d'esempio con le colonne giuste, da compilare con i tuoi materiali"><FileDown size={13} /> File d'esempio</GButton>
           {library.length > 0 && (
             <>
-              <button type="button" className="pf-mini" onClick={() => saveBlob(csvBlob(libraryToCsv(library)), 'libreria-materiali.csv')}><Download size={13} /> Esporta</button>
-              <button type="button" className="pf-mini is-danger" onClick={() => { if (window.confirm('Svuotare la libreria? I materiali già scelti nei locali restano.')) onLibrary([]); }}><Trash2 size={13} /> Svuota</button>
+              <GButton type="button" className="pf-mini" onClick={() => saveBlob(csvBlob(libraryToCsv(library)), 'libreria-materiali.csv')}><Download size={13} /> Esporta</GButton>
+              <GButton type="button" className="pf-mini is-danger" onClick={() => { if (window.confirm('Svuotare la libreria? I materiali già scelti nei locali restano.')) onLibrary([]); }}><Trash2 size={13} /> Svuota</GButton>
             </>
           )}
         </div>
-        <label className="pf-check"><input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} /><span>L'importazione sostituisce tutta la libreria (altrimenti aggiunge e aggiorna)</span></label>
+        <label className="pf-check"><GCheck checked={replace} onChange={(e) => setReplace(e.target.checked)} /><span>L'importazione sostituisce tutta la libreria (altrimenti aggiunge e aggiorna)</span></label>
         {report && (
           <div role="status" className="pf-lib-report">
             <p className="pf-hint"><b>{report.file}</b>: {report.added} materiali importati{report.errors.length ? `, ${report.errors.length} righe da controllare` : ''}.</p>
@@ -85,7 +86,7 @@ export default function LibraryDialog({ library, quote, onLibrary, onClose, say 
                 <option value="all">Tutte le categorie</option>
                 {CATEGORIES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
               </select>
-              <input className="pf-input-sm" type="search" placeholder="Cerca marchio, codice, nome…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Cerca" />
+              <GText className="pf-input-sm" type="search" placeholder="Cerca marchio, codice, nome…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Cerca" />
             </div>
             <ul className="pf-lib-list">
               {shown.slice(0, 60).map((it) => (
@@ -93,7 +94,7 @@ export default function LibraryDialog({ library, quote, onLibrary, onClose, say 
                   <i className="pf-lib-chip" style={{ background: it.color || 'transparent' }} aria-hidden="true" />
                   <span><strong>{it.name}</strong> <em>{[it.brand, it.code, it.format].filter(Boolean).join(' · ')}</em></span>
                   <span className="pf-lib-price">{eur(it.price)}/{it.unit === 'm2' ? 'm²' : it.unit}</span>
-                  <button type="button" className="pf-mini is-danger" onClick={() => onLibrary(library.filter((x) => x.id !== it.id))} aria-label={`Elimina ${it.name}`}><Trash2 size={12} /></button>
+                  <GButton type="button" className="pf-mini is-danger" onClick={() => onLibrary(library.filter((x) => x.id !== it.id))} aria-label={`Elimina ${it.name}`}><Trash2 size={12} /></GButton>
                 </li>
               ))}
             </ul>
@@ -122,7 +123,7 @@ export default function LibraryDialog({ library, quote, onLibrary, onClose, say 
               </table>
               <p className="pf-total"><b>{eur(quote.total)}</b> IVA {quote.vat}% compresa · imponibile {eur(quote.subtotal)}</p>
               <div className="pf-security-actions">
-                <button type="button" className="pf-mini" onClick={() => saveBlob(csvBlob(quoteToCsv(quote)), 'preventivo-acquisto-materiali.csv')}><Download size={13} /> Scarica CSV</button>
+                <GButton type="button" className="pf-mini" onClick={() => saveBlob(csvBlob(quoteToCsv(quote)), 'preventivo-acquisto-materiali.csv')}><Download size={13} /> Scarica CSV</GButton>
               </div>
               <p className="pf-hint">Prezzi di fornitura del materiale, IVA esclusa nelle righe; la posa non è compresa. I pavimenti e i rivestimenti hanno il 10% di sfrido.</p>
             </>
@@ -143,7 +144,7 @@ export function LibraryPanel({ count, quote, onOpen }) {
         {quote.rows.length ? ` Acquisto dei materiali scelti: ${eur(quote.total)} IVA compresa.` : ''}
       </p>
       <div className="pf-security-actions">
-        <button type="button" className="pf-btn-add" onClick={onOpen}><Library size={14} /> Libreria materiali</button>
+        <GButton type="button" className="pf-btn-add" onClick={onOpen}><Library size={14} /> Libreria materiali</GButton>
       </div>
     </section>
   );

@@ -165,7 +165,7 @@ test('il vano scala si seleziona e si regolano tipo e verso su tutti i piani', a
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(90_000);
   const errors = await open(page);
-  await page.getByRole('checkbox', { name: /Casa su più piani/ }).check();
+  await page.getByRole('switch', { name: /Casa su più piani/ }).click();
   await page.getByRole('button', { name: /Genera/ }).first().click();
   await expect(page.locator('.pf-sheet svg')).toBeVisible({ timeout: 40_000 });
   await page.locator('.pf-editbtn').click();
@@ -307,7 +307,7 @@ test('la scala a vista si sceglie nel modulo e riduce il vano', async ({ page },
   test.skip(info.project.name !== 'desktop', 'si prova sul desktop');
   test.setTimeout(90_000);
   const errors = await open(page);
-  await page.getByRole('checkbox', { name: /Casa su più piani/ }).check();
+  await page.getByRole('switch', { name: /Casa su più piani/ }).click();
   await page.locator('details.pf-fold > summary', { hasText: 'Scala' }).click();
   await page.getByRole('radiogroup', { name: 'Posizione della scala' }).getByRole('radio', { name: 'A vista' }).click();
   await page.getByRole('radiogroup', { name: 'Scala', exact: true }).getByRole('radio', { name: 'A U' }).click();

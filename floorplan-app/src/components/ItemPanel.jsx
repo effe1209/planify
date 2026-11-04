@@ -5,6 +5,7 @@ import { itemProblems, SIZE_MAX, SIZE_MIN } from '../lib/furnitureEdit';
 import { validColor } from '../lib/furnitureColor';
 import { furnitureZ } from '../lib/scene3d';
 import { fmtM } from '../lib/utils';
+import { GButton } from '../glass';
 
 /*
  * Arredo selezionato sulla pianta: misure, altezza (conta per le ombre dei sensori d'allarme e per la vista 3D
@@ -23,7 +24,7 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
     <section className="pf-sec pf-item-panel">
       <div className="pf-item-head">
         <h2>{it.name || FURNITURE_LABEL[it.type] || it.type}</h2>
-        <button type="button" className="pf-btn-icon" onClick={onClose} aria-label="Deseleziona"><X size={14} /></button>
+        <GButton type="button" className="pf-btn-icon" onClick={onClose} aria-label="Deseleziona"><X size={14} /></GButton>
       </div>
       <p className="pf-hint">
         {fmtM(it.w)} × {fmtM(it.h)} m{room?.name ? ` · ${room.name}` : ''}
@@ -40,10 +41,10 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
             <input className="pf-input-sm" type="number" min={SIZE_MIN} max={SIZE_MAX} step="0.05" value={+it.h.toFixed(2)}
               onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v) && v > 0) onSize({ h: v }, lock); }} />
           </label>
-          <button type="button" className="pf-mini" aria-pressed={lock} onClick={() => setLock(!lock)}
+          <GButton type="button" className="pf-mini" aria-pressed={lock} onClick={() => setLock(!lock)}
             title={lock ? 'Proporzioni bloccate' : 'Proporzioni libere'}>
             {lock ? <Link2 size={13} /> : <Unlink2 size={13} />}
-          </button>
+          </GButton>
         </div>
       )}
       {onRotation && !it.wallMounted && (
@@ -53,9 +54,9 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
             <input className="pf-input-sm" type="number" min="0" max="359" step="1" value={Math.round(it.rot || 0)} aria-label="Rotazione in gradi"
               onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) onRotation(v); }} />
           </label>
-          <button type="button" className="pf-mini" onClick={() => onRotation((it.rot || 0) - 15)} title="Ruota di 15° in senso antiorario (Q)" aria-label="Ruota di 15 gradi a sinistra">−15°</button>
-          <button type="button" className="pf-mini" onClick={() => onRotation((it.rot || 0) + 15)} title="Ruota di 15° in senso orario (E)" aria-label="Ruota di 15 gradi a destra">+15°</button>
-          {it.rot ? <button type="button" className="pf-mini" onClick={() => onRotation(0)} title="Torna dritto"><RotateCcw size={13} /> 0°</button> : null}
+          <GButton type="button" className="pf-mini" onClick={() => onRotation((it.rot || 0) - 15)} title="Ruota di 15° in senso antiorario (Q)" aria-label="Ruota di 15 gradi a sinistra">−15°</GButton>
+          <GButton type="button" className="pf-mini" onClick={() => onRotation((it.rot || 0) + 15)} title="Ruota di 15° in senso orario (E)" aria-label="Ruota di 15 gradi a destra">+15°</GButton>
+          {it.rot ? <GButton type="button" className="pf-mini" onClick={() => onRotation(0)} title="Torna dritto"><RotateCcw size={13} /> 0°</GButton> : null}
         </div>
       )}
       {onColor && it.type !== 'custom_model' && (
@@ -68,9 +69,9 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
             ))}
             <input type="color" aria-label="Altro colore" value={validColor(it.color) || '#cccccc'} onChange={(e) => onColor(e.target.value)} />
             {it.color && (
-              <button type="button" className="pf-mini" onClick={() => onColor(null)} title="Torna al colore dello stile">
+              <GButton type="button" className="pf-mini" onClick={() => onColor(null)} title="Torna al colore dello stile">
                 <RotateCcw size={13} /> Stile
-              </button>
+              </GButton>
             )}
           </div>
         </div>
@@ -94,9 +95,9 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
               }} />
           </label>
           {it.z && (
-            <button type="button" className="pf-mini" onClick={() => onHeight(null)} title="Torna all'altezza standard">
+            <GButton type="button" className="pf-mini" onClick={() => onHeight(null)} title="Torna all'altezza standard">
               <RotateCcw size={13} /> Standard
-            </button>
+            </GButton>
           )}
         </div>
       )}
@@ -108,9 +109,9 @@ export default function ItemPanel({ plan, index, onRotate, onFlip, onRemove, onH
         <p className="pf-hint pf-item-ok">Posizione libera: nessuna sovrapposizione e passaggi liberi.</p>
       )}
       <div className="pf-security-actions">
-        {!it.wallMounted && <button type="button" className="pf-mini" onClick={onRotate} title="Ruota di 90° (R)"><RotateCw size={13} /> Ruota</button>}
-        {!it.wallMounted && <button type="button" className="pf-mini" onClick={onFlip} title="Specchia (F)"><FlipHorizontal2 size={13} /> Specchia</button>}
-        <button type="button" className="pf-mini is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={13} /> Elimina</button>
+        {!it.wallMounted && <GButton type="button" className="pf-mini" onClick={onRotate} title="Ruota di 90° (R)"><RotateCw size={13} /> Ruota</GButton>}
+        {!it.wallMounted && <GButton type="button" className="pf-mini" onClick={onFlip} title="Specchia (F)"><FlipHorizontal2 size={13} /> Specchia</GButton>}
+        <GButton type="button" className="pf-mini is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={13} /> Elimina</GButton>
       </div>
       <p className="pf-hint">Trascina per spostare (aggancio a 5 cm e ai muri) · frecce 5 cm, Maiusc+frecce 25 cm · R ruota di 90° · Q/E di 15° · maniglia in pianta per l'angolo libero · ⌘Z annulla</p>
     </section>

@@ -1,6 +1,7 @@
 import { Check, Trash2, TriangleAlert, Zap } from 'lucide-react';
 import { APPLIANCES, KIND_ORDER, KINDS, LEVELS } from '../lib/electric';
 import { ElectricGlyph } from './ElectricLayer';
+import { GButton, GCheck } from '../glass';
 
 /*
  * Impianto elettrico: livello CEI 64-8, tavola elettrica on/off, verifica delle dotazioni per locale,
@@ -16,7 +17,7 @@ export default function ElectricPanel({ config, data, floorId, sheet, onStart, o
           secondo i livelli della norma CEI 64-8. Una tavola a parte, sopra la pianta.
         </p>
         <div className="pf-security-actions">
-          <button type="button" className="pf-btn-add" onClick={onStart}><Zap size={14} /> Progetta impianto elettrico</button>
+          <GButton type="button" className="pf-btn-add" onClick={onStart}><Zap size={14} /> Progetta impianto elettrico</GButton>
         </div>
       </section>
     );
@@ -56,15 +57,15 @@ export default function ElectricPanel({ config, data, floorId, sheet, onStart, o
       </div>
       <p className="pf-hint">{LEVELS[config.level].desc}</p>
       <label className="pf-check">
-        <input type="checkbox" checked={config.links} onChange={(e) => onChange({ links: e.target.checked })} />
+        <GCheck checked={config.links} onChange={(e) => onChange({ links: e.target.checked })} />
         <span>Collegamenti <em>(comandi → luci e dorsali dal quadro)</em></span>
       </label>
       <div className="pf-security-actions">
-        <button type="button" className="pf-btn-add" onClick={() => onSheet(sheet === 'electric' ? 'arch' : 'electric')}>
+        <GButton type="button" className="pf-btn-add" onClick={() => onSheet(sheet === 'electric' ? 'arch' : 'electric')}>
           <Zap size={14} /> {sheet === 'electric' ? 'Torna alla pianta' : 'Mostra tavola elettrica'}
-        </button>
-        <button type="button" className="pf-mini" onClick={onClear} title="Rimuovi l'impianto elettrico dal progetto"
-          aria-label="Rimuovi l'impianto elettrico"><Trash2 size={13} /></button>
+        </GButton>
+        <GButton type="button" className="pf-mini" onClick={onClear} title="Rimuovi l'impianto elettrico dal progetto"
+          aria-label="Rimuovi l'impianto elettrico"><Trash2 size={13} /></GButton>
       </div>
 
       {fl && (

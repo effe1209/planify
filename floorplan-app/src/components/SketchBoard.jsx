@@ -5,6 +5,7 @@ import * as G from '../lib/geometry';
 import { CORRECTIONS, boxToPolygon, findOverlap, snapMove, snapPoint, strokeToPolygon } from '../lib/sketchShapes';
 import { fmt, newId, storage } from '../lib/utils';
 import { wandRoom } from '../lib/wand';
+import { GButton, GRange, Glass } from '../glass';
 
 const PX = 40; // pixel per metro a zoom 1: un quadretto grande = 1 m
 const Z_MIN = 0.05;
@@ -366,7 +367,7 @@ export default function SketchBoard({ initialShapes = [], background = null, und
 
   return (
     <div className="pf-sketch-wrap">
-      <div className="pf-sketch-bar">
+      <Glass className="pf-sketch-bar">
         <div className="pf-sketch-tools" role="radiogroup" aria-label="Strumento">
           {tools.map(({ id, label, Icon }) => (
             <button key={id} type="button" role="radio" aria-checked={tool === id}
@@ -377,33 +378,33 @@ export default function SketchBoard({ initialShapes = [], background = null, und
           ))}
         </div>
 
-        <button type="button" className="pf-tool" onClick={undo} disabled={!doc.past.length} title="Annulla (Ctrl/Cmd+Z)">
+        <GButton type="button" className="pf-tool" onClick={undo} disabled={!doc.past.length} title="Annulla (Ctrl/Cmd+Z)">
           <Undo2 size={14} /> Annulla
-        </button>
-        <button type="button" className="pf-tool" disabled={!shapes.length}
+        </GButton>
+        <GButton type="button" className="pf-tool" disabled={!shapes.length}
           onClick={() => { commit(() => []); setSelectedId(null); }}>
           <Trash2 size={14} /> Pulisci
-        </button>
+        </GButton>
 
         {underlay?.rooms?.length > 0 && (
-          <button type="button" className="pf-tool" disabled={!!shapes.length} title={`Parti dai locali di «${underlay.name}»: si spostano e si cambiano a piacere`}
+          <GButton type="button" className="pf-tool" disabled={!!shapes.length} title={`Parti dai locali di «${underlay.name}»: si spostano e si cambiano a piacere`}
             onClick={() => { commit(() => underlay.rooms.map((r) => ({ id: newId(), kind: r.kind, name: r.name, poly: r.poly.map((p) => [...p]) }))); setSelectedId(null); }}>
             <Copy size={14} /> Dal piano {underlay.name}
-          </button>
+          </GButton>
         )}
 
         <div className="pf-spacer" />
 
-        <button type="button" className="pf-tool" onClick={onClose}>
+        <GButton type="button" className="pf-tool" onClick={onClose}>
           <X size={15} /> Chiudi
-        </button>
+        </GButton>
         <button type="button" className="pf-sketch-action" disabled={!shapes.length} onClick={() => onGenerate(shapes)}>
           <Sparkles size={16} /> Genera planimetria arredata
         </button>
-      </div>
+      </Glass>
 
       {tool === 'pen' && (
-        <div className="pf-sketch-kinds" role="radiogroup" aria-label="Correzione del tratto">
+        <Glass className="pf-sketch-kinds" role="radiogroup" aria-label="Correzione del tratto">
           <span>Correzione tratto:</span>
           {CORRECTIONS.map((c) => (
             <button key={c.id} type="button" role="radio" aria-checked={correction === c.id} title={c.hint}
@@ -412,10 +413,10 @@ export default function SketchBoard({ initialShapes = [], background = null, und
               {c.label}
             </button>
           ))}
-        </div>
+        </Glass>
       )}
       {background && bg && (
-        <div className="pf-sketch-kinds pf-sketch-bg" aria-label="Sfondo PDF">
+        <Glass className="pf-sketch-kinds pf-sketch-bg" aria-label="Sfondo PDF">
           <span>Sfondo PDF:</span>
           {background.pages > 1 && (
             <label className="pf-sketch-bg-field">pagina
@@ -433,15 +434,15 @@ export default function SketchBoard({ initialShapes = [], background = null, und
               }} />
           </label>
           <label className="pf-sketch-bg-field">trasparenza
-            <input type="range" min="0.1" max="1" step="0.05" value={bg.opacity} aria-label="Trasparenza dello sfondo"
+            <GRange min="0.1" max="1" step="0.05" value={bg.opacity} aria-label="Trasparenza dello sfondo"
               onChange={(e) => setBg((b) => ({ ...b, opacity: Number(e.target.value) }))} />
           </label>
           <button type="button" className={`pf-kind-chip ${bg.show ? 'is-on' : ''}`} aria-pressed={bg.show}
             onClick={() => setBg((b) => ({ ...b, show: !b.show }))}>{bg.show ? 'Visibile' : 'Nascosto'}</button>
-        </div>
+        </Glass>
       )}
       {tool !== 'select' && tool !== 'bg' && tool !== 'cal' && (
-        <div className="pf-sketch-kinds" role="radiogroup" aria-label="Tipo di stanza da disegnare">
+        <Glass className="pf-sketch-kinds" role="radiogroup" aria-label="Tipo di stanza da disegnare">
           <span>Nuova stanza:</span>
           {SKETCH_KINDS.map((k) => (
             <button key={k.id} type="button" role="radio" aria-checked={kind === k.id}
@@ -449,7 +450,7 @@ export default function SketchBoard({ initialShapes = [], background = null, und
               <i style={{ background: roomColor(k.id) }} /> {k.label}
             </button>
           ))}
-        </div>
+        </Glass>
       )}
 
       <div className="pf-sketch-canvas-area" ref={areaRef}>
@@ -549,9 +550,9 @@ export default function SketchBoard({ initialShapes = [], background = null, und
               </select>
             </label>
             <p className="pf-hint">{fmt(G.polygonArea(selected.poly))} m² · {selected.poly.length} vertici</p>
-            <button type="button" className="pf-tool is-danger" onClick={removeSelected}>
+            <GButton type="button" className="pf-tool is-danger" onClick={removeSelected}>
               <Trash2 size={13} /> Elimina stanza
-            </button>
+            </GButton>
           </div>
         )}
 

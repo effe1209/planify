@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { RotateCcw, RotateCw, Trash2, TriangleAlert, X } from 'lucide-react';
 import { AJAX_MODELS } from '../lib/ajax';
 import { aimDevice, coverFloor, deviceWarnings, sensorModel } from '../lib/coverage';
+import { GButton } from '../glass';
 
 /* Modelli intercambiabili: stessi impieghi (interno / esterno). */
 const SWAP = {
@@ -32,7 +33,7 @@ export default function DevicePanel({ plan, device, devices, doors, onChange, on
     <section className="pf-sec pf-item-panel">
       <div className="pf-item-head">
         <h2>{AJAX_MODELS[device.model]?.name || device.model}</h2>
-        <button type="button" className="pf-btn-icon" onClick={onClose} aria-label="Deseleziona"><X size={14} /></button>
+        <GButton type="button" className="pf-btn-icon" onClick={onClose} aria-label="Deseleziona"><X size={14} /></GButton>
       </div>
       <p className="pf-hint">{device.roomName || 'Esterno'} · {device.purpose}</p>
 
@@ -87,11 +88,11 @@ export default function DevicePanel({ plan, device, devices, doors, onChange, on
       <div className="pf-security-actions">
         {aimed && (
           <>
-            <button type="button" className="pf-mini" onClick={() => turn(-15)} title="Ruota di 15° (Maiusc+R)"><RotateCcw size={13} /> 15°</button>
-            <button type="button" className="pf-mini" onClick={() => turn(15)} title="Ruota di 15° (R)"><RotateCw size={13} /> 15°</button>
+            <GButton type="button" className="pf-mini" onClick={() => turn(-15)} title="Ruota di 15° (Maiusc+R)"><RotateCcw size={13} /> 15°</GButton>
+            <GButton type="button" className="pf-mini" onClick={() => turn(15)} title="Ruota di 15° (R)"><RotateCw size={13} /> 15°</GButton>
           </>
         )}
-        <button type="button" className="pf-mini is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={13} /> Elimina</button>
+        <GButton type="button" className="pf-mini is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={13} /> Elimina</GButton>
       </div>
       <p className="pf-hint">
         Trascina il simbolo per spostare{aimed ? ', la maniglia sull\'asse per ruotare' : ''} · frecce 5 cm · R ruota · ⌘Z annulla

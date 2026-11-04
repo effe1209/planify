@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Cookie, X } from 'lucide-react';
+import { GButton, GCheck } from '../glass';
 
 /* Banner del consenso (al primo accesso) e finestra con preferenze + informativa (sempre richiamabile). */
 
@@ -14,8 +15,8 @@ export function CookieBanner({ onAcceptAll, onNecessaryOnly, onCustomize }) {
         <button type="button" className="pf-link" onClick={onCustomize}>Informativa e preferenze</button>
       </p>
       <div className="pf-cookie-actions">
-        <button type="button" className="pf-secondary" onClick={onNecessaryOnly}>Solo necessari</button>
-        <button type="button" className="pf-primary" onClick={onAcceptAll}>Accetta tutto</button>
+        <GButton type="button" className="pf-secondary" onClick={onNecessaryOnly}>Solo necessari</GButton>
+        <GButton type="button" className="pf-primary" onClick={onAcceptAll}>Accetta tutto</GButton>
       </div>
     </div>
   );
@@ -24,7 +25,7 @@ export function CookieBanner({ onAcceptAll, onNecessaryOnly, onCustomize }) {
 function Toggle({ checked, disabled, onChange, label }) {
   return (
     <label className={`pf-toggle ${disabled ? 'is-disabled' : ''}`}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange?.(e.target.checked)} />
+      <GCheck checked={checked} disabled={disabled} onChange={(e) => onChange?.(e.target.checked)} />
       <span aria-hidden="true" />
       <b className="sr-only">{label}</b>
     </label>
@@ -59,7 +60,7 @@ export function CookieDialog({ consent, onSave, onClose }) {
     <dialog ref={dialogRef} className="pf-dialog" aria-labelledby="pf-cookie-title">
       <header className="pf-dialog-head">
         <h2 id="pf-cookie-title"><Cookie size={18} /> Cookie e privacy</h2>
-        <button type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></button>
+        <GButton type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></GButton>
       </header>
 
       <div className="pf-dialog-body">
@@ -117,12 +118,12 @@ export function CookieDialog({ consent, onSave, onClose }) {
       </div>
 
       <footer className="pf-dialog-foot">
-        <button type="button" className="pf-secondary" onClick={() => onSave({ history: false, analytics: false })}>
+        <GButton type="button" className="pf-secondary" onClick={() => onSave({ history: false, analytics: false })}>
           Rifiuta facoltativi
-        </button>
-        <button type="button" className="pf-primary" onClick={() => onSave({ history, analytics })}>
+        </GButton>
+        <GButton type="button" className="pf-primary" onClick={() => onSave({ history, analytics })}>
           Salva preferenze
-        </button>
+        </GButton>
       </footer>
     </dialog>
   );

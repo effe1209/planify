@@ -1,5 +1,6 @@
 import { Eye, EyeOff, FileText, TriangleAlert } from 'lucide-react';
 import { ASSUMPTIONS, COVER_COLORS } from '../lib/coverage';
+import { GButton } from '../glass';
 
 const rgba = ([r, g, b, a]) => `rgba(${r},${g},${b},${Math.min(1, (a / 255) * 2.2)})`;
 const m2 = (v) => v.toLocaleString('it-IT', { maximumFractionDigits: 1 });
@@ -22,10 +23,10 @@ export default function CoveragePanel({ coverage, shown, onToggle, highlight, on
     <section className="pf-sec pf-coverage">
       <div className="pf-item-head">
         <h2>Copertura sensori</h2>
-        <button type="button" className="pf-mini" onClick={onToggle} aria-pressed={shown}
+        <GButton type="button" className="pf-mini" onClick={onToggle} aria-pressed={shown}
           title={shown ? 'Nascondi la copertura in pianta' : 'Mostra la copertura in pianta'}>
           {shown ? <EyeOff size={13} /> : <Eye size={13} />} {shown ? 'Nascondi' : 'Mostra'}
-        </button>
+        </GButton>
       </div>
       {!coverage ? (
         <p className="pf-hint">{shown ? 'Calcolo in corso…' : 'Mostra la copertura per calcolare le zone viste dai sensori.'}</p>
@@ -101,10 +102,10 @@ export default function CoveragePanel({ coverage, shown, onToggle, highlight, on
           <p className="pf-hint">Clic su una porta in pianta per aprirla o chiuderla nel calcolo.</p>
           {onReport && (
             <div className="pf-security-actions">
-              <button type="button" className="pf-btn-add" onClick={onReport}
+              <GButton type="button" className="pf-btn-add" onClick={onReport}
                 title="PDF da allegare al preventivo: tavole di copertura di tutti i piani, rilevatori, locali, varchi, ipotesi e fonti">
                 <FileText size={14} /> Relazione di copertura (PDF)
-              </button>
+              </GButton>
             </div>
           )}
           <details className="pf-bom">

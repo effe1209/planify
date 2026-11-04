@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Copy, Layers, PenTool, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { FLOOR_PRESETS, levelLabel } from '../lib/project';
+import { GButton, Glass } from '../glass';
 
 /*
  * Barra dei piani del progetto: selezione, rinomina (doppio clic), riordino, eliminazione,
@@ -39,7 +40,7 @@ export default function FloorBar({
   };
 
   return (
-    <div className="pf-floorbar" role="tablist" aria-label="Piani del progetto">
+    <Glass className="pf-floorbar" role="tablist" aria-label="Piani del progetto">
       <Layers size={15} className="pf-floorbar-icon" aria-hidden="true" />
       <div className="pf-floor-seg">
         {floors.map((f, i) => {
@@ -73,12 +74,12 @@ export default function FloorBar({
                       {FLOOR_PRESETS.filter((p) => typeof p.level === 'number').map((p) => <option key={p.level} value={p.level}>{p.name}</option>)}
                     </select>
                   )}
-                  <button type="button" className="pf-btn-icon" disabled={i === 0} onClick={() => onMove(f.id, -1)}
-                    title="Sposta prima" aria-label="Sposta prima"><ChevronLeft size={13} /></button>
-                  <button type="button" className="pf-btn-icon" disabled={i === floors.length - 1} onClick={() => onMove(f.id, 1)}
-                    title="Sposta dopo" aria-label="Sposta dopo"><ChevronRight size={13} /></button>
-                  <button type="button" className="pf-btn-icon is-danger" disabled={floors.length <= 1}
-                    onClick={() => onRemove(f.id)} title="Elimina piano" aria-label="Elimina piano"><Trash2 size={13} /></button>
+                  <GButton type="button" className="pf-btn-icon" disabled={i === 0} onClick={() => onMove(f.id, -1)}
+                    title="Sposta prima" aria-label="Sposta prima"><ChevronLeft size={13} /></GButton>
+                  <GButton type="button" className="pf-btn-icon" disabled={i === floors.length - 1} onClick={() => onMove(f.id, 1)}
+                    title="Sposta dopo" aria-label="Sposta dopo"><ChevronRight size={13} /></GButton>
+                  <GButton type="button" className="pf-btn-icon is-danger" disabled={floors.length <= 1}
+                    onClick={() => onRemove(f.id)} title="Elimina piano" aria-label="Elimina piano"><Trash2 size={13} /></GButton>
                 </span>
               )}
             </div>
@@ -87,9 +88,9 @@ export default function FloorBar({
       </div>
 
       <div className="pf-floor-add">
-        <button ref={addBtn} type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu} title="Aggiungi un piano">
+        <GButton ref={addBtn} type="button" className="pf-tool" onClick={() => setMenu(!menu)} aria-expanded={menu} title="Aggiungi un piano">
           <Plus size={14} /> <span className="pf-tl">Piano</span>
-        </button>
+        </GButton>
         {menu && (
           <div className="pf-floor-menu" role="dialog" aria-label="Aggiungi piano" style={menuPos ? { position: 'fixed', ...menuPos } : undefined}>
             <label className="pf-field-sm">
@@ -103,11 +104,11 @@ export default function FloorBar({
               <input className="pf-input-sm" value={custom} placeholder={FLOOR_PRESETS[preset].name}
                 onChange={(e) => setCustom(e.target.value)} />
             </label>
-            <button type="button" className="pf-btn-add" onClick={() => start('generate')}>
+            <GButton type="button" className="pf-btn-add" onClick={() => start('generate')}>
               <Sparkles size={13} /> Genera con i parametri a sinistra
-            </button>
-            <button type="button" className="pf-tool" onClick={() => start('sketch')}><PenTool size={13} /> Disegna a mano</button>
-            <button type="button" className="pf-tool" onClick={() => start('duplicate')}><Copy size={13} /> Duplica il piano attuale</button>
+            </GButton>
+            <GButton type="button" className="pf-tool" onClick={() => start('sketch')}><PenTool size={13} /> Disegna a mano</GButton>
+            <GButton type="button" className="pf-tool" onClick={() => start('duplicate')}><Copy size={13} /> Duplica il piano attuale</GButton>
           </div>
         )}
       </div>
@@ -115,17 +116,17 @@ export default function FloorBar({
       {pending && (
         <span className="pf-floor-pending">
           Nuovo piano: <b>{pending.name}</b>
-          <button type="button" className="pf-btn-icon" onClick={onCancelAdd} aria-label="Annulla nuovo piano"><X size={12} /></button>
+          <GButton type="button" className="pf-btn-icon" onClick={onCancelAdd} aria-label="Annulla nuovo piano"><X size={12} /></GButton>
         </span>
       )}
 
       <div className="pf-spacer" />
       {floors.length > 1 && (
-        <button type="button" className={`pf-tool ${globalView ? 'is-on' : ''}`} onClick={onToggleGlobal} aria-pressed={globalView}
+        <GButton type="button" className={`pf-tool ${globalView ? 'is-on' : ''}`} onClick={onToggleGlobal} aria-pressed={globalView}
           title="Vista globale">
           <Layers size={14} /> <span className="pf-tl">Vista globale</span>
-        </button>
+        </GButton>
       )}
-    </div>
+    </Glass>
   );
 }

@@ -3,6 +3,7 @@ import { Spline, Undo2, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, DoorOpen, Fli
 import { canMerge, checkStair, openingLine, runOf, stairRoom } from '../lib/walls';
 import FinishPicker from './FinishPicker';
 import { PANORAMIC_MAX, isPanoramic } from '../lib/openings';
+import { GButton, GCheck } from '../glass';
 
 const STAIR_TYPES = [['straight', 'Rampa'], ['l', 'A L'], ['u', 'A U']];
 const ENTRY = [['N', ArrowUp, 'Parte dal lato nord'], ['E', ArrowRight, 'Parte dal lato est'], ['S', ArrowDown, 'Parte dal lato sud'], ['W', ArrowLeft, 'Parte dal lato ovest']];
@@ -70,9 +71,9 @@ export default function EditPlanPanel({
             <button type="button" className="pf-x" onClick={onCloseWall} aria-label="Deseleziona"><X size={13} /></button>
           </header>
           <div className="pf-minirow">
-            <button type="button" className="pf-minibtn" disabled={!canMerge(plan, selectedWall.a, selectedWall.b)} onClick={onMerge}
-              title="Un solo locale (serve che i due formino un rettangolo)"><Merge size={12} /> Unisci</button>
-            <button type="button" className="pf-minibtn" onClick={onOpenWall} title="Il muro sparisce, i locali restano una zona unica"><Unlink size={12} /> Apri muro</button>
+            <GButton type="button" className="pf-minibtn" disabled={!canMerge(plan, selectedWall.a, selectedWall.b)} onClick={onMerge}
+              title="Un solo locale (serve che i due formino un rettangolo)"><Merge size={12} /> Unisci</GButton>
+            <GButton type="button" className="pf-minibtn" onClick={onOpenWall} title="Il muro sparisce, i locali restano una zona unica"><Unlink size={12} /> Apri muro</GButton>
           </div>
           {onWallLook && (
             <FinishPicker parts={['wall']} title="Colore e materiale del muro"
@@ -110,9 +111,9 @@ export default function EditPlanPanel({
               const other = { E: 'W', W: 'E', N: 'S', S: 'N' }[stair.hand];
               const c = checkStair(plan, { hand: other });
               return (
-                <button type="button" className="pf-minibtn is-icon" disabled={!c.ok} aria-label="Specchia la rampa" title={c.ok ? 'Specchia la rampa' : c.why} onClick={() => onStair({ hand: other })}>
+                <GButton type="button" className="pf-minibtn is-icon" disabled={!c.ok} aria-label="Specchia la rampa" title={c.ok ? 'Specchia la rampa' : c.why} onClick={() => onStair({ hand: other })}>
                   <FlipHorizontal2 size={13} />
-                </button>
+                </GButton>
               );
             })()}
           </div>
@@ -140,7 +141,7 @@ export default function EditPlanPanel({
                 <input type="color" value={/^#[0-9a-f]{6}$/i.test(o.color || '') ? o.color : '#ffffff'} aria-label="Colore dell'infisso o della porta"
                   onChange={(e) => onColor(e.target.value)} />
               </label>
-              {o.color && <button type="button" className="pf-minibtn" onClick={() => onColor(null)} title="Torna al colore dello stile">Stile</button>}
+              {o.color && <GButton type="button" className="pf-minibtn" onClick={() => onColor(null)} title="Torna al colore dello stile">Stile</GButton>}
             </div>
           )}
           <div className="pf-minirow">
@@ -151,9 +152,9 @@ export default function EditPlanPanel({
               <em>m</em>
             </label>
             {selected.kind === 'door' && !o.entrance && o.kind !== 'garage' && o.type !== 'sliding' && (
-              <button type="button" className="pf-minibtn is-icon" onClick={onFlip} aria-label="Inverti apertura" title="Inverti il verso di apertura"><FlipHorizontal2 size={13} /></button>
+              <GButton type="button" className="pf-minibtn is-icon" onClick={onFlip} aria-label="Inverti apertura" title="Inverti il verso di apertura"><FlipHorizontal2 size={13} /></GButton>
             )}
-            <button type="button" className="pf-minibtn is-icon is-danger" onClick={onRemove} aria-label="Elimina" title="Elimina (Canc)"><Trash2 size={13} /></button>
+            <GButton type="button" className="pf-minibtn is-icon is-danger" onClick={onRemove} aria-label="Elimina" title="Elimina (Canc)"><Trash2 size={13} /></GButton>
           </div>
         </div>
       )}
@@ -178,10 +179,10 @@ function CurveCard({ plan, onCurve, onStraighten, busy }) {
       <header><span>{curved ? `Facciata curva · ${SIDES.find(([v]) => v === plan.curve.side)?.[1] || ''}` : 'Curva una facciata'}</span></header>
       {curved ? (
         <div className="pf-minirow">
-          <button type="button" className="pf-minibtn" disabled={!onStraighten} onClick={onStraighten}
+          <GButton type="button" className="pf-minibtn" disabled={!onStraighten} onClick={onStraighten}
             title="Torna alla pianta dritta com'era prima della curva (le modifiche fatte dopo si perdono; Annulla le recupera)">
             <Undo2 size={12} /> Raddrizza
-          </button>
+          </GButton>
         </div>
       ) : (
         <>
@@ -198,7 +199,7 @@ function CurveCard({ plan, onCurve, onStraighten, busy }) {
                 onChange={(e) => { const v = parseFloat(e.target.value); if (Number.isFinite(v)) setBulge(v); }} />
               <em>m</em>
             </label>
-            <label className="pf-check"><input type="checkbox" checked={partial} onChange={(e) => setPartial(e.target.checked)} /><span>Solo un tratto</span></label>
+            <label className="pf-check"><GCheck checked={partial} onChange={(e) => setPartial(e.target.checked)} /><span>Solo un tratto</span></label>
           </div>
           {partial && (
             <div className="pf-minirow">
@@ -211,9 +212,9 @@ function CurveCard({ plan, onCurve, onStraighten, busy }) {
             </div>
           )}
           <div className="pf-minirow">
-            <button type="button" className="pf-minibtn" disabled={busy} onClick={() => onCurve({ side, bulge, ...(partial && { a0: from, a1: hi }) })}>
+            <GButton type="button" className="pf-minibtn" disabled={busy} onClick={() => onCurve({ side, bulge, ...(partial && { a0: from, a1: hi }) })}>
               <Spline size={12} /> {busy ? 'Curvo…' : 'Curva'}
-            </button>
+            </GButton>
           </div>
           <p className="pf-tip">Muri, stanze, porte e finestre seguono l'arco; la pianta cresce della freccia. Una sola facciata per piano.</p>
         </>

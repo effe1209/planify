@@ -4,6 +4,7 @@ import { SHAPE_NAME, TYPE_NAME } from '../constants';
 import { fmtM } from '../lib/utils';
 import PlanSvg from './PlanSvg';
 import { activeFloor } from '../lib/project';
+import { GButton } from '../glass';
 
 const THUMB_LAYERS = { furniture: false, labels: false, dims: false, grid: false };
 
@@ -59,7 +60,7 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
             {cloudItems.map((it) => (
               <li key={it.id}>
                 <span><strong>{it.name || 'Senza nome'}</strong> <em>{new Date(it.updated_at).toLocaleDateString('it-IT')}</em></span>
-                <button type="button" className="pf-mini" onClick={() => onOpenCloud?.(it.id)}>Apri</button>
+                <GButton type="button" className="pf-mini" onClick={() => onOpenCloud?.(it.id)}>Apri</GButton>
               </li>
             ))}
           </ul>

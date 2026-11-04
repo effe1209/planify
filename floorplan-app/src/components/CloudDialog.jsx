@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Cloud, Copy, FolderOpen, KeyRound, LogOut, Mail, Trash2, Upload, X } from 'lucide-react';
 import { shareLink } from '../lib/cloud';
+import { GButton } from '../glass';
 
 /*
  * Cloud: accesso (Google, email con link o con codice), salvataggio dei progetti, riapertura e link in sola lettura per i clienti.
@@ -83,7 +84,7 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
     <dialog ref={dialogRef} className="pf-dialog" aria-labelledby="pf-cloud-title">
       <header className="pf-dialog-head">
         <h2 id="pf-cloud-title"><Cloud size={18} /> Cloud</h2>
-        <button type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></button>
+        <GButton type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></GButton>
       </header>
       <div className="pf-dialog-body">
         {!configured && (
@@ -96,16 +97,16 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
         {configured && !ready && <p className="pf-hint">Un attimo…</p>}
         {configured && ready && !user && (
           <div className="pf-cloud-login">
-            <button type="button" className="pf-mini is-accent" disabled={busy} onClick={() => run(() => api.current.signInGoogle())}>
+            <GButton type="button" className="pf-mini is-accent" disabled={busy} onClick={() => run(() => api.current.signInGoogle())}>
               Continua con Google
-            </button>
+            </GButton>
             <p className="pf-hint">Oppure con la tua email: ti mando un link (e un codice di 6 cifre), senza password.</p>
             <form onSubmit={sendLink} className="pf-cloud-login">
               <label className="pf-field-sm">
                 <span>Email</span>
                 <input className="pf-input-sm" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </label>
-              <button type="submit" className="pf-mini" disabled={busy || !email}><Mail size={13} /> Invia il link</button>
+              <GButton type="submit" className="pf-mini" disabled={busy || !email}><Mail size={13} /> Invia il link</GButton>
             </form>
             {sent && (
               <form onSubmit={sendCode} className="pf-cloud-login">
@@ -115,7 +116,7 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
                   <input className="pf-input-sm" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,8}" value={code}
                     onChange={(e) => setCode(e.target.value)} />
                 </label>
-                <button type="submit" className="pf-mini" disabled={busy || code.trim().length < 6}><KeyRound size={13} /> Entra con il codice</button>
+                <GButton type="submit" className="pf-mini" disabled={busy || code.trim().length < 6}><KeyRound size={13} /> Entra con il codice</GButton>
               </form>
             )}
           </div>
@@ -124,7 +125,7 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
           <>
             <div className="pf-cloud-user">
               <span className="pf-hint">{user.email}</span>
-              <button type="button" className="pf-mini" onClick={() => run(async () => { await api.current.signOut(); })}><LogOut size={13} /> Esci</button>
+              <GButton type="button" className="pf-mini" onClick={() => run(async () => { await api.current.signOut(); })}><LogOut size={13} /> Esci</GButton>
             </div>
             <section className="pf-cloud-block">
               <h3>Questo progetto</h3>
@@ -134,16 +135,16 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
                     «{project.name || 'Senza nome'}»{saved ? ` · salvato il ${when(saved.updated_at)} · si salva da solo` : ' · non ancora sul cloud'}
                   </p>
                   <div className="pf-security-actions">
-                    <button type="button" className="pf-mini is-accent" disabled={busy} onClick={save}>
+                    <GButton type="button" className="pf-mini is-accent" disabled={busy} onClick={save}>
                       <Upload size={13} /> {project.cloudId ? 'Salva ora' : 'Salva sul cloud'}
-                    </button>
+                    </GButton>
                     {project.cloudId && !project.cloudShare && (
-                      <button type="button" className="pf-mini" disabled={busy} onClick={share}><Copy size={13} /> Crea link in sola lettura</button>
+                      <GButton type="button" className="pf-mini" disabled={busy} onClick={share}><Copy size={13} /> Crea link in sola lettura</GButton>
                     )}
                     {project.cloudId && project.cloudShare && (
                       <>
-                        <button type="button" className="pf-mini" disabled={busy} onClick={share}><Copy size={13} /> Copia il link</button>
-                        <button type="button" className="pf-mini is-danger" disabled={busy} onClick={unshare}>Spegni il link</button>
+                        <GButton type="button" className="pf-mini" disabled={busy} onClick={share}><Copy size={13} /> Copia il link</GButton>
+                        <GButton type="button" className="pf-mini is-danger" disabled={busy} onClick={unshare}>Spegni il link</GButton>
                       </>
                     )}
                   </div>
@@ -158,8 +159,8 @@ export default function CloudDialog({ cx, project, readOnly, onOpen, onSaved, on
                 {items.map((it) => (
                   <li key={it.id}>
                     <span><strong>{it.name || 'Senza nome'}</strong> <em>{when(it.updated_at)}{it.share_token ? ' · condiviso' : ''}</em></span>
-                    <button type="button" className="pf-mini" disabled={busy} onClick={() => open(it.id)}><FolderOpen size={13} /> Apri</button>
-                    <button type="button" className="pf-mini is-danger" disabled={busy} onClick={() => remove(it)} aria-label={`Elimina ${it.name}`}><Trash2 size={13} /></button>
+                    <GButton type="button" className="pf-mini" disabled={busy} onClick={() => open(it.id)}><FolderOpen size={13} /> Apri</GButton>
+                    <GButton type="button" className="pf-mini is-danger" disabled={busy} onClick={() => remove(it)} aria-label={`Elimina ${it.name}`}><Trash2 size={13} /></GButton>
                   </li>
                 ))}
               </ul>

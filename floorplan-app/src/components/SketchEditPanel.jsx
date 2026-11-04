@@ -1,4 +1,5 @@
 import { FlipHorizontal2, Trash2, X } from 'lucide-react';
+import { GButton, GRange } from '../glass';
 
 /* Pannello della modifica diretta di una pianta disegnata a mano: porta o finestra selezionata (larghezza, verso, elimina). */
 export default function SketchEditPanel({ plan, selected, warning, onResize, onFlip, onRemove, onType, onClose }) {
@@ -33,14 +34,14 @@ export default function SketchEditPanel({ plan, selected, warning, onResize, onF
           )}
           <label className="pf-field-sm">
             <span>Larghezza: {Math.round(o.w * 100)} cm</span>
-            <input type="range" min={0.5} max={o.type === 'sliding' || o.type === 'panoramic' ? 4 : selected.kind === 'door' ? 1.4 : 3} step={0.05} value={o.w} aria-label="Larghezza"
+            <GRange min={0.5} max={o.type === 'sliding' || o.type === 'panoramic' ? 4 : selected.kind === 'door' ? 1.4 : 3} step={0.05} value={o.w} aria-label="Larghezza"
               onChange={(e) => onResize(Number(e.target.value))} />
           </label>
           <div className="pf-minirow">
             {selected.kind === 'door' && (
-              <button type="button" className="pf-minibtn" onClick={onFlip} title="Cambia il verso di apertura"><FlipHorizontal2 size={12} /> Verso</button>
+              <GButton type="button" className="pf-minibtn" onClick={onFlip} title="Cambia il verso di apertura"><FlipHorizontal2 size={12} /> Verso</GButton>
             )}
-            <button type="button" className="pf-minibtn is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={12} /> Elimina</button>
+            <GButton type="button" className="pf-minibtn is-danger" onClick={onRemove} title="Elimina (Canc)"><Trash2 size={12} /> Elimina</GButton>
           </div>
         </div>
       )}

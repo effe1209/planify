@@ -2,6 +2,7 @@ import { Magnet, RotateCcw } from 'lucide-react';
 import { gardenFrame } from '../lib/renderStudio';
 import { gardenOffset } from '../lib/project';
 import { gardenParts } from '../lib/gardenEdit';
+import { GButton, GRange } from '../glass';
 
 const GRID = 0.25;      // passo dello scatto
 const MAGNET = 0.3;     // entro questa distanza da un allineamento il giardino ci si aggancia
@@ -49,17 +50,17 @@ export default function GardenMovePanel({ project, facade, onChange, gardenPlan 
       <span>Posizione del giardino</span>
       <label className="pf-field-sm">
         <span>Lungo la facciata: {label(off.a)}</span>
-        <input type="range" min={-span} max={span} step={0.05} value={off.a} aria-label="Spostamento del giardino lungo la facciata"
+        <GRange min={-span} max={span} step={0.05} value={off.a} aria-label="Spostamento del giardino lungo la facciata"
           onChange={(e) => onChange({ a: snapTo(Number(e.target.value), aSnaps), d: off.d, h: off.h })} />
       </label>
       <label className="pf-field-sm">
         <span>Distanza dalla casa: {label(off.d)}</span>
-        <input type="range" min={-2} max={12} step={0.05} value={off.d} aria-label="Distanza del giardino dalla casa"
+        <GRange min={-2} max={12} step={0.05} value={off.d} aria-label="Distanza del giardino dalla casa"
           onChange={(e) => onChange({ a: off.a, d: snapTo(Number(e.target.value), dSnaps), h: off.h })} />
       </label>
       <label className="pf-field-sm">
         <span>Quota del giardino: {label(off.h)}</span>
-        <input type="range" min={-3} max={1.5} step={0.05} value={off.h} aria-label="Quota del giardino"
+        <GRange min={-3} max={1.5} step={0.05} value={off.h} aria-label="Quota del giardino"
           onChange={(e) => onChange({ a: off.a, d: off.d, h: snapTo(Number(e.target.value), [0]) })} />
       </label>
       <div className="pf-chips" role="group" aria-label="Allineamenti del giardino">
@@ -76,13 +77,13 @@ export default function GardenMovePanel({ project, facade, onChange, gardenPlan 
             .filter(([k]) => parts[k] && parts[k].max > parts[k].min).map(([k, text]) => (
               <label key={k} className="pf-field-sm">
                 <span>{text}: {parts[k].x.toFixed(2).replace('.', ',')} m dal bordo sinistro</span>
-                <input type="range" min={parts[k].min} max={parts[k].max} step={0.05} value={parts[k].x} aria-label={text}
+                <GRange min={parts[k].min} max={parts[k].max} step={0.05} value={parts[k].x} aria-label={text}
                   onChange={(e) => onPart(k, snapTo(Number(e.target.value), partSnaps(k)))} />
               </label>
             ))}
         </>
       )}
-      <button type="button" className="pf-minibtn" disabled={!moved} onClick={() => onChange(null)}><RotateCcw size={12} /> Rimetti il giardino com&apos;era</button>
+      <GButton type="button" className="pf-minibtn" disabled={!moved} onClick={() => onChange(null)}><RotateCcw size={12} /> Rimetti il giardino com&apos;era</GButton>
     </div>
   );
 }

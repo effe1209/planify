@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, Ruler, Save, Trash2, X } from 'lucide-react';
 import { SHEET_FORMATS, SHEET_SCALES } from '../lib/techSheet';
 import { DEFAULT_TEMPLATE, FONTS, LINE_WEIGHTS, cleanTemplate, templateOptions } from '../lib/sheetTemplates';
+import { GButton, GCheck, GRange, GText, SegmentedControl } from '../glass';
 
 /* Anteprima schematica dell'impaginazione: foglio, disegno, colonna e cartiglio come li ha scelti l'utente. */
 function LayoutPreview({ d }) {
@@ -31,13 +32,15 @@ function LayoutPreview({ d }) {
   );
 }
 
-const Seg = ({ label, value, options, onChange }) => (
-  <div className="pf-seg pf-seg-small" role="radiogroup" aria-label={label}>
-    {options.map(([id, text]) => (
-      <button key={String(id)} type="button" role="radio" aria-checked={value === id} className={value === id ? 'is-on' : ''} onClick={() => onChange(id)}>{text}</button>
-    ))}
-  </div>
-);
+/* Scelta tra poche opzioni: SegmentedControl di glisse (i valori non testuali si confrontano come stringhe). */
+const Seg = ({ label, value, options, onChange }) => {
+  // le schede di glisse hanno larghezza fissa: si prende quella dell'etichetta più lunga
+  const w = Math.max(52, Math.max(...options.map(([, t]) => String(t).length)) * 7 + 22);
+  return (
+    <SegmentedControl className="pf-gseg" aria-label={label} value={String(value)} style={{ '--lg-tab-width': `${w}px`, '--lg-tab-height': '28px' }}
+      items={options.map(([id, text]) => ({ value: String(id), label: text }))} onValueChange={(v) => onChange(options.find(([id]) => String(id) === v)[0])} />
+  );
+};
 
 /*
  * Tavole in scala: formato, orientamento, scala, cornice, linee, bianco e nero, carattere e cartiglio, poi PDF (una tavola per piano)
@@ -71,7 +74,7 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
   const text = (key, label, max, ph = '') => (
     <label className="pf-field-sm">
       <span>{label}</span>
-      <input type="text" className="pf-input-sm" maxLength={max} value={draft[key]} placeholder={ph} onChange={(e) => set({ [key]: e.target.value })} />
+      <GText className="pf-input-sm" maxLength={max} value={draft[key]} placeholder={ph} onChange={(e) => set({ [key]: e.target.value })} />
     </label>
   );
   const opts = templateOptions(draft);
@@ -80,7 +83,7 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
     <dialog ref={dialogRef} className="pf-dialog" aria-labelledby="pf-sheets-title">
       <header className="pf-dialog-head">
         <h2 id="pf-sheets-title"><Ruler size={18} /> Tavole in scala</h2>
-        <button type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></button>
+        <GButton type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></GButton>
       </header>
       <div className="pf-dialog-body">
         <p className="pf-hint">Pianta quotata, legenda dei locali, serramenti e cartiglio a una scala vera. Imposta la grafica della tavola e salvala come modello.</p>
@@ -95,11 +98,11 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </label>
-            <button type="button" className="pf-btn-icon is-danger" disabled={!pickedId} title="Elimina il modello" aria-label="Elimina il modello"
-              onClick={() => { onDeleteTemplate?.(pickedId); pick(''); }}><Trash2 size={13} /></button>
+            <GButton type="button" className="pf-btn-icon is-danger" disabled={!pickedId} title="Elimina il modello" aria-label="Elimina il modello"
+              onClick={() => { onDeleteTemplate?.(pickedId); pick(''); }}><Trash2 size={13} /></GButton>
           </div>
           {text('name', 'Nome del modello', 40, 'Es. Studio – esecutivo A3')}
-          <button type="button" className="pf-mini" onClick={save} title="Salva queste impostazioni nel progetto e nel browser"><Save size={13} /> Salva modello</button>
+          <GButton type="button" className="pf-mini" onClick={save} title="Salva queste impostazioni nel progetto e nel browser"><Save size={13} /> Salva modello</GButton>
         </div>
 
         <div className="pf-cloud-block">
@@ -108,10 +111,10 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
           <Seg label="Orientamento" value={draft.orientation} options={[['landscape', 'Orizzontale'], ['portrait', 'Verticale']]} onChange={(orientation) => set({ orientation })} />
           <Seg label="Scala di stampa" value={draft.scale} options={[['auto', 'Migliore'], ...SHEET_SCALES.filter((n) => n !== 20 && n !== 500).map((n) => [n, `1:${n}`])]} onChange={(scale) => set({ scale })} />
           <p className="pf-hint">Se la pianta non entra alla scala scelta si passa alla più piccola che basta, e il cartiglio la riporta.</p>
-          <label className="pf-check"><input type="checkbox" checked={draft.frame} onChange={(e) => set({ frame: e.target.checked })} /><span>Cornice attorno al foglio</span></label>
+          <label className="pf-check"><GCheck checked={draft.frame} onChange={(e) => set({ frame: e.target.checked })} /><span>Cornice attorno al foglio</span></label>
           <label className="pf-field-sm">
             <span>Margine: {draft.margin} mm</span>
-            <input type="range" min={5} max={20} step={1} value={draft.margin} aria-label="Margine del foglio" onChange={(e) => set({ margin: Number(e.target.value) })} />
+            <GRange min={5} max={20} step={1} value={draft.margin} aria-label="Margine del foglio" onChange={(e) => set({ margin: Number(e.target.value) })} />
           </label>
         </div>
 
@@ -121,14 +124,14 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
           <Seg label="Colonna di legenda" value={draft.side} options={[['right', 'A destra'], ['left', 'A sinistra']]} onChange={(side) => set({ side })} />
           <Seg label="Cartiglio" value={draft.cartouche} options={[['bottom', 'In basso'], ['top', 'In alto']]} onChange={(cartouche) => set({ cartouche })} />
           <Seg label="Posizione del disegno" value={draft.align} options={[['center', 'Al centro'], ['start', 'In alto a sinistra']]} onChange={(align) => set({ align })} />
-          <label className="pf-check"><input type="checkbox" checked={draft.northBlock} onChange={(e) => set({ northBlock: e.target.checked })} /><span>Nord e scala grafica</span></label>
-          <label className="pf-check"><input type="checkbox" checked={draft.rooms} onChange={(e) => set({ rooms: e.target.checked })} /><span>Elenco dei locali con le superfici</span></label>
-          <label className="pf-check"><input type="checkbox" checked={draft.schedule} onChange={(e) => set({ schedule: e.target.checked })} /><span>Abaco dei serramenti</span></label>
+          <label className="pf-check"><GCheck checked={draft.northBlock} onChange={(e) => set({ northBlock: e.target.checked })} /><span>Nord e scala grafica</span></label>
+          <label className="pf-check"><GCheck checked={draft.rooms} onChange={(e) => set({ rooms: e.target.checked })} /><span>Elenco dei locali con le superfici</span></label>
+          <label className="pf-check"><GCheck checked={draft.schedule} onChange={(e) => set({ schedule: e.target.checked })} /><span>Abaco dei serramenti</span></label>
           <label className="pf-field-sm">
             <span>Colore di cornice, linee e titoli</span>
             <span className="pf-finish-row">
               <input type="color" value={draft.accent || '#14181f'} aria-label="Colore di cornice e titoli" onChange={(e) => set({ accent: e.target.value })} />
-              <button type="button" className="pf-minibtn" disabled={!draft.accent} onClick={() => set({ accent: '' })}>Nero di serie</button>
+              <GButton type="button" className="pf-minibtn" disabled={!draft.accent} onClick={() => set({ accent: '' })}>Nero di serie</GButton>
             </span>
           </label>
         </div>
@@ -151,10 +154,10 @@ export default function SheetsDialog({ onPdf, onDxf, onClose, busy, templates = 
         </div>
 
         <div className="pf-security-actions">
-          <button type="button" className="pf-mini is-accent" disabled={busy} onClick={() => onPdf(opts)}><FileText size={13} /> {busy ? 'Preparo…' : 'Scarica PDF (tutti i piani)'}</button>
-          <button type="button" className="pf-mini" disabled={busy} onClick={() => onDxf(opts)} title="Il DXF del piano aperto, con cornice e cartiglio alla scala scelta">
+          <GButton type="button" className="pf-mini is-accent" disabled={busy} onClick={() => onPdf(opts)}><FileText size={13} /> {busy ? 'Preparo…' : 'Scarica PDF (tutti i piani)'}</GButton>
+          <GButton type="button" className="pf-mini" disabled={busy} onClick={() => onDxf(opts)} title="Il DXF del piano aperto, con cornice e cartiglio alla scala scelta">
             DXF con cornice e cartiglio (piano aperto)
-          </button>
+          </GButton>
         </div>
       </div>
     </dialog>

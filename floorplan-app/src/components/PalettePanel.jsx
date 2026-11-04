@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bookmark, RotateCcw, X } from 'lucide-react';
 import { PALETTE_KEYS, cleanPalette, parseColor, styleColors, toRgb } from '../lib/palette';
 import { deletePalette, loadPalettes, savePalette } from '../lib/savedPalettes';
+import { GButton, GText } from '../glass';
 
 /* Palette pronte: cinque colori armonici (pareti, facciata, pavimenti, legno, tessuti) da cui partire e ritoccare. */
 const PRESETS = [
@@ -34,7 +35,7 @@ function ColorRow({ label, value, custom, onChange }) {
         <span>{label}{!custom && <em> · stile</em>}</span>
       </div>
       <div className="pf-pal-codes">
-        <input type="text" className="pf-pal-hex" value={hex} aria-label={`${label}: codice esadecimale`} spellCheck="false" maxLength={9}
+        <GText className="pf-pal-hex" value={hex} aria-label={`${label}: codice esadecimale`} spellCheck="false" maxLength={9}
           onChange={(e) => typeHex(e.target.value)} onBlur={() => setHex(value.toUpperCase())} placeholder="#B7773F" />
         {['R', 'G', 'B'].map((ch, i) => (
           <label key={ch} className="pf-pal-ch">
@@ -91,14 +92,14 @@ export default function PalettePanel({ palette, styleId, onChange }) {
         ))}
       </ul>
       <div className="pf-row pf-pal-save">
-        <input type="text" value={name} maxLength={40} placeholder="Nome della palette" aria-label="Nome della palette da salvare"
+        <GText value={name} maxLength={40} placeholder="Nome della palette" aria-label="Nome della palette da salvare"
           onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') store(); }} />
-        <button type="button" className="pf-btn-add" onClick={store} aria-label="Salva la palette"><Bookmark size={13} /> Salva</button>
+        <GButton type="button" className="pf-btn-add" onClick={store} aria-label="Salva la palette"><Bookmark size={13} /> Salva</GButton>
       </div>
       <div className="pf-row">
-        <button type="button" className="pf-btn-add" disabled={!Object.keys(cur).length} onClick={() => onChange(null)}>
+        <GButton type="button" className="pf-btn-add" disabled={!Object.keys(cur).length} onClick={() => onChange(null)}>
           <RotateCcw size={13} /> Torna ai colori dello stile
-        </button>
+        </GButton>
       </div>
     </section>
   );

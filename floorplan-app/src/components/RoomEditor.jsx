@@ -3,6 +3,7 @@ import { Armchair, Eraser, FlipHorizontal2, Plus, RotateCw, Sliders, Trash2, Upl
 import { FLOOR_PALETTES, FURNITURE, FURNITURE_LABEL, ROOM_KINDS } from '../constants';
 import { forUse } from '../lib/materialLibrary';
 import FinishPicker from './FinishPicker';
+import { GButton, GRange, GText } from '../glass';
 
 const NAME_CHIPS = ['Soggiorno', 'Cucina', 'Camera da Letto', 'Bagno', 'Studio', 'Guardaroba', 'Palestra'];
 
@@ -27,7 +28,7 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
       {!room.mezz && (<>
       <label className="pf-field-sm">
         <span>Nome del locale</span>
-        <input type="text" className="pf-input-sm" value={room.name} onChange={(e) => onChange({ name: e.target.value })} />
+        <GText className="pf-input-sm" value={room.name} onChange={(e) => onChange({ name: e.target.value })} />
       </label>
       <div className="pf-chips">
         {NAME_CHIPS.map((nm) => (
@@ -91,16 +92,16 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
               <span>{item.name || FURNITURE_LABEL[item.type] || item.type} <em>{item.w} × {item.h} m</em></span>
               <div className="pf-furn-actions">
                 {!item.wallMounted && ASYMMETRIC.has(item.type) && (
-                  <button type="button" className="pf-btn-icon" title="Specchia" onClick={() => onFlip(index)}>
+                  <GButton type="button" className="pf-btn-icon" title="Specchia" onClick={() => onFlip(index)}>
                     <FlipHorizontal2 size={12} />
-                  </button>
+                  </GButton>
                 )}
-                {!item.wallMounted && <button type="button" className="pf-btn-icon" title="Ruota di 90°" onClick={() => onRotate(index)}>
+                {!item.wallMounted && <GButton type="button" className="pf-btn-icon" title="Ruota di 90°" onClick={() => onRotate(index)}>
                   <RotateCw size={12} />
-                </button>}
-                <button type="button" className="pf-btn-icon is-danger" title="Elimina" onClick={() => onRemoveItem(index)}>
+                </GButton>}
+                <GButton type="button" className="pf-btn-icon is-danger" title="Elimina" onClick={() => onRemoveItem(index)}>
                   <Trash2 size={12} />
-                </button>
+                </GButton>
               </div>
             </div>
           ))}
@@ -118,9 +119,9 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
               setImportBusy(true);
               try { await onImportModel(file); } finally { setImportBusy(false); }
             }} />
-          <button type="button" className="pf-btn-add" disabled={importBusy} onClick={() => modelInput.current?.click()}>
+          <GButton type="button" className="pf-btn-add" disabled={importBusy} onClick={() => modelInput.current?.click()}>
             <Upload size={13} /> {importBusy ? 'Importazione…' : 'Importa modello Blender (.glb)'}
-          </button>
+          </GButton>
           <p className="pf-hint">L’ingombro si può modificare dopo l’importazione.</p>
         </div>
       )}
@@ -129,12 +130,12 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
         <div className="pf-field-sm">
           <span>Arredo del locale</span>
           <div className="pf-row">
-            <button type="button" className="pf-btn-add" disabled={busy} onClick={() => onFurnish(false)}>
+            <GButton type="button" className="pf-btn-add" disabled={busy} onClick={() => onFurnish(false)}>
               <Armchair size={13} /> Arreda questo locale
-            </button>
-            <button type="button" className="pf-btn-add" disabled={busy} onClick={() => onFurnish(true)}>
+            </GButton>
+            <GButton type="button" className="pf-btn-add" disabled={busy} onClick={() => onFurnish(true)}>
               <Eraser size={13} /> Svuota
-            </button>
+            </GButton>
           </div>
         </div>
       )}
@@ -149,9 +150,9 @@ export default function RoomEditor({ room, furniture, library = [], onChange, on
               </optgroup>
             ))}
           </select>
-          <button type="button" className="pf-btn-add" onClick={() => onAddItem(newId)}>
+          <GButton type="button" className="pf-btn-add" onClick={() => onAddItem(newId)}>
             <Plus size={13} /> Aggiungi
-          </button>
+          </GButton>
         </div>
       </div>
     </section>
@@ -166,7 +167,7 @@ function MezzSize({ mezz, area }) {
     <div className="pf-field-sm pf-mezz-size">
       <span>{mezz.label} del soppalco</span>
       <div className="pf-row">
-        <input type="range" min={mezz.min} max={mezz.max} step="0.05" value={mezz.cur} aria-label={`${mezz.label} del soppalco`}
+        <GRange min={mezz.min} max={mezz.max} step="0.05" value={mezz.cur} aria-label={`${mezz.label} del soppalco`}
           onChange={(e) => mezz.onSize(parseFloat(e.target.value))} />
         <input type="number" className="pf-input-sm pf-mezz-num" min={mezz.min} max={mezz.max} step="0.05" value={mezz.cur}
           aria-label={`${mezz.label} del soppalco in metri`} onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) mezz.onSize(v); }} />

@@ -3,6 +3,7 @@ import { Download, Film, Loader2, Orbit, Square, X } from 'lucide-react';
 import { TIMES } from '../lib/renderStudio';
 import { createTourStage, extensionOf, planTour, recordTour, renderPanorama, tourFileName, tourViews } from '../lib/tour';
 import PanoViewer from './PanoViewer';
+import { GButton } from '../glass';
 
 const SIZES = [['2048', 'Anteprima 2048 px'], ['4096', 'Alta 4096 px']];
 
@@ -99,7 +100,7 @@ export default function TourDialog({ project, onClose }) {
     <dialog ref={dialogRef} className="pf-dialog pf-dialog-wide pf-tour" aria-labelledby="pf-tour-title">
       <header className="pf-dialog-head">
         <h2 id="pf-tour-title"><Orbit size={18} /> Tour 3D</h2>
-        <button type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></button>
+        <GButton type="button" className="pf-icon-btn" onClick={onClose} aria-label="Chiudi"><X size={18} /></GButton>
       </header>
       <div className="pf-dialog-body">
         <p className="pf-hint">Un panorama a 360° per ogni locale (da guardare qui o da usare in un sito o in un visore) e il video del giro della casa.</p>
@@ -124,10 +125,10 @@ export default function TourDialog({ project, onClose }) {
                 <li key={v.id} className={openId === v.id ? 'is-on' : ''}>
                   {panos[v.id] ? <img src={panos[v.id].url} alt="" className="pf-tour-thumb" /> : <i className="pf-tour-thumb is-empty" aria-hidden="true" />}
                   <span><strong>{label(v)}</strong>{panos[v.id] ? <em>{panos[v.id].width} × {panos[v.id].width / 2} px</em> : null}</span>
-                  {panos[v.id] && <button type="button" className="pf-mini" onClick={() => setOpenId(v.id)}>Guarda</button>}
-                  <button type="button" className="pf-mini" disabled={!!busy} onClick={() => panorama(v)}>
+                  {panos[v.id] && <GButton type="button" className="pf-mini" onClick={() => setOpenId(v.id)}>Guarda</GButton>}
+                  <GButton type="button" className="pf-mini" disabled={!!busy} onClick={() => panorama(v)}>
                     {busy === v.id ? <><Loader2 size={13} className="pf-spin" /> Creo…</> : panos[v.id] ? 'Rifai' : 'Crea panorama'}
-                  </button>
+                  </GButton>
                   {panos[v.id] && (
                     <a className="pf-mini" href={panos[v.id].url} download={tourFileName(project, `panorama-${label(v).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, 'jpg')}><Download size={13} /> JPG</a>
                   )}
@@ -135,9 +136,9 @@ export default function TourDialog({ project, onClose }) {
               ))}
             </ul>
             <div className="pf-security-actions">
-              <button type="button" className="pf-mini" disabled={!!busy} onClick={all}>
+              <GButton type="button" className="pf-mini" disabled={!!busy} onClick={all}>
                 {busy === 'tutti' ? <><Loader2 size={13} className="pf-spin" /> {progress.label}…</> : 'Crea tutti i panorami'}
-              </button>
+              </GButton>
             </div>
             {current && panos[current.id] && (
               <section className="pf-cloud-block">
@@ -150,9 +151,9 @@ export default function TourDialog({ project, onClose }) {
               <p className="pf-hint">Parte da fuori e gira in ogni locale (circa {planTour(project).reduce((s, g) => s + g.seconds, 0)} secondi), 1280 × 720. Si registra in tempo reale: tieni aperta la finestra.</p>
               <div className="pf-security-actions">
                 {busy === 'video' ? (
-                  <button type="button" className="pf-mini is-danger" onClick={() => abortRef.current?.abort()}><Square size={12} /> Interrompi</button>
+                  <GButton type="button" className="pf-mini is-danger" onClick={() => abortRef.current?.abort()}><Square size={12} /> Interrompi</GButton>
                 ) : (
-                  <button type="button" className="pf-mini is-accent" disabled={!!busy} onClick={makeVideo}><Film size={13} /> Registra il video</button>
+                  <GButton type="button" className="pf-mini is-accent" disabled={!!busy} onClick={makeVideo}><Film size={13} /> Registra il video</GButton>
                 )}
                 {video && busy !== 'video' && (
                   <a className="pf-mini" href={video.url} download={tourFileName(project, 'tour', video.ext)}><Download size={13} /> Scarica {video.ext.toUpperCase()} ({video.seconds} s)</a>

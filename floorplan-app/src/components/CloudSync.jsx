@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { sharePayload } from '../lib/share';
+import { GButton } from '../glass';
 
 /*
  * Salvataggio automatico sul cloud, in un componente a parte: il suo stato (Salvo…, Salvato, offline, conflitto) non fa
@@ -47,15 +48,15 @@ export default function CloudSync({ cx, current, shared, onUpdate, onAdd, apiRef
   return (
     <span className={`pf-cloud-status is-${status}`} role="status" aria-live="polite">
       <span className="pf-cloud-status-text">{status === 'saved' && <Check size={12} />}{text}</span>
-      {status === 'error' && <button type="button" className="pf-mini" onClick={() => save(current)}>Riprova</button>}
+      {status === 'error' && <GButton type="button" className="pf-mini" onClick={() => save(current)}>Riprova</GButton>}
       {status === 'conflict' && (
         <>
-          <button type="button" className="pf-mini" onClick={async () => {
+          <GButton type="button" className="pf-mini" onClick={async () => {
             const { id: _l, ...p } = await cx.api.current.open(current.cloudId);
             const e = onAdd({ ...p, name: `${p.name || 'Progetto'} (cloud)` });
             apiRef?.current?.baseline(e);
-          }}>Apri quella</button>
-          <button type="button" className="pf-mini is-danger" onClick={() => save(current, { force: true })}>Tieni la mia</button>
+          }}>Apri quella</GButton>
+          <GButton type="button" className="pf-mini is-danger" onClick={() => save(current, { force: true })}>Tieni la mia</GButton>
         </>
       )}
     </span>

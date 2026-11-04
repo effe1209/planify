@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Layers, Loader2, X } from 'lucide-react';
+import { GButton } from '../glass';
 
 /* Ruoli che si possono dare a un layer del DXF. */
 export const LAYER_ROLES = [
@@ -78,10 +79,10 @@ export default function DxfLayersDialog({ info, error, onApply, onClose, busy })
         )}
         <footer>
           <p className="pf-hint">Passa il mouse su un layer per vederlo nel disegno. Muri neri, porte rosse, finestre blu.</p>
-          <button type="button" className="pf-tool" onClick={onClose}>Annulla</button>
-          <button type="button" className="pf-tool pf-tool-accent" disabled={!info || busy || !changed} onClick={() => onApply(roles)}>
+          <GButton type="button" className="pf-tool" onClick={onClose}>Annulla</GButton>
+          <GButton type="button" className="pf-tool pf-tool-accent" disabled={!info || busy || !changed} onClick={() => onApply(roles)}>
             {busy ? <><Loader2 size={14} className="pf-spin" /> Importo…</> : 'Reimporta con questa scelta'}
-          </button>
+          </GButton>
         </footer>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { Armchair, Eraser, Wand2 } from 'lucide-react';
 import { STYLES } from '../constants';
+import { GButton } from '../glass';
 
 /* Arredare la pianta così com'è (importata o modificata): stile a scelta, tutto il piano o un locale per volta. */
 export default function FurnishPanel({ plan, style, busy, onStyle, onFurnish, onClear }) {
@@ -21,13 +22,13 @@ export default function FurnishPanel({ plan, style, busy, onStyle, onFurnish, on
         ))}
       </div>
       <div className="pf-row">
-        <button type="button" className="pf-btn-add" disabled={busy} onClick={onFurnish}>
+        <GButton type="button" className="pf-btn-add" disabled={busy} onClick={onFurnish}>
           {empty ? <Wand2 size={13} /> : <Armchair size={13} />} {empty ? 'Arreda tutto' : 'Riarreda tutto'}
-        </button>
+        </GButton>
         {!empty && (
-          <button type="button" className="pf-btn-add" disabled={busy} onClick={onClear}>
+          <GButton type="button" className="pf-btn-add" disabled={busy} onClick={onClear}>
             <Eraser size={13} /> Svuota
-          </button>
+          </GButton>
         )}
       </div>
     </section>

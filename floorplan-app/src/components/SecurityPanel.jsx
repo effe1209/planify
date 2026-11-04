@@ -1,5 +1,6 @@
 import { Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { billOfMaterials, DEVICE_STYLE } from '../lib/ajax';
+import { GButton } from '../glass';
 
 /*
  * Allarme Ajax: avvia la disposizione ottimale dei dispositivi sul progetto (tutti i piani), aggiunge
@@ -34,18 +35,18 @@ export default function SecurityPanel({ project, floorId, onPlan, onClear, doors
         </label>
       )}
       <div className="pf-security-actions">
-        <button type="button" className="pf-btn-add" onClick={onPlan}>
+        <GButton type="button" className="pf-btn-add" onClick={onPlan}>
           <ShieldCheck size={14} /> {devices.length ? 'Ricalcola disposizione' : 'Disposizione ottimale allarme'}
-        </button>
+        </GButton>
         {devices.length > 0 && onAddSensor && (
-          <button type="button" className="pf-mini" onClick={onAddSensor}
+          <GButton type="button" className="pf-mini" onClick={onAddSensor}
             title={roomName ? `Aggiungi un MotionProtect in «${roomName}»` : 'Aggiungi un MotionProtect (seleziona prima un locale)'}>
             <Plus size={13} /> Volumetrico{roomName ? ` in ${roomName}` : ''}
-          </button>
+          </GButton>
         )}
         {devices.length > 0 && (
-          <button type="button" className="pf-mini" onClick={onClear} title="Rimuovi i dispositivi dal progetto"
-            aria-label="Rimuovi i dispositivi"><Trash2 size={13} /></button>
+          <GButton type="button" className="pf-mini" onClick={onClear} title="Rimuovi i dispositivi dal progetto"
+            aria-label="Rimuovi i dispositivi"><Trash2 size={13} /></GButton>
         )}
       </div>
 

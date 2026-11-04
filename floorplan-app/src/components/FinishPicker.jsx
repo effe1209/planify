@@ -1,5 +1,6 @@
 import { RotateCcw } from 'lucide-react';
 import { MATERIALS } from '../lib/materials';
+import { GButton } from '../glass';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const ROWS = { floor: ['Pavimento', 'floor'], wall: ['Pareti', 'walls'] };
@@ -33,8 +34,8 @@ export default function FinishPicker({ value, parts = ['floor', 'wall'], onChang
             </label>
             <input type="color" aria-label={`Colore: ${label}`} value={HEX.test(cur.color || '') ? cur.color : (MATERIALS[key].find((m) => m.id === cur.mat)?.spec.color || MATERIALS[key].find((m) => m.id === cur.mat)?.spec.a || '#e6e2da')}
               onChange={(e) => set(part, { color: e.target.value })} />
-            <button type="button" className="pf-btn-icon" title="Ripristina lo stile" aria-label={`Ripristina ${label}`} disabled={!value?.[part]}
-              onClick={() => set(part, { mat: null, color: null })}><RotateCcw size={12} /></button>
+            <GButton type="button" className="pf-btn-icon" title="Ripristina lo stile" aria-label={`Ripristina ${label}`} disabled={!value?.[part]}
+              onClick={() => set(part, { mat: null, color: null })}><RotateCcw size={12} /></GButton>
           </div>
         );
       })}

@@ -1,5 +1,6 @@
 import { Compass } from 'lucide-react';
 import { SECTORS, exposures, normNorth } from '../lib/orientation';
+import { GRange } from '../glass';
 
 const NAME = { N: 'Nord', E: 'Est', S: 'Sud', O: 'Ovest' };
 
@@ -28,7 +29,7 @@ export default function NorthPanel({ plan, north = 0, onNorth }) {
           </div>
         </label>
       </div>
-      <input type="range" min="0" max="359" step="5" value={north} aria-label="Rotazione del nord"
+      <GRange min="0" max="359" step="5" value={north} aria-label="Rotazione del nord"
         onChange={(e) => onNorth(normNorth(e.target.value))} className="pf-north-range" />
       <ul className="pf-north-list">
         {SECTORS.map((k) => (

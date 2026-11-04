@@ -1,5 +1,6 @@
 import { Footprints, Trash2 } from 'lucide-react';
 import { FLOOR_RISE, extStairGeometry, facadeEdges } from '../lib/extStair';
+import { GButton, GCheck, GRange } from '../glass';
 
 const SIDES = [['N', 'Nord'], ['E', 'Est'], ['S', 'Sud'], ['W', 'Ovest']];
 
@@ -40,21 +41,21 @@ export default function ExtStairPanel({ plan, level, onSet, onRemove, error, bas
           </div>
           <label className="pf-field-sm">
             <span>Posizione lungo il muro</span>
-            <input type="range" min={0} max={1} step={0.02} value={es.t ?? 0.5} aria-label="Posizione della scala lungo il muro" onChange={(e) => set({ t: Number(e.target.value) })} />
+            <GRange min={0} max={1} step={0.02} value={es.t ?? 0.5} aria-label="Posizione della scala lungo il muro" onChange={(e) => set({ t: Number(e.target.value) })} />
           </label>
           {es.mode === 'side' && (
-            <label className="pf-check"><input type="checkbox" checked={!!es.flip} onChange={(e) => set({ flip: e.target.checked })} /><span>Rampa dall&apos;altra parte</span></label>
+            <label className="pf-check"><GCheck checked={!!es.flip} onChange={(e) => set({ flip: e.target.checked })} /><span>Rampa dall&apos;altra parte</span></label>
           )}
           <label className="pf-field-sm">
             <span>Larghezza della rampa: {Math.round(es.w * 100)} cm</span>
-            <input type="range" min={0.8} max={1.6} step={0.05} value={es.w} aria-label="Larghezza della rampa" onChange={(e) => set({ w: Number(e.target.value) })} />
+            <GRange min={0.8} max={1.6} step={0.05} value={es.w} aria-label="Larghezza della rampa" onChange={(e) => set({ w: Number(e.target.value) })} />
           </label>
           <label className="pf-field-sm">
             <span>Dislivello dal giardino: {es.rise.toFixed(2).replace('.', ',')} m</span>
-            <input type="range" min={0.5} max={6} step={0.05} value={es.rise} aria-label="Dislivello dal giardino" onChange={(e) => set({ rise: Number(e.target.value) })} />
+            <GRange min={0.5} max={6} step={0.05} value={es.rise} aria-label="Dislivello dal giardino" onChange={(e) => set({ rise: Number(e.target.value) })} />
           </label>
           <p className="pf-hint">{g.count} alzate da {Math.round((es.rise / g.count) * 100)} cm; ingombro {g.bounds.w.toFixed(1).replace('.', ',')} × {g.bounds.h.toFixed(1).replace('.', ',')} m.</p>
-          <button type="button" className="pf-minibtn is-danger" onClick={onRemove}><Trash2 size={12} /> Togli la scala esterna</button>
+          <GButton type="button" className="pf-minibtn is-danger" onClick={onRemove}><Trash2 size={12} /> Togli la scala esterna</GButton>
         </>
       )}
       {typeof level === 'number' && level >= 1 && onBase && (

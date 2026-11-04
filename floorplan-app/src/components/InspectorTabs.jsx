@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { TabBar } from '../glass';
 export const INSPECTOR_TABS = [
   ['plan', 'Pianta', 'Locali, orientamento, note e legenda'],
   ['furn', 'Arredi', 'Arredo, stile, palette, materiali e libreria'],
@@ -11,25 +11,10 @@ export const INSPECTOR_TABS = [
  * sta sempre sopra le schede, qualunque sia aperta. La barra è la prima cosa del pannello e resta ferma in cima mentre si scorre, anche con un elemento selezionato. Frecce sinistra/destra spostano la scheda.
  */
 export default function InspectorTabs({ tab, onTab }) {
-  const ref = useRef(null);
-  const move = (e, i) => {
-    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (!d) return;
-    e.preventDefault();
-    const next = INSPECTOR_TABS[(i + d + INSPECTOR_TABS.length) % INSPECTOR_TABS.length][0];
-    onTab(next);
-    requestAnimationFrame(() => ref.current?.querySelector(`[data-tab="${next}"]`)?.focus());
-  };
   return (
     <div className="pf-insp-tabs-wrap">
-    <div className="pf-insp-tabs" role="tablist" aria-label="Sezioni del pannello" ref={ref}>
-      {INSPECTOR_TABS.map(([id, label, tip], i) => (
-        <button key={id} type="button" role="tab" data-tab={id} aria-selected={tab === id} tabIndex={tab === id ? 0 : -1}
-          className={tab === id ? 'is-on' : ''} title={tip} onClick={() => onTab(id)} onKeyDown={(e) => move(e, i)}>
-          {label}
-        </button>
-      ))}
-    </div>
+      <TabBar className="pf-insp-tabbar" aria-label="Sezioni del pannello" value={tab} onValueChange={onTab}
+        items={INSPECTOR_TABS.map(([id, label]) => ({ value: id, label }))} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Minus, Plus } from 'lucide-react';
 import { GARAGE_MODES, HOUSE_PRESETS, MAX_HOUSE_LEVEL, PROGRAMS, STAIR_STYLES, STAIR_TYPES, floorName, houseShift } from '../lib/house';
 import { levelLabel } from '../lib/project';
+import { GCheck } from '../glass';
 
 /*
  * Casa su più piani. Senza `pending`: interruttore «Casa su più piani», preset e programma di ogni piano.
@@ -47,7 +48,7 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
   return (
     <div className="pf-needs">
       <label className="pf-check">
-        <input type="checkbox" checked={form.house} onChange={(e) => setF('house', e.target.checked)} />
+        <GCheck checked={form.house} onChange={(e) => setF('house', e.target.checked)} />
         <span>Casa su più piani <em>(zona giorno e zona notte su piani diversi, collegati dalla scala)</em></span>
       </label>
       {form.house && (
@@ -78,7 +79,7 @@ export default function HouseOptions({ form, setF, pending = null, stairFixed = 
           </div>
           {garage && (
             <label className="pf-check">
-              <input type="checkbox" checked={form.houseGarage} onChange={(e) => setF('houseGarage', e.target.checked)} />
+              <GCheck checked={form.houseGarage} onChange={(e) => setF('houseGarage', e.target.checked)} />
               <span>Piano con garage <em>(la scala arriva in un vano chiuso con porta sul box)</em></span>
             </label>
           )}

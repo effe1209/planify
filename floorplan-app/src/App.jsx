@@ -8,6 +8,7 @@ import {
 import { Analytics } from '@vercel/analytics/react';
 import './App.css';
 import './apple.css';
+import './glass/glass.css';
 
 import { FURNITURE, LOADING_STEPS, defaultBedrooms, PRESETS, SHAPES, SHAPE_NAME, STYLES, TYPES, TYPE_NAME, LOFT_MIN, loftTooSmall } from './constants';
 import PlanSvg from './components/PlanSvg';
@@ -84,6 +85,7 @@ import { clamp, fmt, newId, normalizeBaseUrl, randomSeed, saveBlob, snap, storag
 import { requestBase, waitForEngine } from './lib/engine';
 import { engineStair, neighbourCore, neighbourWet, projectStairs, stairNote, stairsFit } from './lib/stairs';
 import { HOUSE_PRESETS, floorName, houseFloorsRequest, houseShift, suggestProgram } from './lib/house';
+import { GButton, GCheck, GRange, GText, Glass } from './glass';
 
 const REQUEST_TIMEOUT_MS = 90000;
 const STAIR_ROUNDS = 3;     // varianti in più per allineare le scale con i piani adiacenti: 3 giri…
@@ -1808,11 +1810,11 @@ export default function App() {
 
       <header className="pf-top">
         <div className="pf-brand">
-          <button type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('left')}
+          <GButton type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('left')}
             aria-label={panels.left ? 'Nascondi il pannello dei comandi' : 'Mostra il pannello dei comandi'} aria-pressed={panels.left}
             title={panels.left ? 'Nascondi il pannello dei comandi (⌥⌘[)' : 'Mostra il pannello dei comandi (⌥⌘[)'}>
             {panels.left ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-          </button>
+          </GButton>
           <Logo />
           <Wordmark />
         </div>
@@ -1830,24 +1832,24 @@ export default function App() {
             }[engine.status]}</span>
           </span>
           {engine.status === 'error' && (
-            <button type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</button>
+            <GButton type="button" className="pf-mini is-accent" onClick={engine.retry} title={engine.reason}>Riprova</GButton>
           )}
           <CloudSync cx={cx} current={current} shared={shared} onUpdate={history.update} onAdd={history.add} apiRef={syncApi} />
-          <button type="button" className="pf-mini" onClick={() => setCloudDialog(true)} title="Account e progetti sul cloud">
+          <GButton type="button" className="pf-mini" onClick={() => setCloudDialog(true)} title="Account e progetti sul cloud">
             <CloudIcon size={14} /> <span className="pf-tl-mobile">Cloud</span>
-          </button>
-          <button type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
+          </GButton>
+          <GButton type="button" className="pf-mini" onClick={() => setCookieDialog(true)} title="Cookie e privacy">
             <Cookie size={14} /> <span className="pf-tl-mobile">Cookie</span>
-          </button>
-          <button type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('right')}
+          </GButton>
+          <GButton type="button" className="pf-icon-btn pf-panel-toggle" onClick={() => togglePanel('right')}
             aria-label={panels.right ? 'Nascondi il pannello dei dettagli' : 'Mostra il pannello dei dettagli'} aria-pressed={panels.right}
             title={panels.right ? 'Nascondi il pannello dei dettagli (⌥⌘])' : 'Mostra il pannello dei dettagli (⌥⌘])'}>
             {panels.right ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
-          </button>
-          <button type="button" className="pf-icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          </GButton>
+          <GButton type="button" className="pf-icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             aria-label={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'} title={theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
+          </GButton>
         </div>
       </header>
 
@@ -1916,7 +1918,7 @@ export default function App() {
                 <div className="pf-program">
                   {[['garageLaundry', 'Lavanderia sul fondo'], ['garageStorage', 'Ripostiglio / cantina']].map(([k, label]) => (
                     <label key={k} className="pf-check">
-                      <input type="checkbox" checked={form[k]} onChange={(e) => setF(k, e.target.checked)} />
+                      <GCheck checked={form[k]} onChange={(e) => setF(k, e.target.checked)} />
                       <span>{label}</span>
                     </label>
                   ))}
@@ -1941,7 +1943,7 @@ export default function App() {
                     <span>{form.roomType === 'office' ? 'Locali (open space incluso)' : 'Locali principali'}</span>
                     <strong>{form.rooms}</strong>
                   </div>
-                  <input type="range" min="1" max="8" value={form.rooms} aria-label="Locali principali"
+                  <GRange min="1" max="8" value={form.rooms} aria-label="Locali principali"
                     onChange={(e) => setF('rooms', Number(e.target.value))} />
                 </div>
               )}
@@ -1970,13 +1972,13 @@ export default function App() {
                   {form.curveSide && (
                     <label className="pf-field-sm">
                       <span>Freccia dell&apos;arco: {Number(form.curveBulge).toLocaleString('it-IT', { minimumFractionDigits: 1 })} m</span>
-                      <input type="range" min="0.5" max="3" step="0.1" value={form.curveBulge} aria-label="Freccia dell'arco"
+                      <GRange min="0.5" max="3" step="0.1" value={form.curveBulge} aria-label="Freccia dell'arco"
                         onChange={(e) => setF('curveBulge', Number(e.target.value))} />
                     </label>
                   )}
                   <label className="pf-field-sm">
                     <span>Angoli arrotondati: {Number(form.curveCorner) > 0 ? `raggio ${Number(form.curveCorner).toLocaleString('it-IT', { minimumFractionDigits: 1 })} m` : 'spigoli vivi'}</span>
-                    <input type="range" min="0" max="2" step="0.1" value={form.curveCorner} aria-label="Raggio degli angoli arrotondati"
+                    <GRange min="0" max="2" step="0.1" value={form.curveCorner} aria-label="Raggio degli angoli arrotondati"
                       onChange={(e) => setF('curveCorner', Number(e.target.value))} />
                   </label>
                 </div>
@@ -2011,15 +2013,15 @@ export default function App() {
               </summary>
               <label className="pf-field">
                 <span>URL del backend</span>
-                <input type="text" className="pf-plain" value={backendUrl} spellCheck="false"
+                <GText className="pf-plain" value={backendUrl} spellCheck="false"
                   placeholder="https://tuo-servizio.onrender.com" onChange={(e) => setBackendUrl(e.target.value)} />
               </label>
               <div className="pf-seed-toggle">
                 <span>Nuovo seed ad ogni clic</span>
-                <button type="button" className={`pf-mini ${autoSeed ? 'is-accent' : ''}`} onClick={() => setAutoSeed(!autoSeed)}>
+                <GButton type="button" className={`pf-mini ${autoSeed ? 'is-accent' : ''}`} onClick={() => setAutoSeed(!autoSeed)}>
                   {autoSeed ? <Sparkles size={12} /> : <Lock size={12} />}
                   {autoSeed ? 'Attivo (casuale)' : 'Bloccato'}
-                </button>
+                </GButton>
               </div>
               {!autoSeed && (
                 <label className="pf-field">
@@ -2039,15 +2041,15 @@ export default function App() {
               </div>
             )}
             <div className="pf-action-row">
-              <button type="button" className="pf-primary" disabled={isLoading} onClick={() => run()}>
+              <GButton type="button" className="pf-primary" disabled={isLoading} onClick={() => run()}>
                 {isLoading ? <Loader2 size={17} className="pf-spin" /> : <Sparkles size={17} />}
                 {isLoading ? 'Sto disegnando…' : pendingFloor ? `Genera «${pendingFloor.name}»`
                   : form.house && form.roomType === 'apartment' && engineHas('house') ? `Genera casa su ${form.houseFloors.length + (form.houseGarage && engineHas('garage_stairs') ? 1 : 0)} piani` : 'Genera planimetria'}
-              </button>
-              <button type="button" className="pf-secondary" disabled={isLoading} onClick={() => run({ variant: true })}
+              </GButton>
+              <GButton type="button" className="pf-secondary" disabled={isLoading} onClick={() => run({ variant: true })}
                 title="Nuovo seed e nuova disposizione" aria-label="Nuova variante">
                 <Shuffle size={17} />
-              </button>
+              </GButton>
             </div>
           </div>
         </aside>
@@ -2058,60 +2060,60 @@ export default function App() {
             <div className="pf-shared-bar" role="status">
               <Link2 size={15} />
               <span>Progetto condiviso in <b>sola lettura</b>{shared.name ? ` · ${shared.name}` : ''}</span>
-              <button type="button" className="pf-mini is-accent" onClick={copyShared}>Salva una copia</button>
-              <button type="button" className="pf-mini" onClick={closeShared}>Chiudi</button>
+              <GButton type="button" className="pf-mini is-accent" onClick={copyShared}>Salva una copia</GButton>
+              <GButton type="button" className="pf-mini" onClick={closeShared}>Chiudi</GButton>
             </div>
           )}
           <div className="pf-toolbar">
-            <div className="pf-group" role="group" aria-label="Livelli">
+            <Glass className="pf-group" role="group" aria-label="Livelli">
               {[['furniture', Armchair, 'Arredi'], ['labels', Tag, 'Nomi'], ['dims', Ruler, 'Quote'], ['grid', LayoutGrid, 'Griglia'],
                 ['technical', PencilRuler, 'Tecnico']]
                 .map(([k, Icon, label]) => (
-                  <button key={k} type="button" className={`pf-tool ${layers[k] ? 'is-on' : ''}`} aria-pressed={layers[k]}
-                    onClick={() => toggle(k)} title={label}><Icon size={15} /> <span className="pf-tl">{label}</span></button>
+                  <GButton key={k} type="button" className={`pf-tool ${layers[k] ? 'is-on' : ''}`} aria-pressed={layers[k]}
+                    onClick={() => toggle(k)} title={label}><Icon size={15} /> <span className="pf-tl">{label}</span></GButton>
                 ))}
               {devices?.length > 0 && (
-                <button type="button" className={`pf-tool ${layers.alarm ? 'is-on' : ''}`} aria-pressed={layers.alarm}
-                  onClick={() => toggle('alarm')} title="Allarme"><ShieldCheck size={15} /> <span className="pf-tl">Allarme</span></button>
+                <GButton type="button" className={`pf-tool ${layers.alarm ? 'is-on' : ''}`} aria-pressed={layers.alarm}
+                  onClick={() => toggle('alarm')} title="Allarme"><ShieldCheck size={15} /> <span className="pf-tl">Allarme</span></GButton>
               )}
               {electricCfg && (
-                <button type="button" className={`pf-tool ${showElectric ? 'is-on' : ''}`} aria-pressed={showElectric}
+                <GButton type="button" className={`pf-tool ${showElectric ? 'is-on' : ''}`} aria-pressed={showElectric}
                   onClick={() => setSheet(showElectric ? 'arch' : 'electric')} title="Tavola dell'impianto elettrico">
                   <Zap size={15} /> <span className="pf-tl">Elettrico</span>
-                </button>
+                </GButton>
               )}
               {plumbingCfg && (
-                <button type="button" className={`pf-tool ${showPlumbing ? 'is-on' : ''}`} aria-pressed={showPlumbing}
+                <GButton type="button" className={`pf-tool ${showPlumbing ? 'is-on' : ''}`} aria-pressed={showPlumbing}
                   onClick={() => setSheet(showPlumbing ? 'arch' : 'plumbing')} title="Tavola dell'impianto idraulico">
                   <Droplets size={15} /> <span className="pf-tl">Idraulico</span>
-                </button>
+                </GButton>
               )}
-            </div>
+            </Glass>
 
-            <div className="pf-group" role="group" aria-label="Vista 3D">
-              <button type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
+            <Glass className="pf-group" role="group" aria-label="Vista 3D">
+              <GButton type="button" className={`pf-tool ${view3d ? 'is-on' : ''}`} aria-pressed={!!view3d} disabled={!plan}
                 onClick={() => { setSheets(null); setView3d(view3d ? null : { low: false, whole: (globalView || hasGarden) && builtFloors > 1, spread: false, roof: (globalView || hasGarden) && builtFloors > 1 ? { ...ROOF_DEFAULTS } : null, sensors: !!devices?.length, electric: !!electricPlan, cables: false, cones: false, lightsOn: false }); }}
-                title="Vista 3D navigabile"><Box size={15} /> 3D</button>
-              <button type="button" className={`pf-tool ${sheets ? 'is-on' : ''}`} aria-pressed={!!sheets} disabled={!plan}
+                title="Vista 3D navigabile"><Box size={15} /> 3D</GButton>
+              <GButton type="button" className={`pf-tool ${sheets ? 'is-on' : ''}`} aria-pressed={!!sheets} disabled={!plan}
                 onClick={() => { setView3d(null); setSheets(sheets ? null : { roof: { ...ROOF_DEFAULTS } }); }}
-                title="Prospetti N/E/S/O e sezioni dell'edificio"><Layers size={15} /> <span className="pf-tl">Prospetti</span></button>
+                title="Prospetti N/E/S/O e sezioni dell'edificio"><Layers size={15} /> <span className="pf-tl">Prospetti</span></GButton>
               {sheets && (
-                <button type="button" className={`pf-tool ${sheets.roof ? 'is-on' : ''}`} aria-pressed={!!sheets.roof}
-                  onClick={() => setSheets({ ...sheets, roof: sheets.roof ? null : { ...ROOF_DEFAULTS } })} title="Mostra o nascondi il tetto">Tetto</button>
+                <GButton type="button" className={`pf-tool ${sheets.roof ? 'is-on' : ''}`} aria-pressed={!!sheets.roof}
+                  onClick={() => setSheets({ ...sheets, roof: sheets.roof ? null : { ...ROOF_DEFAULTS } })} title="Mostra o nascondi il tetto">Tetto</GButton>
               )}
               {view3d && builtFloors > 1 && (
-                <button type="button" className={`pf-tool ${view3d.whole ? 'is-on' : ''}`} aria-pressed={!!view3d.whole}
+                <GButton type="button" className={`pf-tool ${view3d.whole ? 'is-on' : ''}`} aria-pressed={!!view3d.whole}
                   onClick={() => setView3d({ ...view3d, whole: !view3d.whole })} title="Tutti i piani impilati con i solai">
                   Tutta la casa
-                </button>
+                </GButton>
               )}
               {view3d?.whole && (
-                <button type="button" className={`pf-tool ${view3d.spread ? 'is-on' : ''}`} aria-pressed={!!view3d.spread}
-                  onClick={() => setView3d({ ...view3d, spread: !view3d.spread })} title="Piani staccati per vedere dentro">Esploso</button>
+                <GButton type="button" className={`pf-tool ${view3d.spread ? 'is-on' : ''}`} aria-pressed={!!view3d.spread}
+                  onClick={() => setView3d({ ...view3d, spread: !view3d.spread })} title="Piani staccati per vedere dentro">Esploso</GButton>
               )}
               {view3d && (
-                <button type="button" className={`pf-tool ${view3d.roof ? 'is-on' : ''}`} aria-pressed={!!view3d.roof}
-                  onClick={() => setView3d({ ...view3d, roof: view3d.roof ? null : { ...ROOF_DEFAULTS } })} title="Mostra o nascondi il tetto">Tetto</button>
+                <GButton type="button" className={`pf-tool ${view3d.roof ? 'is-on' : ''}`} aria-pressed={!!view3d.roof}
+                  onClick={() => setView3d({ ...view3d, roof: view3d.roof ? null : { ...ROOF_DEFAULTS } })} title="Mostra o nascondi il tetto">Tetto</GButton>
               )}
               {view3d?.roof && (
                 <select className="pf-select-sm" aria-label="Tipo di tetto" value={view3d.roof.type}
@@ -2121,28 +2123,28 @@ export default function App() {
               )}
               {view3d && !!devices?.length && (
                 <>
-                  <button type="button" className={`pf-tool ${view3d.sensors ? 'is-on' : ''}`} aria-pressed={!!view3d.sensors}
-                    onClick={() => setView3d({ ...view3d, sensors: !view3d.sensors })} title="Sensori Ajax nel 3D">Sensori</button>
-                  <button type="button" className={`pf-tool ${view3d.cones ? 'is-on' : ''}`} aria-pressed={!!view3d.cones}
-                    onClick={() => setView3d({ ...view3d, cones: !view3d.cones })} title="Coni di rilevazione dei sensori">Copertura</button>
+                  <GButton type="button" className={`pf-tool ${view3d.sensors ? 'is-on' : ''}`} aria-pressed={!!view3d.sensors}
+                    onClick={() => setView3d({ ...view3d, sensors: !view3d.sensors })} title="Sensori Ajax nel 3D">Sensori</GButton>
+                  <GButton type="button" className={`pf-tool ${view3d.cones ? 'is-on' : ''}`} aria-pressed={!!view3d.cones}
+                    onClick={() => setView3d({ ...view3d, cones: !view3d.cones })} title="Coni di rilevazione dei sensori">Copertura</GButton>
                 </>
               )}
               {view3d && !!electricPlan && (
                 <>
-                  <button type="button" className={`pf-tool ${view3d.electric ? 'is-on' : ''}`} aria-pressed={!!view3d.electric}
-                    onClick={() => setView3d({ ...view3d, electric: !view3d.electric })} title="Prese, comandi, quadri e punti luce dell'impianto elettrico">Impianto</button>
+                  <GButton type="button" className={`pf-tool ${view3d.electric ? 'is-on' : ''}`} aria-pressed={!!view3d.electric}
+                    onClick={() => setView3d({ ...view3d, electric: !view3d.electric })} title="Prese, comandi, quadri e punti luce dell'impianto elettrico">Impianto</GButton>
                   {view3d.electric && (
-                    <button type="button" className={`pf-tool ${view3d.cables ? 'is-on' : ''}`} aria-pressed={!!view3d.cables}
-                      onClick={() => setView3d({ ...view3d, cables: !view3d.cables })} title="Collegamenti comando-luce e quadro-cassette">Cavi</button>
+                    <GButton type="button" className={`pf-tool ${view3d.cables ? 'is-on' : ''}`} aria-pressed={!!view3d.cables}
+                      onClick={() => setView3d({ ...view3d, cables: !view3d.cables })} title="Collegamenti comando-luce e quadro-cassette">Cavi</GButton>
                   )}
-                  <button type="button" className={`pf-tool ${view3d.lightsOn ? 'is-on' : ''}`} aria-pressed={!!view3d.lightsOn}
-                    onClick={() => setView3d({ ...view3d, lightsOn: !view3d.lightsOn, electric: true })} title="Accende i punti luce: la scena si abbassa come di sera">Luci accese</button>
+                  <GButton type="button" className={`pf-tool ${view3d.lightsOn ? 'is-on' : ''}`} aria-pressed={!!view3d.lightsOn}
+                    onClick={() => setView3d({ ...view3d, lightsOn: !view3d.lightsOn, electric: true })} title="Accende i punti luce: la scena si abbassa come di sera">Luci accese</GButton>
                 </>
               )}
               {view3d && (
-                <button type="button" className={`pf-tool ${view3d.cut ? 'is-on' : ''}`} aria-pressed={!!view3d.cut}
+                <GButton type="button" className={`pf-tool ${view3d.cut ? 'is-on' : ''}`} aria-pressed={!!view3d.cut}
                   onClick={() => setView3d({ ...view3d, cut: view3d.cut ? null : { axis: 'x', t: 0.5, flip: false } })}
-                  title="Sezione 3D: un piano di taglio verticale toglie metà casa per vedere dentro">Sezione</button>
+                  title="Sezione 3D: un piano di taglio verticale toglie metà casa per vedere dentro">Sezione</GButton>
               )}
               {view3d?.cut && (
                 <span className="pf-cutbar">
@@ -2151,77 +2153,77 @@ export default function App() {
                     <option value="x">Trasversale</option>
                     <option value="z">Longitudinale</option>
                   </select>
-                  <input type="range" min="0" max="1" step="0.01" value={view3d.cut.t} aria-label="Posizione del piano di sezione"
+                  <GRange min="0" max="1" step="0.01" value={view3d.cut.t} aria-label="Posizione del piano di sezione"
                     onChange={(e) => setView3d({ ...view3d, cut: { ...view3d.cut, t: Number(e.target.value) } })} />
-                  <button type="button" className="pf-tool" onClick={() => setView3d({ ...view3d, cut: { ...view3d.cut, flip: !view3d.cut.flip } })}
-                    title="Tiene l'altra metà">Inverti</button>
+                  <GButton type="button" className="pf-tool" onClick={() => setView3d({ ...view3d, cut: { ...view3d.cut, flip: !view3d.cut.flip } })}
+                    title="Tiene l'altra metà">Inverti</GButton>
                 </span>
               )}
               {view3d && (
-                <button type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
-                  onClick={() => setView3d({ ...view3d, low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</button>
+                <GButton type="button" className={`pf-tool ${view3d.low ? 'is-on' : ''}`} aria-pressed={view3d.low}
+                  onClick={() => setView3d({ ...view3d, low: !view3d.low })} title="Muri tagliati a 1,20 m per vedere dentro">Muri bassi</GButton>
               )}
               {view3d && (
                 <>
-                  <button type="button" className={`pf-tool ${view3d.render ? 'is-on' : ''}`} aria-pressed={!!view3d.render}
+                  <GButton type="button" className={`pf-tool ${view3d.render ? 'is-on' : ''}`} aria-pressed={!!view3d.render}
                     onClick={() => setView3d({ ...view3d, render: !view3d.render })} title="Render: inquadrature automatiche e libere, ora del giorno, sfondo, fino a 4K">
                     <Camera size={15} /> <span className="pf-tl">Render</span>
-                  </button>
-                  <button type="button" className="pf-tool" onClick={export3dPng} title="Immagine della vista 3D così come la vedi">
+                  </GButton>
+                  <GButton type="button" className="pf-tool" onClick={export3dPng} title="Immagine della vista 3D così come la vedi">
                     <ImageIcon size={15} /> <span className="pf-tl">PNG 3D</span>
-                  </button>
-                  <button type="button" className="pf-tool" onClick={export3dDxf}
+                  </GButton>
+                  <GButton type="button" className="pf-tool" onClick={export3dDxf}
                     title="Modello 3D per il CAD (facce 3D, layer per piano e tipo: muri, vetri, pavimenti, arredi, solai)">
                     <Download size={15} /> <span className="pf-tl">DXF 3D</span>
-                  </button>
-                  <button type="button" className="pf-tool" onClick={export3dGlb} disabled={exportingGlb}
+                  </GButton>
+                  <GButton type="button" className="pf-tool" onClick={export3dGlb} disabled={exportingGlb}
                     title="Modello 3D per Blender (GLB): materiali e texture dello stile, arredi completi, luci e sole. In Blender: File → Importa → glTF 2.0">
                     <Download size={15} /> <span className="pf-tl">{exportingGlb ? 'GLB…' : 'GLB Blender'}</span>
-                  </button>
+                  </GButton>
                 </>
               )}
-            </div>
+            </Glass>
 
-            <div className="pf-group" role="group" aria-label="Annulla e ripeti">
-              <button type="button" className="pf-tool" disabled={!stacks.undo.length} onClick={undo}
-                title="Annulla (⌘Z)" aria-label="Annulla"><Undo2 size={15} /></button>
-              <button type="button" className="pf-tool" disabled={!stacks.redo.length} onClick={redo}
-                title="Ripeti (⇧⌘Z)" aria-label="Ripeti"><Redo2 size={15} /></button>
-            </div>
+            <Glass className="pf-group" role="group" aria-label="Annulla e ripeti">
+              <GButton type="button" className="pf-tool" disabled={!stacks.undo.length} onClick={undo}
+                title="Annulla (⌘Z)" aria-label="Annulla"><Undo2 size={15} /></GButton>
+              <GButton type="button" className="pf-tool" disabled={!stacks.redo.length} onClick={redo}
+                title="Ripeti (⇧⌘Z)" aria-label="Ripeti"><Redo2 size={15} /></GButton>
+            </Glass>
 
-            <div className="pf-group" role="group" aria-label="Disegno e import">
-              <button type="button" className="pf-tool pf-tool-accent" onClick={() => dxfInputRef.current?.click()}
+            <Glass className="pf-group" role="group" aria-label="Disegno e import">
+              <GButton type="button" className="pf-tool pf-tool-accent" onClick={() => dxfInputRef.current?.click()}
                 title="Carica una pianta: DXF o PDF dal CAD, oppure il PDF della planimetria catastale (tutti i piani). Muri, porte, finestre e locali vengono ricostruiti dal disegno">
                 <Upload size={15} /> <span className="pf-tl-keep">Importa DXF o PDF</span>
-              </button>
-              <button type="button" className={`pf-tool ${sketch ? 'is-on' : ''}`}
+              </GButton>
+              <GButton type="button" className={`pf-tool ${sketch ? 'is-on' : ''}`}
                 onClick={() => setSketch(sketch ? null : { shapes: [] })} title="Disegna schizzo">
                 <PenTool size={15} /> <span className="pf-tl">Disegna schizzo</span>
-              </button>
-            </div>
+              </GButton>
+            </Glass>
 
             <div className="pf-spacer" />
 
-            <div className="pf-group" role="group" aria-label="Zoom">
-              <button type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z / 1.2, 0.2, 3))}
-                aria-label="Riduci" title="Riduci"><ZoomOut size={15} /></button>
-              <button type="button" className="pf-tool pf-pct" disabled={!plan} onClick={resetView}
-                title="Adatta alla finestra"><Scan size={14} className="pf-tl" /> {Math.round(z * 100)}%</button>
-              <button type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z * 1.2, 0.2, 3))}
-                aria-label="Ingrandisci" title="Ingrandisci"><ZoomIn size={15} /></button>
-            </div>
+            <Glass className="pf-group" role="group" aria-label="Zoom">
+              <GButton type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z / 1.2, 0.2, 3))}
+                aria-label="Riduci" title="Riduci"><ZoomOut size={15} /></GButton>
+              <GButton type="button" className="pf-tool pf-pct" disabled={!plan} onClick={resetView}
+                title="Adatta alla finestra"><Scan size={14} className="pf-tl" /> {Math.round(z * 100)}%</GButton>
+              <GButton type="button" className="pf-tool pf-sq" disabled={!plan} onClick={() => setZoom(clamp(z * 1.2, 0.2, 3))}
+                aria-label="Ingrandisci" title="Ingrandisci"><ZoomIn size={15} /></GButton>
+            </Glass>
 
-            <div className="pf-group pf-export-inline" role="group" aria-label="Esporta">
+            <Glass className="pf-group pf-export-inline" role="group" aria-label="Esporta">
               {exportItems.map(({ key, label, Icon, onClick, accent, title }) => (
-                <button key={key} type="button" className={`pf-tool ${accent ? 'pf-tool-accent' : ''}`} disabled={!plan}
-                  onClick={onClick} title={title}><Icon size={15} /> <span className="pf-tl">{label}</span></button>
+                <GButton key={key} type="button" className={`pf-tool ${accent ? 'pf-tool-accent' : ''}`} disabled={!plan}
+                  onClick={onClick} title={title}><Icon size={15} /> <span className="pf-tl">{label}</span></GButton>
               ))}
-            </div>
-            <div className="pf-group pf-export-more" ref={exportRef}>
-              <button type="button" className={`pf-tool ${exportOpen ? 'is-on' : ''}`} disabled={!plan} aria-haspopup="menu"
+            </Glass>
+            <Glass className="pf-group pf-export-more" ref={exportRef}>
+              <GButton type="button" className={`pf-tool ${exportOpen ? 'is-on' : ''}`} disabled={!plan} aria-haspopup="menu"
                 aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)} title="Esporta e condividi">
                 <Download size={15} /> <span className="pf-tl-keep">Esporta</span> <ChevronDown size={13} />
-              </button>
+              </GButton>
               {exportOpen && (
                 <div className="pf-export-menu" role="menu">
                   {exportItems.map(({ key, label, Icon, onClick, accent, title }) => (
@@ -2230,7 +2232,7 @@ export default function App() {
                   ))}
                 </div>
               )}
-            </div>
+            </Glass>
           </div>
 
           {current && !sketch && (
@@ -2363,10 +2365,10 @@ export default function App() {
             <div className="pf-insp-head">
             {canEdit && (
               <div className="pf-editbar">
-                <button type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
+                <GButton type="button" className={`pf-btn-add pf-editbtn ${wallEdit ? 'is-on' : ''}`} aria-pressed={wallEdit} onClick={toggleEdit} disabled={furnishing}
                   title="Attiva o disattiva la modifica di muri, aperture, locali e scale: resta attiva finché non la ripremi">
                   <Move size={14} /> {wallEdit ? 'Modifica attiva · tocca per terminare' : 'Modifica pianta'}
-                </button>
+                </GButton>
                 {wallEdit && (
                   <EditTools addMode={addMode} splitDir={splitDir} only={sketchEditable ? ['door', 'window', 'panoramic', 'sliding', 'balcony'] : null}
                     onAdd={(k) => { setAddMode(addMode === k ? null : k); setSelectedOpening(null); setSelectedWall(null); setSelectedStair(false); }}
@@ -2494,17 +2496,17 @@ export default function App() {
                     <Star size={13} strokeWidth={2.2} fill={current.saved ? 'currentColor' : 'none'} /> {current.saved ? 'Salvata' : 'Salva'}
                   </button>
                   {floor.sketch ? (
-                    <button type="button" className="pf-mini" onClick={() => setSketch({ shapes: floor.sketch, floorId: floor.id })}
+                    <GButton type="button" className="pf-mini" onClick={() => setSketch({ shapes: floor.sketch, floorId: floor.id })}
                       title="Riapri lo schizzo per modificarlo">
                       <PencilLine size={13} /> Modifica schizzo
-                    </button>
+                    </GButton>
                   ) : (
                     <div>
                       <span>#{plan.seed}</span>
-                      <button type="button" className="pf-mini" onClick={() => copy(plan.seed, 'Seed copiato')} title="Copia il seed">
+                      <GButton type="button" className="pf-mini" onClick={() => copy(plan.seed, 'Seed copiato')} title="Copia il seed">
                         <Copy size={13} />
-                      </button>
-                      <button type="button" className="pf-mini"
+                      </GButton>
+                      <GButton type="button" className="pf-mini"
                         onClick={() => {
                           setAutoSeed(!autoSeed);
                           if (autoSeed) setF('seed', plan.seed);
@@ -2512,7 +2514,7 @@ export default function App() {
                         }}
                         title={autoSeed ? 'Blocca questa variante' : 'Sblocca per generare seed casuali'}>
                         {autoSeed ? <Unlock size={13} /> : <Lock size={13} />}
-                      </button>
+                      </GButton>
                     </div>
                   )}
                 </div>
@@ -2644,14 +2646,14 @@ export default function App() {
                     ))}
                   </ul>
                   {dxfSource && floor?.meta?.dxfName === dxfSource.name && base && engineHas('dxf_layers') && !readOnly && (
-                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={() => openLayers()}>
+                    <GButton type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={() => openLayers()}>
                       <Layers size={15} /> Controlla i layer del DXF
-                    </button>
+                    </GButton>
                   )}
                   {alignCore && (
-                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignFloor}>
+                    <GButton type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={realignFloor}>
                       <Shuffle size={15} /> Rigenera questo piano con la scala allineata
-                    </button>
+                    </GButton>
                   )}
                   {(gardenFront?.garage?.ramp || gardenFront?.hasStair) && !readOnly && (
                     <div className="pf-field-sm">
@@ -2671,9 +2673,9 @@ export default function App() {
                     </div>
                   )}
                   {gardenFront && (
-                    <button type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={() => realignGarden()}>
+                    <GButton type="button" className="pf-secondary pf-realign" disabled={isLoading} onClick={() => realignGarden()}>
                       <Shuffle size={15} /> {gardenAligned ? 'Rigenera il giardino davanti alla casa' : 'Allinea il giardino alla casa'}
-                    </button>
+                    </GButton>
                   )}
                 </section>
               )}

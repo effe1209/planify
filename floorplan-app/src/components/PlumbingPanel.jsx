@@ -2,6 +2,7 @@ import { Droplets, Trash2, TriangleAlert } from 'lucide-react';
 import { GENERATORS, PIPES, PKIND_ORDER, PKINDS } from '../lib/plumbing';
 import { fmtM } from '../lib/utils';
 import { PlumbingGlyph } from './PlumbingLayer';
+import { GButton, GCheck } from '../glass';
 
 /*
  * Impianto idrico-sanitario: generatore dell'acqua calda, tavola on/off, apparecchi e collettore del piano,
@@ -17,7 +18,7 @@ export default function PlumbingPanel({ config, data, floorId, sheet, onStart, o
           dell'acqua calda e colonne di scarico allineate tra i piani fino alla fognatura. Una tavola a parte.
         </p>
         <div className="pf-security-actions">
-          <button type="button" className="pf-btn-add" onClick={onStart}><Droplets size={14} /> Progetta impianto idraulico</button>
+          <GButton type="button" className="pf-btn-add" onClick={onStart}><Droplets size={14} /> Progetta impianto idraulico</GButton>
         </div>
       </section>
     );
@@ -46,15 +47,15 @@ export default function PlumbingPanel({ config, data, floorId, sheet, onStart, o
         </div>
       </div>
       <label className="pf-check">
-        <input type="checkbox" checked={config.lines} onChange={(e) => onChange({ lines: e.target.checked })} />
+        <GCheck checked={config.lines} onChange={(e) => onChange({ lines: e.target.checked })} />
         <span>Tubazioni <em>(fredda, calda, scarichi e dorsali)</em></span>
       </label>
       <div className="pf-security-actions">
-        <button type="button" className="pf-btn-add" onClick={() => onSheet(sheet === 'plumbing' ? 'arch' : 'plumbing')}>
+        <GButton type="button" className="pf-btn-add" onClick={() => onSheet(sheet === 'plumbing' ? 'arch' : 'plumbing')}>
           <Droplets size={14} /> {sheet === 'plumbing' ? 'Torna alla pianta' : 'Mostra tavola idraulica'}
-        </button>
-        <button type="button" className="pf-mini" onClick={onClear} title="Rimuovi l'impianto idraulico dal progetto"
-          aria-label="Rimuovi l'impianto idraulico"><Trash2 size={13} /></button>
+        </GButton>
+        <GButton type="button" className="pf-mini" onClick={onClear} title="Rimuovi l'impianto idraulico dal progetto"
+          aria-label="Rimuovi l'impianto idraulico"><Trash2 size={13} /></GButton>
       </div>
 
       {fl && (

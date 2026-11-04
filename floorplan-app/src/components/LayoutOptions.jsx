@@ -1,4 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
+import { GCheck } from '../glass';
 
 /* Controlli del programma dell'appartamento: camere, bagni, cucina, penisola. */
 
@@ -51,7 +52,7 @@ export default function LayoutOptions({ form, setF }) {
       <Segmented label="Cucina" value={form.kitchen} onChange={(v) => setF('kitchen', v)}
         options={[['auto', 'Automatica'], ['open', 'A vista'], ['closed', 'Separata']]} />
       <label className="pf-check">
-        <input type="checkbox" checked={form.peninsula} onChange={(e) => setF('peninsula', e.target.checked)} />
+        <GCheck checked={form.peninsula} onChange={(e) => setF('peninsula', e.target.checked)} />
         <span>Penisola in cucina <em>(se lo spazio lo consente)</em></span>
       </label>
 
@@ -61,7 +62,7 @@ export default function LayoutOptions({ form, setF }) {
           options={[['auto', 'Il migliore'], [true, 'Sì'], [false, 'No']]} />
         {NEEDS.map(([key, label, hint]) => (
           <label key={key} className="pf-check" title={hint}>
-            <input type="checkbox" checked={form[key]} onChange={(e) => setF(key, e.target.checked)} />
+            <GCheck checked={form[key]} onChange={(e) => setF(key, e.target.checked)} />
             <span>{label} <em>{hint}</em></span>
           </label>
         ))}

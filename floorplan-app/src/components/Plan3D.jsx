@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { THEMES } from '../lib/themes';
 import { themeFor, themeWithPalette } from '../lib/palette';
+import { GButton } from '../glass';
 
 /*
  * Vista 3D navigabile del piano aperto o di tutta la casa (piani impilati con i solai, anche esplosa):
@@ -605,7 +606,7 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
           {/WebGL/i.test(error) && !/Disabled|0xffff|blocklist/i.test(error) && (
             <p>Il browser ha finito i contesti grafici (troppe schede o render aperti) o l&apos;accelerazione grafica è spenta. Chiudi le altre schede che usano il 3D e riprova.</p>
           )}
-          <button type="button" className="pf-tool" onClick={() => { setError(null); setAttempt((n) => n + 1); }}>Riprova</button>
+          <GButton type="button" className="pf-tool" onClick={() => { setError(null); setAttempt((n) => n + 1); }}>Riprova</GButton>
         </div>
       )}
       <span className="pf-3d-hint">Trascina per ruotare · rotellina per lo zoom · tasto destro per spostarti</span>
