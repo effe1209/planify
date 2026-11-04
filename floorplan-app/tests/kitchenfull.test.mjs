@@ -60,13 +60,39 @@ assert.equal(vis.plan.furniture.find((f) => f.type === 'kitchen_dishwasher').bui
 const dw = r.plan.furniture.find((f) => f.type === 'kitchen_dishwasher');
 assert.ok(dw.x >= counter.x + counter.w - 0.001 || dw.x + dw.w <= counter.x + 0.001, 'accanto al piano');
 
-// piano che occupa tutta la parete: si accorcia per fare posto alle colonne
+// piano che occupa tutta la parete: le colonne vanno ad angolo, sul muro che gli sta accanto (cucina a L), e il frigo è l'ultimo della fila
 const wide = mk({ ...counter, x: 0.1, w: 5.8 }, { doors: [], windows: [] });
 const w2 = completeKitchen(wide, 1);
 const ctr = w2.plan.furniture.find((f) => f.type === 'kitchen_counter');
-assert.ok(ctr.w < 5.8 && ctr.kitchenOrig, 'piano accorciato');
-assert.ok(w2.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher').length >= 2);
+assert.equal(ctr.w, 5.8, 'il piano non si accorcia se c\'è posto ad angolo');
+const arms = w2.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher');
+assert.equal(arms.length, 3, 'tutte e tre le unità');
+for (const f of arms) {
+  assert.ok(f.facing === 'E' || f.facing === 'W', 'sul muro ad angolo guardano verso l\'interno');
+  assert.ok(f.y >= 0.1 + 0.6 - 0.01, 'dopo la profondità del piano, non sopra di lui');
+  assert.ok(f.x < 0.2 || f.x + f.w > 5.8, 'contro il muro est o ovest');
+}
+const fridgeY = w2.plan.furniture.find((f) => f.type === 'kitchen_fridge_tall');
+const sameWall = arms.filter((f) => Math.abs(f.x - fridgeY.x) < 0.01);
+assert.ok(sameWall.every((f) => f.y <= fridgeY.y + 1e-6), 'il frigo è l\'ultimo sul suo muro (il più lontano dal piano)');
 assert.deepEqual(baseKitchen(w2.plan, 1).plan.furniture.find((f) => f.type === 'kitchen_counter').w, 5.8);
+
+// frigo ai bordi: con un piano corto in mezzo alla parete è l'ultimo della sua fila, mai tra due unità
+for (const x0 of [1.0, 1.8, 2.4]) {
+  const q = completeKitchen(mk({ ...counter, x: x0, w: 2.0 }, { doors: [], windows: [] }), 1).plan;
+  const along = q.furniture.filter((f) => (f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher') && Math.abs(f.y - counter.y) < 0.01);
+  const fr = along.find((f) => f.type === 'kitchen_fridge_tall');
+  if (!fr) continue;
+  const rightSide = fr.x > x0;
+  assert.ok(along.every((f) => (rightSide ? f.x <= fr.x + 1e-6 || f.x < x0 : f.x >= fr.x - 1e-6 || f.x > x0 + 2)), 'frigo non all\'estremo');
+}
+
+// ad angolo non c'è posto (porte negli angoli): si accorcia il piano
+const blocked = mk({ ...counter, x: 0.1, w: 5.8 }, { windows: [], doors: [{ x: 0, y: 1.0, w: 0.9, rot: 90, openDir: 1 }, { x: 5.8, y: 1.0, w: 0.9, rot: 90, openDir: 1 }] });
+const w3 = completeKitchen(blocked, 1);
+const ctr3 = w3.plan.furniture.find((f) => f.type === 'kitchen_counter');
+assert.ok(ctr3.w < 5.8 && ctr3.kitchenOrig, 'senza angolo libero il piano si accorcia');
+assert.equal(baseKitchen(w3.plan, 1).plan.furniture.find((f) => f.type === 'kitchen_counter').w, 5.8);
 
 // facciate diverse: contro il muro est e ovest le colonne seguono lo stesso muro
 for (const [facing, x, y, w, h] of [['W', 5.3, 0.8, 0.6, 2.4], ['E', 0.1, 0.8, 0.6, 2.4], ['N', 1.6, 3.3, 2.4, 0.6]]) {
@@ -74,7 +100,9 @@ for (const [facing, x, y, w, h] of [['W', 5.3, 0.8, 0.6, 2.4], ['E', 0.1, 0.8, 0
   const q = completeKitchen(mk(c, { doors: [], windows: [] }), 1);
   const cols = q.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher');
   assert.ok(cols.length >= 2, `${facing}: colonne`);
-  for (const f of cols) assert.ok(facing === 'N' ? Math.abs(f.y - y) < 1e-6 : Math.abs(f.x - x) < 1e-6, `${facing}: colonna allineata al piano`);
+  const aligned = cols.filter((f) => (facing === 'N' ? Math.abs(f.y - y) < 1e-6 : Math.abs(f.x - x) < 1e-6));
+  assert.ok(aligned.length >= 2, `${facing}: almeno due unità allineate al piano (le altre vanno ad angolo)`);
+  for (const f of cols.filter((q) => !aligned.includes(q))) assert.notEqual(f.facing, facing, `${facing}: l'unità ad angolo guarda in un'altra direzione`);
 }
 
 // 3D e impianti

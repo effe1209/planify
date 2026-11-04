@@ -78,44 +78,73 @@ export function completeKitchen(plan0, roomId) {
   const hobMid = hobAlong[0];
 
   const used = [];
-  const slotsFor = (side) => {
-    // colonne contigue al piano dal lato `side` (-1 = prima, +1 = dopo): ci si ferma al primo ingombro
-    const out = [];
+  const innerLow = axis === 'x' ? inner.x0 : inner.y0;
+  const innerHigh = axis === 'x' ? inner.x1 : inner.y1;
+  /* Le unità possibili da un lato del piano, dal piano verso l'esterno: prima quelle contigue lungo lo stesso muro, poi, se il muro finisce
+     all'angolo, quelle sul muro che gli sta ad angolo (la cucina diventa a L). Ci si ferma al primo ingombro. */
+  const chainFor = (side) => {
+    const run = [];
     for (let k = 1; k <= 3; k++) {
       const a0 = side < 0 ? start0 - COLUMN * k : start0 + len0 + COLUMN * (k - 1);
       const r = slotRect(a0);
       if (!free(r, [])) break;   // gli spazi già presi si contano con `taken`, non si ricalcolano come ingombro
-      out.push(r);
+      run.push({ r, facing: counter.facing });
     }
-    return out;
+    const endPos = side < 0 ? start0 - COLUMN * run.length : start0 + len0 + COLUMN * run.length;
+    const gap = side < 0 ? endPos - innerLow : innerHigh - endPos;
+    const reaches = gap >= -0.05 && gap <= 0.45;   // il piano (o la sua ultima colonna) arriva all'angolo
+    const arm = [];
+    if (reaches) {
+      for (let k = 1; k <= 2; k++) {
+        let r;
+        let facing;
+        if (axis === 'x') {
+          const y0 = counter.facing === 'S' ? counter.y + depth + COLUMN * (k - 1) : counter.y - COLUMN * k;
+          r = side < 0 ? { x: round(inner.x0 + 0.005), y: round(y0), w: depth, h: COLUMN } : { x: round(inner.x1 - 0.005 - depth), y: round(y0), w: depth, h: COLUMN };
+          facing = side < 0 ? 'E' : 'W';
+        } else {
+          const x0 = counter.facing === 'E' ? counter.x + depth + COLUMN * (k - 1) : counter.x - COLUMN * k;
+          r = side < 0 ? { x: round(x0), y: round(inner.y0 + 0.005), w: COLUMN, h: depth } : { x: round(x0), y: round(inner.y1 - 0.005 - depth), w: COLUMN, h: depth };
+          facing = side < 0 ? 'S' : 'N';
+        }
+        if (!free(r, [])) break;
+        arm.push({ r, facing, corner: true });
+      }
+    }
+    return { slots: [...run, ...arm], reaches };
   };
   const centre = (side) => (side < 0 ? start0 - COLUMN / 2 : start0 + len0 + COLUMN / 2);
-  // il frigo sta all'estremo più lontano dalla cottura, il forno dall'altra parte
-  const sides = [-1, 1].sort((a, b) => Math.abs(centre(b) - hobMid) - Math.abs(centre(a) - hobMid));
+  const chains = new Map([[-1, chainFor(-1)], [1, chainFor(1)]]);
   // la lavastoviglie sta dal lato del lavello, così l'allaccio dell'acqua e dello scarico è corto
   const sinkAlong = alongOf(itemPoint(counter, counter.parts?.sink ?? lenOf(counter) * 0.58, 0));
   const sinkSide = Math.abs(centre(-1) - sinkAlong) <= Math.abs(centre(1) - sinkAlong) ? -1 : 1;
+  const farFromHob = [-1, 1].sort((a, b) => Math.abs(centre(b) - hobMid) - Math.abs(centre(a) - hobMid));
   const taken = new Map([[-1, 0], [1, 0]]);
   const added = [];
   const builtIn = room.kitchenDishwasher !== 'visible';
-  const place = (type, preferred) => {
-    for (const side of [preferred, -preferred]) {
-      const slots = slotsFor(side);
-      const idx = taken.get(side);
-      if (idx < slots.length) {
-        const r = slots[idx];
-        taken.set(side, idx + 1);
-        used.push(rectToBox(r));
-        added.push({ type, ...r, rot: 0, facing: counter.facing, room: roomId, kitchenFull: true, ...(type === 'kitchen_dishwasher' && { builtIn }) });
-        return true;
-      }
-    }
-    return false;
+  const left = (side) => chains.get(side).slots.length - taken.get(side);
+  const take = (type, side, extra = {}) => {
+    const slot = chains.get(side).slots[taken.get(side)];
+    taken.set(side, taken.get(side) + 1);
+    used.push(rectToBox(slot.r));
+    added.push({ type, ...slot.r, rot: 0, facing: slot.facing, room: roomId, kitchenFull: true, ...extra });
   };
   const missing = [];
-  if (!place('kitchen_dishwasher', sinkSide)) missing.push('kitchen_dishwasher');
-  if (!place('kitchen_fridge_tall', sides[0])) missing.push('kitchen_fridge_tall');
-  if (!place('kitchen_oven_tall', sides[1])) missing.push('kitchen_oven_tall');
+  // il frigo sta ai bordi: ultimo di una fila, dal lato che arriva all'angolo (altrimenti il più lontano dalla cottura)
+  const withRoom = [-1, 1].filter((sd) => chains.get(sd).slots.length > 0);
+  const reachSides = withRoom.filter((sd) => chains.get(sd).reaches);
+  const fridgeSide = reachSides.length === 1 ? reachSides[0]
+    : farFromHob.find((sd) => (reachSides.length ? reachSides : withRoom).includes(sd));
+  const room1 = (sd, keep) => left(sd) - keep >= 1;   // dopo questa unità resta posto per quelle ancora da mettere (il frigo)
+  // lavastoviglie: dal lato del lavello (e, se serve, in quello del frigo solo lasciando posto al frigo)
+  const dishSide = [sinkSide, -sinkSide].find((sd) => left(sd) >= 1 && (sd !== fridgeSide || room1(sd, 1)));
+  if (dishSide != null) take('kitchen_dishwasher', dishSide, { builtIn }); else missing.push('kitchen_dishwasher');
+  // forno e microonde: dal lato opposto al frigo, se c'è posto
+  const ovenSide = [-fridgeSide, fridgeSide].find((sd) => sd != null && !Number.isNaN(sd) && left(sd) >= 1 && (sd !== fridgeSide || room1(sd, 1)));
+  if (ovenSide != null) take('kitchen_oven_tall', ovenSide); else missing.push('kitchen_oven_tall');
+  // frigo: ultimo della sua fila; se lì non c'è più posto, dove ne resta
+  const frSide = [fridgeSide, -fridgeSide].find((sd) => sd != null && !Number.isNaN(sd) && left(sd) >= 1);
+  if (frSide != null) take('kitchen_fridge_tall', frSide); else missing.push('kitchen_fridge_tall');
 
   // se non c'è posto accanto al piano, si accorcia il piano (2,4 m ne restano almeno) e la colonna prende il suo posto
   let shrink = 0;
@@ -124,7 +153,7 @@ export function completeKitchen(plan0, roomId) {
   for (const type of [...missing]) {
     if (len0 - shrink - COLUMN < 2.4) break;
     // dal lato più lontano dalla cottura
-    const farSide = sides[0];
+    const farSide = farFromHob[0];
     const a0 = farSide < 0 ? start0 + shrink : start0 + len0 - shrink - COLUMN;
     const r = slotRect(a0);
     added.push({ type, ...r, rot: 0, facing: counter.facing, room: roomId, kitchenFull: true, ...(type === 'kitchen_dishwasher' && { builtIn }) });
