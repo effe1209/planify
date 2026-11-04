@@ -124,12 +124,51 @@ Il disegno a mano non è una scorciatoia: **la pianta resta modificabile**.
 - **Tour 360°** per ogni locale e video del giro della casa; **path tracing** per le immagini più curate.
 - **Materiali veri** (texture PBR CC0): facciata, tetto, pareti e pavimenti a scelta, **struttura in legno** con pilastri, travi a vista, portico e travetti sotto la gronda.
 - **Colore e materiale per ogni locale e per ogni muro**, oltre a sei stili di interni.
-- Esporta in **GLB** (Blender), **DXF 3D** e **IFC**.
+- Esporta in **GLB**, **DXF 3D** e **IFC**, oppure in un clic una **scena pronta per Blender** (vedi sotto).
 
 <div align="center">
   <img src="docs/media/render-interno-balcone.jpg" alt="Il balcone visto da dentro" width="560" /><br />
   <sub>Il balcone con il parapetto di vetro, visto dall'interno.</sub>
 </div>
+
+### 🎬 Render con Blender, in un comando
+
+Dal pannello **Render** premi **«Esporta per Blender (ZIP)»**: Planify prepara tutta la scena per Cycles, senza nessun lavoro a mano.
+
+<div align="center">
+  <img src="docs/media/blender-camera.jpg" alt="Interno della camera, render Cycles in Blender" width="760" /><br />
+  <sub>Render Cycles in Blender dello stesso progetto, ottenuto con un solo comando da terminale.</sub>
+</div>
+
+<br />
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/blender-esterno.jpg" alt="Esterno con tetto e travi" /><br /><sub><b>Esterno</b> · tetto, travetti, pilastri e luce del tramonto.</sub></td>
+    <td width="50%"><img src="docs/media/blender-pianta-dall-alto.jpg" alt="Pianta dall'alto in Blender" /><br /><sub><b>Pianta dall'alto</b> · camera ortografica, senza tetto, con i corpi illuminanti accesi.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/blender-balcone.jpg" alt="Balcone con parapetto di vetro" /><br /><sub><b>Balcone</b> · vetro vero, riflessi e arredi in rattan.</sub></td>
+    <td width="50%"><img src="docs/media/blender-bagno.jpg" alt="Bagno in Blender" /><br /><sub><b>Bagno</b> · pareti e pavimento con le texture dello stile.</sub></td>
+  </tr>
+</table>
+
+**Cosa trovi nello ZIP**
+
+| File | A cosa serve |
+|---|---|
+| `<nome>.glb` | La casa con tetto, soffitti, finestre e vetri, arredi, sole, punti luce, sensori e le inquadrature come camere. |
+| `<nome>_blender.py` | Lo script che prepara Cycles: cielo, sole all'ora scelta, lampade accese o spente, vetro vero, mappa tonale, riduzione del rumore, scheda grafica, camere e risoluzione. |
+| `cielo.hdr` | Il cielo dell'ora scelta (Poly Haven, CC0). |
+| `RENDER.command` · `RENDER.bat` | Doppio clic: trovano Blender e renderizzano tutte le inquadrature. |
+
+**Da terminale** (Blender 3.6 o successivo, qui con l'app su Mac). Estrai lo ZIP, entra nella cartella e lancia:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender -b --python nome-progetto_blender.py -- tutte
+```
+
+Blender parte senza interfaccia (`-b`), carica il `.glb`, imposta cielo, sole e luci, e salva un PNG per ogni camera (`CAM_*.png`) accanto allo script. Se `blender` è nel `PATH` basta `blender -b --python nome-progetto_blender.py -- tutte`; senza `tutte` prepara solo la scena. Per cambiare ora del giorno, risoluzione o numero di campioni modifica le prime righe dello script.
 
 ### ⚡ Impianti, norme e computo
 
