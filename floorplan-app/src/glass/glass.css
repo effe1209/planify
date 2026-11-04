@@ -65,6 +65,13 @@
 }
 .pf-app .pf-rail .lg-glass::after, .pf-app .pf-inspector .lg-glass::after, .pf-dialog .lg-glass::after { display: none; }
 .pf-app .pf-rail .lg-button, .pf-app .pf-inspector .lg-button { transition: none; }
+/* Barre in alto e barre sulla pianta: l'hover segue subito il mouse (niente dissolvenza da 200 ms né luce che segue il puntatore) */
+.pf-app .pf-top .lg-button, .pf-app .lg-glass.pf-group .lg-button, .pf-app .lg-glass.pf-floorbar .lg-button,
+.pf-app .lg-glass.pf-sketch-bar .lg-button, .pf-app .pf-top .pf-gb, .pf-app .pf-top select { transition: none; }
+.pf-app .pf-top .lg-glass::after, .pf-app .lg-glass.pf-group::after, .pf-app .lg-glass.pf-floorbar::after,
+.pf-app .lg-glass.pf-sketch-bar::after, .pf-app .lg-glass.pf-sketch-kinds::after, .pf-app .pf-top .lg-button::after { display: none; }
+/* Pannello Render: se è più alto della vista 3D scorre invece di uscire dal bordo */
+.pf-render { max-height: calc(100% - 24px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .pf-dialog {
   background: var(--pf-glass-strong, rgba(255, 255, 255, 0.78));
   -webkit-backdrop-filter: blur(28px) saturate(1.8);
