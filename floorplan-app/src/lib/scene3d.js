@@ -11,6 +11,7 @@ import { slideDoor } from './mezz';
 import { balconyRailings } from './balcony';
 import { glassSpan, isPanoramic, isSliding } from './openings';
 import { withCornerWindows } from './cornerWindows';
+import { raiseKitchenWindows } from './kitchenWindows';
 
 export const WALL_H = 2.7;
 const DOOR_H = 2.1;
@@ -56,7 +57,7 @@ import { pointInPolygon } from './geometry';
 import { extStairGeometry } from './extStair';
 
 export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = null, openings: voids = [], facade = null, timber = true, timberBeams = false } = {}) {
-  const plan = withCornerWindows(plan0);   // due finestre vicine in un angolo sono una sola, con il montante
+  const plan = raiseKitchenWindows(withCornerWindows(plan0));   // due finestre vicine in un angolo sono una sola, con il montante
   const root = new THREE.Group();
   // ogni pezzo costruito mentre `curTag` è acceso porta quell'etichetta (arredo o apertura di origine): serve a riconoscere cosa si clicca nel 3D
   let curTag = null;
@@ -292,9 +293,11 @@ export function buildScene(THREE, plan0, theme, { lowWalls = false, stairs = nul
         } else if (c.door) {
           if (wh2 > DOOR_H) seg(c.a, c.b, DOOR_H, wh2 - DOOR_H);
         } else {
-          seg(c.a, c.b, 0, Math.min(SILL, wh2));
-          if (wh2 > SILL) seg(c.a + 0.02, c.b - 0.02, SILL, Math.min(DOOR_H, wh2) - SILL, M.glass);
-          if (wh2 > DOOR_H) seg(c.a, c.b, DOOR_H, wh2 - DOOR_H);
+          const sl = c.sill ?? SILL;   // il davanzale può essere più alto (finestra dietro il piano cucina)
+          const tp = c.top ?? DOOR_H;
+          seg(c.a, c.b, 0, Math.min(sl, wh2));
+          if (wh2 > sl) seg(c.a + 0.02, c.b - 0.02, sl, Math.min(tp, wh2) - sl, M.glass);
+          if (wh2 > tp) seg(c.a, c.b, tp, wh2 - tp);
         }
         cur = Math.max(cur, c.b);
       }

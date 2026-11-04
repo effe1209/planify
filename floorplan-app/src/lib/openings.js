@@ -14,9 +14,11 @@ export const isSliding = (o) => o?.type === 'sliding';
 
 /* Altezza del vetro dal pavimento: [da, a] in metri, con il soffitto `wallH`. */
 export function glassSpan(o, wallH = 2.7) {
-  return isPanoramic(o)
-    ? { sill: 0, top: Math.min(PANORAMIC_H, wallH - 0.1) }
-    : { sill: SILL, top: Math.min(WINDOW_TOP, wallH) };
+  if (isPanoramic(o)) return { sill: 0, top: Math.min(PANORAMIC_H, wallH - 0.1) };
+  // finestra con quote proprie (dietro il piano cucina il davanzale sale a 1,20 m)
+  const sill = Number.isFinite(o?.sill) ? o.sill : SILL;
+  const top = Number.isFinite(o?.top) ? o.top : WINDOW_TOP;
+  return { sill, top: Math.min(top, wallH) };
 }
 
 /* Altezza utile del vetro (m) per luce e computo. */

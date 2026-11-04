@@ -8,6 +8,7 @@
 import { opening } from './ajax';
 import { isPanoramic } from './openings';
 import { withCornerWindows } from './cornerWindows';
+import { furnitureRect, raiseKitchenWindows } from './kitchenWindows';
 
 const CURTAIN_ROOMS = new Set(['living', 'living_kitchen', 'dining', 'bed', 'study', 'hotel_room']);
 const BACK = { S: [0, -1], N: [0, 1], E: [-1, 0], W: [1, 0] };   // dal centro dell'arredo verso il suo retro
@@ -46,7 +47,7 @@ function freeBeyond(plan, op, o, side) {
 }
 
 export function decorFor(plan0) {
-  const plan = withCornerWindows(plan0);
+  const plan = raiseKitchenWindows(withCornerWindows(plan0));
   const out = [];
   const rooms = new Map(plan.rooms.map((r) => [r.id, r]));
   const glass = plan.windows.map((w) => opening(plan, w));
@@ -56,7 +57,20 @@ export function decorFor(plan0) {
   // le vetrate scorrevoli sono porte a tutto vetro: anche loro hanno la tenda
   const curtained = [...plan.windows.map((w) => ({ o: w, op: opening(plan, w) })),
     ...plan.doors.filter((d) => d.type === 'sliding').map((d) => ({ o: d, op: opening(plan, d) }))];
+  // arredi che una tenda non può attraversare (tutto tranne tappeti e decori a terra)
+  const blockers = plan.furniture.filter((it) => it.type !== 'rug' && !it.decor && !it.elev).map(furnitureRect);
+  const placed = [];   // pannelli già messi: due tende non si toccano
+  const panelHits = (op, ex, ey, ux, uy, len) => {
+    // il pannello sta appoggiato al muro: da (ex, ey) lungo (ux, uy) per `len`, profondo 12 cm verso la stanza
+    const x1 = ex + ux * len + op.nx * 0.12;
+    const y1 = ey + uy * len + op.ny * 0.12;
+    const r = { x0: Math.min(ex, x1), x1: Math.max(ex, x1), y0: Math.min(ey, y1), y1: Math.max(ey, y1) };
+    const hit = [...blockers, ...placed].some((b) => b.x0 < r.x1 - 0.005 && b.x1 > r.x0 + 0.005 && b.y0 < r.y1 - 0.005 && b.y1 > r.y0 + 0.005);
+    if (!hit) placed.push(r);
+    return hit;
+  };
   for (const { o, op } of curtained) {
+    if (o.kitchen) continue;   // finestra dietro il piano cucina: niente tenda
     if (!op.room || !CURTAIN_ROOMS.has(op.room.kind)) continue;
     const face = { x: op.cx + op.nx * (op.t / 2 + 0.03), y: op.cy + op.ny * (op.t / 2 + 0.03) };
     if (isPanoramic(o) || o.corner) {
@@ -66,6 +80,7 @@ export function decorFor(plan0) {
       for (const side of [-1, 1]) {
         const ex = face.x + op.ux * side * (op.w / 2 - 0.02);
         const ey = face.y + op.uy * side * (op.w / 2 - 0.02);
+        if (panelHits(op, ex, ey, -op.ux * side, -op.uy * side, panel)) continue;
         out.push({ kind: 'curtain', x: ex, y: ey, ux: -op.ux * side, uy: -op.uy * side, nx: op.nx, ny: op.ny, len: panel });
       }
       continue;
@@ -77,6 +92,7 @@ export function decorFor(plan0) {
       if (len < 0.12) continue;
       const ex = face.x + op.ux * side * (op.w / 2 - 0.08);
       const ey = face.y + op.uy * side * (op.w / 2 - 0.08);
+      if (panelHits(op, ex, ey, op.ux * side, op.uy * side, len)) continue;
       out.push({ kind: 'curtain', x: ex, y: ey, ux: op.ux * side, uy: op.uy * side, nx: op.nx, ny: op.ny, len });
     }
   }

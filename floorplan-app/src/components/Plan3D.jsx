@@ -293,24 +293,32 @@ export default function Plan3D({ plan, north = 0, roof = null, overlay = null, p
          * del progetto (o un salvataggio sul cloud) non fa lampeggiare la vista né riporta l'inquadratura all'inizio.
          * L'inquadratura si rifà solo la prima volta o se la casa cambia molto (un altro progetto).
          */
-        const loadModel = () => {
-          const P = propsRef.current;
+        let loadSeq = 0;
+        const loadModel = async () => {
+          const P0 = propsRef.current;
           const st = sceneRef.current;
-          if (!P || !st || disposed) return;
-          const old = st.model;
-          const oldGround = st.ground;
-          const model = P.project
-            ? buildHouse(THREE, P.project, (f) => themeFor(P.project, f), { lowWalls: P.lowWalls, spread: P.spread, timberBeams: true })
-            : buildScene(THREE, P.plan, themeWithPalette(THEMES[P.style] || THEMES.modern, P.palette, P.materials), { lowWalls: P.lowWalls, timberBeams: true });
-          model.traverse((o) => { if (o.userData?.layer === 'TRAVI' || o.userData?.layer === 'TETTO') o.visible = !!P.roof; });
-          scene.add(model);
-          import('../lib/customModels').then(({ hydrateCustomModels }) => hydrateCustomModels(THREE, model))
+          if (!P0 || !st || disposed) return;
+          const seq = ++loadSeq;
+          const model = P0.project
+            ? buildHouse(THREE, P0.project, (f) => themeFor(P0.project, f), { lowWalls: P0.lowWalls, spread: P0.spread, timberBeams: true })
+            : buildScene(THREE, P0.plan, themeWithPalette(THEMES[P0.style] || THEMES.modern, P0.palette, P0.materials), { lowWalls: P0.lowWalls, timberBeams: true });
+          const ready = import('../lib/customModels').then(({ hydrateCustomModels }) => hydrateCustomModels(THREE, model))
             .then(() => import('../lib/pbr'))
             .then(({ upgradeMaterials }) => upgradeMaterials(THREE, model, { aniso: renderer.capabilities.getMaxAnisotropy?.() || 8 }))
-            .then(() => {
-              if (model.parent === scene) invalidate(true);
-              else model.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => m.userData?.pbrTextures?.forEach((t) => t.dispose())); });
-            }).catch(() => {});
+            .catch(() => {});
+          // Un modello nuovo prende il posto del vecchio solo quando le sue texture sono pronte: altrimenti, a ogni mobile spostato,
+          // per un attimo si vedrebbe il pavimento «disegnato» al posto di quello vero, come se ce ne fossero due sovrapposti.
+          if (st.model) await Promise.race([ready, new Promise((r) => setTimeout(r, 1200))]);
+          if (disposed || seq !== loadSeq) { disposeTree(model); return; }   // nel frattempo è partito un altro aggiornamento
+          const P = propsRef.current;
+          model.traverse((o) => { if (o.userData?.layer === 'TRAVI' || o.userData?.layer === 'TETTO') o.visible = !!P.roof; });
+          scene.add(model);
+          ready.then(() => {
+            if (model.parent === scene) invalidate(true);
+            else model.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => m.userData?.pbrTextures?.forEach((t) => t.dispose())); });
+          });
+          const old = st.model;
+          const oldGround = st.ground;
           if (old) {
             scene.remove(old);
             disposeTree(old);
