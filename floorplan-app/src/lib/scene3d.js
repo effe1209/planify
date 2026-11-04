@@ -24,7 +24,7 @@ const SHAPES = {
   nightstand: [0.5, 'wood'], wardrobe: [2.2, 'cabinet'], wardrobe_corner: [2.2, 'cabinet'], wardrobe_open_corner: [2.1, 'wood'], wardrobe_open: [2.1, 'cabinet'],
   sofa_round: [0.8, 'fabric'], sofa_curved: [0.8, 'fabric'], chair_design: [0.82, 'wood'], chair_outdoor: [0.85, 'wood'], armchair_rattan: [0.8, 'wood'], table_rattan: [0.5, 'wood'], desk: [0.75, 'wood'], table: [0.75, 'wood'],
   table_round: [0.75, 'wood'], coffee_table: [0.4, 'wood'], tv: [0.6, 'dark', 0.6], kitchen_counter: [0.9, 'counter'],
-  kitchen_peninsula: [0.9, 'counter'], kitchen_fridge_tall: [2.1, 'cabinet'], kitchen_oven_tall: [2.1, 'cabinet'], kitchen_dishwasher: [0.88, 'cabinet'], wall_cabinet: [0.7, 'cabinet', 1.4], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
+  kitchen_peninsula: [0.9, 'counter'], kitchen_fridge_tall: [2.1, 'cabinet'], kitchen_oven_tall: [2.1, 'cabinet'], kitchen_dishwasher: [0.88, 'cabinet'], kitchen_corner_tall: [2.1, 'cabinet'], wall_cabinet: [0.7, 'cabinet', 1.4], sideboard: [0.8, 'wood'], bookcase: [2.0, 'cabinet'], dresser: [0.9, 'wood'],
   shoe_cabinet: [1.0, 'cabinet'], console: [0.8, 'wood'], floor_lamp: [1.6, 'lamp'], plant: [1.0, 'plant'],
   toilet: [0.45, 'ceramic'], bidet: [0.4, 'ceramic'], sink: [0.85, 'ceramic'], bath_column: [1.8, 'cabinet'],
   towel_radiator: [1.2, 'ceramic', 0.2], shower: [0.06, 'ceramic'],

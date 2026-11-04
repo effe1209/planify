@@ -18,7 +18,7 @@ export const OBJECT_NAMES = {
   kitchen_counter: 'CUCINA', kitchen_peninsula: 'PENISOLA', shoe_cabinet: 'SCARPIERA', console: 'CONSOLE', floor_lamp: 'LAMPADA',
   bath_column: 'COLONNA_BAGNO', towel_radiator: 'SCALDASALVIETTE', utility_sink: 'LAVATOIO', minibar: 'MINIBAR',
   workbench: 'BANCO_LAVORO', laundry_basket: 'CESTO', gazebo: 'GAZEBO',
-  kitchen_fridge_tall: 'COLONNA_FRIGO', kitchen_oven_tall: 'COLONNA_FORNO', kitchen_dishwasher: 'LAVASTOVIGLIE', wall_cabinet: 'PENSILE',
+  kitchen_fridge_tall: 'COLONNA_FRIGO', kitchen_oven_tall: 'COLONNA_FORNO', kitchen_dishwasher: 'LAVASTOVIGLIE', wall_cabinet: 'PENSILE', kitchen_corner_tall: 'COLONNA_ANGOLO',
   wardrobe_corner: 'ARMADIO_ANGOLO', wardrobe_open_corner: 'GUARDAROBA_APERTO_ANGOLO', wardrobe_open: 'ARMADIO_APERTO', sofa_round: 'DIVANO_TONDO', sofa_curved: 'DIVANO_ARCO',
   chair_design: 'SEDIA_DESIGN', chair_outdoor: 'SEDIA_ESTERNO', armchair_rattan: 'POLTRONA_RATTAN', table_rattan: 'TAVOLINO_RATTAN',
   pillow: 'CUSCINO', throw: 'COPERTA', book_stack: 'LIBRI', vase: 'VASO', candle: 'CANDELA', figurine: 'STATUINA',
@@ -1081,6 +1081,16 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       pull(W / 2 - 0.08, 1.46, zf + 0.008, true);
       break;
     }
+    case 'kitchen_corner_tall': {
+      // colonna intera che chiude l'angolo: corpo alto come le altre colonne, anta unica e maniglia
+      bx(W, 0.1, D - 0.04, 0, 0, -0.01, darkLine);
+      bx(W - 0.012, 2.0, D - 0.02, 0, 0.1, -0.01, M.cabinet);
+      const zf = D / 2 - 0.01 + 0.01;
+      bx(W - 0.04, 0.9, 0.016, 0, 0.14, zf, wood);
+      bx(W - 0.04, 1.0, 0.016, 0, 1.06, zf, wood);
+      pull(W / 2 - 0.06, 0.9, zf + 0.008, true);
+      break;
+    }
     case 'kitchen_dishwasher': {
       // lavastoviglie da cucina, alta come il piano (0,90 m): incassata (frontale come i mobili, maniglia in alto) o a vista (frontale
       // in acciaio con pannello comandi); il piano di lavoro prosegue sopra
@@ -1277,11 +1287,11 @@ export function buildObject(THREE, it, M, mat, theme = {}) {
       }
       bx(W + 0.01, 0.04, D + 0.03, 0, 0.84, 0.0, M.counter);
       bx(W, 0.45, 0.015, 0, 0.88, -D / 2 + 0.006, m('splash', '#e8e5de'));
-      const sx = -W / 4;
+      const sx = it.parts?.sink != null ? it.parts.sink - W / 2 : -W / 4;
       bx(0.5, 0.02, 0.38, sx, 0.87, 0.02, m('sinkbowl', '#c3c9d0', { metalness: 0.5, roughness: 0.3 }));
       cy(0.012, 0.012, 0.22, sx, 0.88, -D / 2 + 0.1, chrome, 10);
       bx(0.018, 0.018, 0.15, sx, 1.08, -D / 2 + 0.17, chrome);
-      const hx = W / 4;
+      const hx = it.parts?.hob != null ? it.parts.hob - W / 2 : W / 4;
       bx(0.58, 0.008, 0.5, hx, 0.88, 0.0, m('hob', '#14171b', { roughness: 0.15 }));
       for (const [bx0, bz0] of [[-0.13, -0.11], [0.13, -0.11], [-0.13, 0.11], [0.13, 0.11]]) cy(0.07, 0.07, 0.012, hx + bx0, 0.888, bz0, m('burner', '#3a4048'), 18);
       bx(0.62, 0.08, 0.42, hx, 1.52, -D / 2 + 0.22, metalMat);

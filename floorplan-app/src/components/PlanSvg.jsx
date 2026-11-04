@@ -254,6 +254,13 @@ const BASE_FURNITURE = {
       <rect x={w * 0.14} y={h * 0.6} width={w * 0.72} height={h * 0.18} rx={1.5} fill="#5a626c" fillOpacity="0.85" stroke={F_STROKE} strokeWidth="0.8" />
     </>
   ),
+  kitchen_corner_tall: (w, h) => (
+    <>
+      <rect width={w} height={h} rx={1.5} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />
+      <line x1={0} y1={0} x2={w} y2={h} stroke={F_SOFT} />
+      <line x1={w} y1={0} x2={0} y2={h} stroke={F_SOFT} />
+    </>
+  ),
   kitchen_dishwasher: (w, h) => (
     <>
       <rect width={w} height={h} rx={1.5} fill="#eef0f3" stroke={F_STROKE} strokeWidth="1.1" />

@@ -91,7 +91,7 @@ export function quantities(project) {
         add('splash', len * 0.6);
       }
       // cucina completa: ogni colonna con elettrodomestico incassato (i pensili sono già nel prezzo al metro della cucina)
-      if (['kitchen_fridge_tall', 'kitchen_oven_tall'].includes(it.type)) add('kitchen_tall', 1);
+      if (['kitchen_fridge_tall', 'kitchen_oven_tall', 'kitchen_corner_tall'].includes(it.type)) add('kitchen_tall', 1);
       if (it.type === 'kitchen_dishwasher') add('kitchen_dishwasher', 1);
     }
   }

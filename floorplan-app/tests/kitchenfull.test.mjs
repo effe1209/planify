@@ -16,7 +16,7 @@ const mk = (counter, extra = {}) => ({
   doors: [{ x: 4.6, y: 4 - t, w: 0.9, rot: 0, entrance: true }], windows: [{ x: 2.6, y: 0, w: 1.0, rot: 0 }],
   furniture: [counter], ...extra,
 });
-const counter = { type: 'kitchen_counter', x: 1.6, y: t, w: 2.4, h: 0.6, rot: 0, facing: 'S', room: 1 };
+const counter = { type: 'kitchen_counter', x: 1.0, y: t, w: 3.0, h: 0.6, rot: 0, facing: 'S', room: 1 };
 
 const r = completeKitchen(mk(counter), 1);
 assert.ok(r.plan && r.added > 0, 'si aggiunge qualcosa');
@@ -38,10 +38,12 @@ for (let i = 0; i < floorItems.length; i++) for (let j = i + 1; j < floorItems.l
 for (const f of r.plan.furniture) { assert.ok(f.x >= 0 && f.x + f.w <= 6 && f.y >= 0 && f.y + f.h <= 4, `${f.type} fuori dal locale`); }
 for (const f of r.plan.furniture.filter((q) => q.type === 'kitchen_fridge_tall' || q.type === 'kitchen_oven_tall' || q.type === 'kitchen_dishwasher')) assert.ok(f.x + f.w <= 2.6 || f.x >= 3.6, 'colonna davanti alla finestra');
 // i pensili non coprono la finestra né la cappa
-const hood = 1.6 + 2.4 * 0.75;
+const cnt = r.plan.furniture.find((f) => f.type === 'kitchen_counter');
+const hood = cnt.x + cnt.parts.hob;   // 2D e 3D leggono la stessa posizione della cottura
+assert.ok(hood + 0.31 <= 2.6 || hood - 0.31 >= 3.6, 'cappa davanti alla finestra');
 for (const c of r.plan.furniture.filter((q) => q.type === 'wall_cabinet')) {
   assert.ok(c.x + c.w <= 2.6 + 0.001 || c.x >= 3.6 - 0.001, 'pensile sulla finestra');
-  assert.ok(c.x + c.w <= hood - 0.4 || c.x >= hood + 0.4, 'pensile sulla cappa');
+  assert.ok(c.x + c.w <= hood - 0.39 || c.x >= hood + 0.39, 'pensile sulla cappa');
   assert.deepEqual(c.z, [1.4, 2.1]);
 }
 // rifatta, non raddoppia; tornando alla base si ritrova il piano com'era
@@ -65,7 +67,7 @@ const wide = mk({ ...counter, x: 0.1, w: 5.8 }, { doors: [], windows: [] });
 const w2 = completeKitchen(wide, 1);
 const ctr = w2.plan.furniture.find((f) => f.type === 'kitchen_counter');
 assert.equal(ctr.w, 5.8, 'il piano non si accorcia se c\'è posto ad angolo');
-const arms = w2.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher');
+const arms = w2.plan.furniture.filter((f) => f.type.endsWith('_tall') && f.type !== 'kitchen_corner_tall' || f.type === 'kitchen_dishwasher');
 assert.equal(arms.length, 3, 'tutte e tre le unità');
 for (const f of arms) {
   assert.ok(f.facing === 'E' || f.facing === 'W', 'sul muro ad angolo guardano verso l\'interno');
@@ -80,7 +82,7 @@ assert.deepEqual(baseKitchen(w2.plan, 1).plan.furniture.find((f) => f.type === '
 // frigo ai bordi: con un piano corto in mezzo alla parete è l'ultimo della sua fila, mai tra due unità
 for (const x0 of [1.0, 1.8, 2.4]) {
   const q = completeKitchen(mk({ ...counter, x: x0, w: 2.0 }, { doors: [], windows: [] }), 1).plan;
-  const along = q.furniture.filter((f) => (f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher') && Math.abs(f.y - counter.y) < 0.01);
+  const along = q.furniture.filter((f) => (f.type.endsWith('_tall') && f.type !== 'kitchen_corner_tall' || f.type === 'kitchen_dishwasher') && Math.abs(f.y - counter.y) < 0.01);
   const fr = along.find((f) => f.type === 'kitchen_fridge_tall');
   if (!fr) continue;
   const rightSide = fr.x > x0;
@@ -98,11 +100,25 @@ assert.equal(baseKitchen(w3.plan, 1).plan.furniture.find((f) => f.type === 'kitc
 for (const [facing, x, y, w, h] of [['W', 5.3, 0.8, 0.6, 2.4], ['E', 0.1, 0.8, 0.6, 2.4], ['N', 1.6, 3.3, 2.4, 0.6]]) {
   const c = { type: 'kitchen_counter', x, y, w, h, rot: 0, facing, room: 1 };
   const q = completeKitchen(mk(c, { doors: [], windows: [] }), 1);
-  const cols = q.plan.furniture.filter((f) => f.type.endsWith('_tall') || f.type === 'kitchen_dishwasher');
+  const cols = q.plan.furniture.filter((f) => f.type.endsWith('_tall') && f.type !== 'kitchen_corner_tall' || f.type === 'kitchen_dishwasher');
   assert.ok(cols.length >= 2, `${facing}: colonne`);
   const aligned = cols.filter((f) => (facing === 'N' ? Math.abs(f.y - y) < 1e-6 : Math.abs(f.x - x) < 1e-6));
   assert.ok(aligned.length >= 2, `${facing}: almeno due unità allineate al piano (le altre vanno ad angolo)`);
   for (const f of cols.filter((q) => !aligned.includes(q))) assert.notEqual(f.facing, facing, `${facing}: l'unità ad angolo guarda in un'altra direzione`);
+}
+
+// angolo: il buco tra la fine del piano e il muro lo chiude una colonna intera
+{
+  const c = { type: 'kitchen_counter', x: 0.45, y: t, w: 4.9, h: 0.6, rot: 0, facing: 'S', room: 1 };   // finisce a 0,25 m dal muro est (5,8)... e a 0,25 dall'ovest
+  const q = completeKitchen(mk(c, { doors: [], windows: [] }), 1).plan;
+  const fill = q.furniture.filter((f) => f.type === 'kitchen_corner_tall');
+  assert.ok(fill.length >= 1, 'colonna d\'angolo');
+  for (const f of fill) assert.ok(f.y <= t + 0.01 && f.h >= 0.59, 'esce dal muro quanto il piano');
+}
+// la cottura (e la cappa) non sta mai davanti alla finestra, in pianta e in 3D
+{
+  const ctr = r.plan.furniture.find((f) => f.type === 'kitchen_counter');
+  assert.ok(ctr.parts && ctr.parts.hob != null && ctr.parts.sink != null, 'posizioni esplicite');
 }
 
 // 3D e impianti

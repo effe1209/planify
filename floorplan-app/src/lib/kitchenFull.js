@@ -13,7 +13,7 @@ export const COLUMN = 0.6;          // larghezza di una colonna
 export const WALL_DEPTH = 0.35;     // profondità dei pensili
 export const WALL_LIFT = 1.4;       // da terra al fondo del pensile
 const COLUMN_TYPES = ['kitchen_fridge_tall', 'kitchen_oven_tall'];
-const LABEL = { kitchen_fridge_tall: 'frigo', kitchen_oven_tall: 'forno e microonde', kitchen_dishwasher: 'lavastoviglie' };
+const LABEL = { kitchen_fridge_tall: 'frigo', kitchen_oven_tall: 'forno e microonde', kitchen_dishwasher: 'lavastoviglie', kitchen_corner_tall: 'colonna d\'angolo' };
 const round = (v) => Math.round(v * 1000) / 1000;
 const overlap = (a, b, pad = 0.01) => a.x0 < b.x1 - pad && a.x1 > b.x0 + pad && a.y0 < b.y1 - pad && a.y1 > b.y0 + pad;
 const rectToBox = (r) => ({ x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h });
@@ -33,7 +33,9 @@ export function baseKitchen(plan, roomId) {
   const furniture = plan.furniture.filter((f) => !(f.kitchenFull && f.room === roomId)).map((f) => {
     if (f.room !== roomId || f.type !== 'kitchen_counter') return f;
     const { kitchenOrig, noFridge: _n, noDishwasher: _d, ...rest } = f;
-    return { ...rest, ...(kitchenOrig || {}) };
+    const back = { ...rest, ...(kitchenOrig || {}) };
+    if (kitchenOrig && !('parts' in kitchenOrig)) delete back.parts;
+    return back;
   });
   const rooms = plan.rooms.map((r) => {
     if (r.id !== roomId) return r;
@@ -92,7 +94,7 @@ export function completeKitchen(plan0, roomId) {
     }
     const endPos = side < 0 ? start0 - COLUMN * run.length : start0 + len0 + COLUMN * run.length;
     const gap = side < 0 ? endPos - innerLow : innerHigh - endPos;
-    const reaches = gap >= -0.05 && gap <= 0.45;   // il piano (o la sua ultima colonna) arriva all'angolo
+    const reaches = gap >= -0.05 && gap <= 0.65;   // il piano (o la sua ultima colonna) arriva all'angolo
     const arm = [];
     if (reaches) {
       for (let k = 1; k <= 2; k++) {
@@ -111,7 +113,7 @@ export function completeKitchen(plan0, roomId) {
         arm.push({ r, facing, corner: true });
       }
     }
-    return { slots: [...run, ...arm], reaches };
+    return { slots: [...run, ...arm], reaches, runLen: run.length, endPos, gap };
   };
   const centre = (side) => (side < 0 ? start0 - COLUMN / 2 : start0 + len0 + COLUMN / 2);
   const chains = new Map([[-1, chainFor(-1)], [1, chainFor(1)]]);
@@ -146,6 +148,20 @@ export function completeKitchen(plan0, roomId) {
   const frSide = [fridgeSide, -fridgeSide].find((sd) => sd != null && !Number.isNaN(sd) && left(sd) >= 1);
   if (frSide != null) take('kitchen_fridge_tall', frSide); else missing.push('kitchen_fridge_tall');
 
+  // angolo: se tra la fine del piano (o delle colonne in fila) e il muro resta un buco, lo chiude una colonna intera, che esce dal muro
+  // quanto il piano e riempie l'angolo
+  for (const side of [-1, 1]) {
+    const ch = chains.get(side);
+    if (!ch.reaches || ch.gap < 0.08 || taken.get(side) < ch.runLen || !taken.get(side)) continue;
+    const a0 = side < 0 ? round(innerLow + 0.005) : round(ch.endPos);
+    const g = side < 0 ? round(ch.endPos - a0) : round(innerHigh - 0.005 - a0);
+    if (g < 0.08) continue;
+    const r = axis === 'x' ? { x: round(a0), y: counter.y, w: g, h: depth } : { x: counter.x, y: round(a0), w: depth, h: g };
+    if (!free(r, used)) continue;
+    used.push(rectToBox(r));
+    added.push({ type: 'kitchen_corner_tall', ...r, rot: 0, facing: counter.facing, room: roomId, kitchenFull: true });
+  }
+
   // se non c'è posto accanto al piano, si accorcia il piano (2,4 m ne restano almeno) e la colonna prende il suo posto
   let shrink = 0;
   const loc = [itemPoint(counter, 0, 0), itemPoint(counter, lenOf(counter), 0)].map(alongOf);
@@ -171,6 +187,30 @@ export function completeKitchen(plan0, roomId) {
   }
   for (const type of missing) notes.push(`${type === 'kitchen_dishwasher' ? 'Lavastoviglie' : `Colonna ${LABEL[type]}`} non inserita: manca posto accanto al piano.`);
 
+  // cottura e lavello con posizione esplicita (la pianta e il 3D la leggono uguale); la cottura, con la cappa, mai davanti a una finestra
+  {
+    const L = lenOf(counter);
+    const base = alongOf(itemPoint(counter, 0, 0));
+    const dirn = alongOf(itemPoint(counter, 1, 0)) - base >= 0 ? 1 : -1;
+    const sinkW = Math.min(L * 0.3, 0.8);
+    const sinkC = counter.parts?.sink ?? L * 0.58 + sinkW / 2;
+    let hobC = counter.parts?.hob ?? L * 0.18 + 0.3;
+    const winC = windows.filter((op) => againstOpening({ x0: counter.x, x1: counter.x + counter.w, y0: counter.y, y1: counter.y + counter.h }, op, { depth: 0.6, margin: 0.05 }))
+      .map((op) => ({ a: axis === 'x' ? op.cx : op.cy, half: op.w / 2 }));
+    const clear = (lx) => winC.every(({ a, half }) => Math.abs(base + dirn * lx - a) >= half + 0.36);
+    if (!clear(hobC)) {
+      const cands = [];
+      for (let lx = 0.45; lx <= L - 0.45 + 1e-6; lx += 0.05) cands.push(lx);
+      cands.sort((u, v) => Math.abs(u - hobC) - Math.abs(v - hobC));
+      const pick = cands.find((lx) => clear(lx) && Math.abs(lx - sinkC) >= 0.8) ?? cands.find((lx) => clear(lx) && Math.abs(lx - sinkC) >= 0.65);
+      if (pick != null) hobC = round(pick);
+      else notes.push('La cottura resta davanti a una finestra: manca posto altrove sul piano.');
+    }
+    const orig = counter.kitchenOrig || { x: counter.x, y: counter.y, w: counter.w, h: counter.h, ...(counter.parts && { parts: counter.parts }) };
+    counter = { ...counter, kitchenOrig: orig, parts: { ...counter.parts, hob: round(hobC), sink: round(sinkC) } };
+    hobAlong.splice(0, hobAlong.length, base + dirn * hobC);
+  }
+
   // pensili sopra il piano, lasciando liberi finestre, cappa e colonne
   const cs = axis === 'x' ? counter.x : counter.y;
   const ce = cs + (axis === 'x' ? counter.w : counter.h);
@@ -182,7 +222,7 @@ export function completeKitchen(plan0, roomId) {
       blocks.push([a - op.w / 2 - 0.08, a + op.w / 2 + 0.08]);
     }
   }
-  for (const h of hobAlong) blocks.push([h - 0.45, h + 0.45]);
+  for (const h of hobAlong) blocks.push([h - 0.4, h + 0.4]);
   blocks.sort((a, b) => a[0] - b[0]);
   const segs = [];
   let cur = cs;

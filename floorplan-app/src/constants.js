@@ -189,7 +189,7 @@ export const FURNITURE_LABEL = {
   rug: 'Tappeto', bed: 'Letto', nightstand: 'Comodino', wardrobe: 'Armadio', desk: 'Scrivania', office_chair: 'Sedia da ufficio', sofa: 'Divano',
   sofa_corner: 'Divano angolare', sofa_round: 'Divano tondo', sofa_curved: 'Divano ad arco', chair_design: 'Sedia di design', chair_outdoor: 'Sedia da esterno', armchair_rattan: 'Poltrona in rattan', table_rattan: 'Tavolino in rattan',
   wardrobe_corner: 'Armadio ad angolo', wardrobe_open_corner: 'Guardaroba aperto angolare', wardrobe_open: 'Armadio aperto', armchair: 'Poltrona', coffee_table: 'Tavolino', tv: 'Mobile TV',
-  table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola', kitchen_fridge_tall: 'Colonna frigo', kitchen_oven_tall: 'Colonna forno e microonde', kitchen_dishwasher: 'Lavastoviglie', wall_cabinet: 'Pensile',
+  table: 'Tavolo', table_round: 'Tavolo tondo', kitchen_counter: 'Piano cucina', kitchen_peninsula: 'Penisola', kitchen_fridge_tall: 'Colonna frigo', kitchen_oven_tall: 'Colonna forno e microonde', kitchen_dishwasher: 'Lavastoviglie', kitchen_corner_tall: 'Colonna d\'angolo', wall_cabinet: 'Pensile',
   shower: 'Doccia', shower_round: 'Doccia angolare', shower_walkin: 'Doccia walk-in', bathtub: 'Vasca',
   toilet: 'WC', bidet: 'Bidet', sink: 'Lavabo', bath_column: 'Colonna contenitore', towel_radiator: 'Scaldasalviette', minibar: 'Minibar', console: 'Credenza', plant: 'Pianta',
   washer: 'Lavatrice', dryer: 'Asciugatrice', utility_sink: 'Lavatoio', laundry_basket: 'Cesto biancheria',
