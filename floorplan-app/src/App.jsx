@@ -2580,7 +2580,7 @@ export default function App() {
                 onSet={(opts) => { const r = setExtStair(plan, opts.side, opts); if (r.error) setExtStairError(r.error); else { setExtStairError(null); editPlan(() => r.plan); } }}
                 onRemove={() => { setExtStairError(null); editPlan((p) => removeExtStair(p)); }} />
               </>)}
-              {T('plan') && !readOnly && floor.meta?.type === 'garden' && houseFront(current) && (<>
+              {T('plan') && !readOnly && current?.floors.some((x) => x.level === 'out' && x.plan?.rooms?.length) && houseFront(current) && (<>
               <section className="pf-sec">
                 <h2>Giardino rispetto alla casa</h2>
                 <p className="pf-hint">Spostalo come vuoi: scatta a 25 cm e si aggancia a centro casa, bordi, scala e portoncino. Vale in 3D e nei render.</p>
