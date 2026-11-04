@@ -125,11 +125,11 @@ export function houseFront(project) {
   return frontOf(project)?.facade || null;
 }
 
-/* Spostamento a mano del giardino rispetto alla casa (project.gardenOffset): a lungo la facciata, d verso l'esterno, in metri. */
+/* Spostamento a mano del giardino rispetto alla casa (project.gardenOffset): a lungo la facciata, d verso l'esterno, h in quota (negativo = più in basso), in metri. */
 export function gardenOffset(project) {
   const o = project?.gardenOffset;
   const num = (v) => (Number.isFinite(v) ? v : 0);
-  return { a: num(o?.a), d: num(o?.d) };
+  return { a: num(o?.a), d: num(o?.d), h: num(o?.h) };
 }
 
 /* La facciata e la funzione che porta un punto del giardino nella pianta del piano terra (vedi lib/scene3d.js). */

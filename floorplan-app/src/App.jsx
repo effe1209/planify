@@ -15,6 +15,7 @@ import SketchBoard from './components/SketchBoard';
 import SketchEditPanel from './components/SketchEditPanel';
 import ExtStairPanel from './components/ExtStairPanel';
 import GardenMovePanel from './components/GardenMovePanel';
+import { moveGardenPart } from './lib/gardenEdit';
 import { removeExtStair, setExtStair } from './lib/extStair';
 import * as SK from './lib/sketchEdit';
 import { fileToBase64, pdfPageImage } from './lib/pdfRaster';
@@ -2584,8 +2585,9 @@ export default function App() {
               <section className="pf-sec">
                 <h2>Giardino rispetto alla casa</h2>
                 <p className="pf-hint">Spostalo come vuoi: scatta a 25 cm e si aggancia a centro casa, bordi, scala e portoncino. Vale in 3D e nei render.</p>
-                <GardenMovePanel project={current} facade={houseFront(current)}
-                  onChange={(o) => editProject((p) => { const { gardenOffset: _g, ...rest } = p; return o && (o.a || o.d) ? { ...rest, gardenOffset: { a: +o.a.toFixed(3), d: +o.d.toFixed(3) } } : rest; })} />
+                <GardenMovePanel project={current} facade={houseFront(current)} gardenPlan={current.floors.find((x) => x.level === 'out' && x.plan?.rooms?.length)?.plan}
+                  onPart={(part, x) => { const gf = current.floors.find((q) => q.level === 'out' && q.plan?.rooms?.length); const r = moveGardenPart(gf.plan, part, x); if (r.error) setError(r.error); else { setError(null); editProject((p) => updateFloor(p, gf.id, (q) => ({ ...q, plan: r.plan }))); } }}
+                  onChange={(o) => editProject((p) => { const { gardenOffset: _g, ...rest } = p; return o && (o.a || o.d || o.h) ? { ...rest, gardenOffset: { a: +o.a.toFixed(3), d: +o.d.toFixed(3), h: +(o.h || 0).toFixed(3) } } : rest; })} />
               </section>
               </>)}
               {T('plan') && (<>

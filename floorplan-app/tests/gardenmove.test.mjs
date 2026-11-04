@@ -28,8 +28,13 @@ const f1 = gardenFrame(proj({ gardenOffset: { a: 1.5, d: 2 } }));
 const p0 = f0.toWorld(3, 1);
 const p1 = f1.toWorld(3, 1);
 assert.ok(Math.abs(p1[0] - p0[0] - 1.5) < 1e-6 && Math.abs(p1[1] - p0[1] - 2) < 1e-6);
-assert.deepEqual(gardenOffset({}), { a: 0, d: 0 });
-assert.deepEqual(gardenOffset({ gardenOffset: { a: 'x', d: 3 } }), { a: 0, d: 3 });
+assert.deepEqual(gardenOffset({}), { a: 0, d: 0, h: 0 });
+assert.deepEqual(gardenOffset({ gardenOffset: { a: 'x', d: 3, h: -0.5 } }), { a: 0, d: 3, h: -0.5 });
+// quota: il giardino scende e la scala esterna lo raggiunge
+const lowest = (p) => { let y = Infinity; const hs = buildHouse(THREE, p, (f) => themeFor(p, f)); hs.updateMatrixWorld(true); hs.traverse((o) => { if (o.userData.layer === 'SCALA_ESTERNA') y = Math.min(y, new THREE.Box3().setFromObject(o).min.y); }); return y; };
+const stairHouse = (extra = {}) => ({ ...proj(extra), floors: [{ id: 'h', level: 1, plan: { ...house, extStair: { at: [10, 4], out: [1, 0], w: 1, mode: 'straight', flip: false, rise: 3, side: 'E', t: 0.5 } }, meta: { style: 'modern' } }, { id: 'g', level: 'out', plan: garden, meta: { type: 'garden' } }] });
+assert.ok(Math.abs(lowest(stairHouse())) < 0.02, 'la scala arriva a terra');
+assert.ok(Math.abs(lowest(stairHouse({ gardenOffset: { a: 0, d: 0, h: -1 } })) + 1) < 0.02, 'giardino più basso: la scala scende fino a lui');
 // stesso spostamento su tutte le facciate: scena 3D e riferimento dei render coincidono
 for (const door of [{ x: 4, y: 0, w: 1, rot: 0, entrance: true }, { x: 9.8, y: 3, w: 1, rot: 90, entrance: true }, { x: 0, y: 3, w: 1, rot: 90, entrance: true }]) {
   const mk = (extra = {}) => ({ ...proj(extra), floors: [{ id: 'h', level: 0, plan: { ...house, doors: [door] }, meta: { style: 'modern' } }, { id: 'g', level: 'out', plan: garden, meta: { type: 'garden' } }] });

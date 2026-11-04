@@ -936,7 +936,10 @@ export function buildHouse(THREE, project, themeFor, { lowWalls = false, spread 
     // le scale partono dal piano e salgono al successivo: sul piano di sopra non si disegnano
     const up = (byFloor[f.id] || []).filter((st) => st.engine ? st.upTo : st.role === 'up');
     const voids = f.level === lowest ? [] : floorVoids(byFloor[f.id]);
-    const g = buildScene(THREE, f.plan, themeFor(f), { lowWalls, stairs: up, openings: voids, facade: facadeId, timber: false });
+    // la scala esterna arriva sul giardino, alla sua quota (anche spostato in alto o in basso)
+    const hasGarden = project.floors.some((x) => x.level === 'out' && x.plan?.rooms?.length);
+    const plan = f.plan.extStair && hasGarden ? { ...f.plan, extStair: { ...f.plan.extStair, rise: Math.max(0.3, quota(f.level) - gardenOffset(project).h) } } : f.plan;
+    const g = buildScene(THREE, plan, themeFor(f), { lowWalls, stairs: up, openings: voids, facade: facadeId, timber: false });
     const y = quota(f.level);
     g.position.y = y;
     g.userData.floor = { id: f.id, name: f.name, level: f.level };
@@ -1101,6 +1104,7 @@ function placeGarden(THREE, floor, { facade, W, L }, theme, drop, off = { a: 0, 
   g.position.set(place[1], 0, place[2]);
   g.translateX(off.a);   // spostamento a mano: lungo la facciata e verso l'esterno, nel riferimento del giardino
   g.translateZ(off.d);
+  g.position.y += off.h;   // quota del giardino: la scala esterna lo raggiunge
   g.userData.floor = { id: floor.id, name: floor.name, level: 'out' };
   return g;
 }
