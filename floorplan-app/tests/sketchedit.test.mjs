@@ -76,3 +76,14 @@ assert.equal(bal.plan.rooms.length, plan.rooms.length + 1);
 assert.ok(bal.plan.dimensions.length > plan.dimensions.length, 'la pianta cresce col balcone');
 assert.ok(addBalcony(plan, [5.1, 2]).error, 'non sul muro tra due locali');
 console.log('sketchedit ok');
+
+// il balcone non ha muri propri: nessuna polilinea dei muri lo contorna (solo il parapetto)
+{
+  const withBal = addBalcony(plan, [3, 4.1]);
+  const br2 = withBal.plan.rooms.find((r) => r.id === withBal.room);
+  const ys = withBal.plan.wallLines.flatMap((l) => l.pts.map((q) => q[1]));
+  assert.ok(Math.max(...ys) < Math.max(...br2.poly.map((q) => q[1])) - 0.5, 'nessun muro attorno al balcone');
+  const skBal = sketchToPlan([{ kind: 'living', name: 'S', poly: rect(0, 0, 5, 4) }, { kind: 'balcony', name: 'Balcone', poly: rect(0, 4, 5, 1.5) }]);
+  assert.ok(skBal.wallLines.every((l) => l.pts.every((q) => q[1] < 4.3)), 'anche disegnato a mano nello schizzo');
+}
+console.log('sketchedit balcone ok');

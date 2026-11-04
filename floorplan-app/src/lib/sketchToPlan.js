@@ -755,7 +755,7 @@ export function sketchToPlan(shapes, { style = 'modern', peninsula = false } = {
     notches: [],
     rooms,
     walls: [],
-    wallLines: cutWalls(rooms.map((r) => r.poly), [...doors, ...windows].map((o) => o.chord)),
+    wallLines: cutWalls(rooms.filter((r) => r.kind !== 'balcony').map((r) => r.poly), [...doors, ...windows].map((o) => o.chord)),   // il balcone ha solo il parapetto
     doors: doors.map(({ centre: _c, chord: _ch, ...d }) => d),
     windows: windows.map(({ chord: _ch, ...w }) => w),
     furniture,

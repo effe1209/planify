@@ -1,69 +1,301 @@
 <div align="center">
-  <img src="floorplan-app/public/planify-logo.png" alt="Planify Logo" width="120" height="120" />
 
-  <h1>Planify AI 📐</h1>
-  
-  <p>
-    <strong>Un generatore automatico di planimetrie intelligenti, completo di muri, porte, finestre e arredi.</strong>
-  </p>
+<img src="floorplan-app/public/planify-logo.png" alt="Planify" width="110" height="110" />
 
-  <p>
-    <a href="#caratteristiche-principali">Caratteristiche</a> •
-    <a href="#come-funziona">Come Funziona</a> •
-    <a href="#installazione-e-avvio">Installazione</a> •
-    <a href="#tecnologie-usate">Tecnologie</a>
-  </p>
+# Planify
+
+**Dalla prima idea alla tavola tecnica: progetta la casa in pianta, in 3D e in render, nel browser.**
+
+Genera planimetrie complete di muri, porte, finestre e arredi, o disegnale a mano.
+Poi modificale, guardale in 3D, rendile fotorealistiche, aggiungi impianti, giardino e scala esterna ed esporta le tavole in scala.
+
+[![Provalo online](https://img.shields.io/badge/Prova%20Planify-planify--easy.vercel.app-d1f462?style=for-the-badge&labelColor=14181f)](https://planify-easy.vercel.app)
+
+![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white&labelColor=14181f)
+![Three.js](https://img.shields.io/badge/Three.js-3D%20e%20render-white?logo=threedotjs&logoColor=white&labelColor=14181f)
+![Python](https://img.shields.io/badge/Python-motore%20FastAPI-3776ab?logo=python&logoColor=white&labelColor=14181f)
+![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white&labelColor=14181f)
+
+[Galleria](#galleria) ·
+[Funzioni](#funzioni) ·
+[Come funziona](#come-funziona) ·
+[Avvio rapido](#avvio-rapido) ·
+[Test](#test) ·
+[Documentazione](#documentazione)
+
+<br />
+
+<img src="docs/media/giro-3d.gif" alt="Giro attorno alla casa in 3D" width="760" />
+
+<sub>Un monolocale importato da un DXF: pianta, 3D e render escono dallo stesso progetto. <a href="docs/media/giro-3d.mp4">Guarda il video</a></sub>
+
 </div>
 
 ---
 
-## 💡 Cos'è Planify?
+## 💡 Cos'è Planify
 
-**Planify** è un'applicazione full-stack progettata per generare planimetrie architettoniche in modo completamente automatico partendo da pochi semplici parametri (dimensioni, numero di locali, stile e forma dell'edificio). 
+Planify è un'applicazione web per progettare un edificio in modo rapido ma preciso. Il progetto nasce da un **motore in Python** che calcola layout, muri, aperture e arredi, e da un'**interfaccia React** che li mostra in pianta tecnica, in 3D navigabile e in render, e li lascia modificare con il mouse.
 
-Il cuore del sistema è un **motore algoritmico in Python puro** (zero dipendenze) capace di calcolare layout complessi, tracciare muri, inserire aperture e arredare le stanze in modo logico e coerente. Il tutto è controllabile tramite una **moderna e reattiva interfaccia utente in React**, che permette di visualizzare i risultati in vettoriale, ispezionare le stanze ed esportare il progetto.
+Puoi partire da quattro strade e passare dall'una all'altra:
 
-## ✨ Caratteristiche Principali
+| Parti da… | Cosa succede |
+|---|---|
+| 🎲 **Pochi parametri** | Dimensioni, numero di locali, stile e forma: il motore genera più varianti e sceglie la migliore. |
+| ✏️ **Un disegno a mano** | Stanze a rettangolo o a forma libera (tonde, oblique…), con muri, porte e finestre calcolati. |
+| 📥 **Un file** | DXF di studio, PDF esportato da un CAD o planimetria catastale scansionata. |
+| 🏠 **Un progetto già fatto** | Aprilo da un link di sola lettura o dal cloud e continua da lì. |
 
-* 🏗️ **Sagome Dinamiche:** Genera non solo piante rettangolari, ma anche sagome a **L, U, T** o **scalari**.
-* 🛋️ **Arredo Intelligente:** Posizionamento algoritmico dell'arredamento che rispetta gli ingombri, non blocca le porte e considera la posizione delle finestre.
-* 🚪 **Connettività Spaziale:** Le porte vengono posizionate solo su muri condivisi e il motore garantisce che ogni stanza generata sia sempre raggiungibile.
-* 🎨 **Visualizzazione Interattiva:**
-  * Toggle dei livelli (nascondi/mostra arredi, quote, etichette e griglia).
-  * Zoom, pan e tooltips per le stanze.
-  * Supporto nativo per **Tema Chiaro** e **Tema Scuro**.
-* 💾 **Esportazione Avanzata:** Scarica la tua planimetria in formato **SVG** (vettoriale di alta qualità), **PNG** (raster) o **JSON** (dati grezzi della pianta).
-* ✏️ **Schizzo a mano libera:** disegna le stanze a rettangolo o a mano libera (tonde, a ferro di cavallo, oblique): la forma viene rispettata, i bordi si agganciano a griglia e alle stanze vicine e le porte vengono messe solo sui muri in comune, in modo che ogni stanza sia raggiungibile. Funziona anche senza backend.
-* 🛋️ **Progettata come da un interior designer:** il motore genera più varianti e sceglie la migliore per luce naturale (finestre ≥ 1/8 del pavimento), circolazione compatta, proporzioni, privacy (camere raggiungibili senza attraversare il soggiorno) e arredo completo; la pianta mostra il punteggio con punti di forza e cosa migliorare.
-* 🏠 **Costruita sui tuoi bisogni:** camere matrimoniali e singole, bagni, cucina a vista o separata, penisola, ingresso separato, suite padronale con bagno privato e cabina armadio, studio, ripostiglio/lavanderia.
-* ⭐ **Cronologia salvata:** le planimetrie (e le modifiche fatte) restano nella cronologia; con la stella le salvi in modo permanente. Con il consenso, la cronologia resta sul dispositivo tra una visita e l'altra.
-* 🍪 **Privacy:** banner di consenso e informativa su cookie e archiviazione locale; statistiche anonime attive solo su consenso.
-* 🎲 **Riproducibilità:** Grazie al sistema di *Seed*, puoi bloccare una variante che ti piace o generare infinite disposizioni diverse a parità di dimensioni.
+---
 
-## 🚀 Come Funziona
+<a id="galleria"></a>
 
-Il sistema è diviso in due componenti principali:
+## 🖼️ Galleria
 
-1. **Il Motore Backend (FastAPI + Python):** Riceve le richieste e avvia una pipeline di generazione in 5 step:
-   * **Layout:** Suddivide lo spazio disponibile in stanze basandosi sulla tipologia (Appartamento, Ufficio, Open Space).
-   * **Muri:** Calcola lo spessore e genera i perimetri in automatico dai confini delle zone.
-   * **Porte:** Analizza le adiacenze e "buca" i muri per connettere gli spazi.
-   * **Finestre:** Vengono posizionate in modo intelligente sui muri esterni.
-   * **Arredi:** Una classe `Placer` prova a posizionare letti, divani, cucine e sanitari evitando collisioni.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/pianta-2d.png" alt="Pianta quotata" /><br /><sub><b>Pianta quotata</b> · arredata, con misure, nord, scala grafica e cartiglio.</sub></td>
+    <td width="50%"><img src="docs/media/render-tre-quarti.jpg" alt="Render a tre quarti" /><br /><sub><b>Render a tre quarti</b> · tetto, materiali veri, ombre e luce naturale.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/render-pianta-3d.jpg" alt="Pianta 3D dall'alto" /><br /><sub><b>Pianta 3D dall'alto</b> · come una planimetria, ma con luce, ombre e arredi in volume.</sub></td>
+    <td width="50%"><img src="docs/media/render-interno-camera.jpg" alt="Render interno" /><br /><sub><b>Render interno</b> · inquadrature automatiche a 1,6 m dentro ogni locale.</sub></td>
+  </tr>
+</table>
 
-2. **Il Frontend (React):** Offre un pannello di controllo per configurare larghezza, lunghezza e stile. Invia i dati al backend, riceve un JSON strutturato e lo disegna meticolosamente tramite SVG, garantendo una pulizia visiva da disegno tecnico (con tanto di quote e cartiglio).
+---
 
-## 🛠️ Installazione e Avvio
+<a id="funzioni"></a>
 
-Il progetto richiede l'avvio separato del backend (API) e del frontend (UI).
+## ✨ Cosa sa fare
 
-### 1. Avvio del Backend (Motore Python)
+### 🎲 Genera la pianta
 
-Assicurati di avere Python installato sul tuo sistema, poi esegui:
+- **Tipologie:** appartamento, loft con soppalco, ufficio, camera d'albergo, garage, giardino e case a più piani.
+- **Sagome:** rettangolare, a **L, U, T**, scalare, e facciate curve.
+- **Progettata come da un interior designer:** il motore prova più schemi e sceglie quello col punteggio migliore (luce naturale, circolazione, privacy, proporzioni, arredo completo) e mostra punti di forza e cosa migliorare.
+- **Arredo sensato:** ogni mobile rispetta ingombri e porte, tiene conto delle finestre, e ci sono **mensole, vasi, libri e cornici** al posto giusto.
+- **Vetrate panoramiche** a tutta altezza dove c'è muro libero e **vetrate scorrevoli** verso il balcone.
+- **Seed:** blocchi la variante che ti piace o ne generi infinite a parità di misure.
+
+### ✏️ Disegna a mano e modifica in diretta
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/schizzo-pianta.png" alt="Pianta disegnata a mano" /></td>
+    <td width="50%"><img src="docs/media/schizzo-3d-alto.jpg" alt="Lo stesso schizzo in 3D" /></td>
+  </tr>
+</table>
+
+Il disegno a mano non è una scorciatoia: **la pianta resta modificabile**.
+
+- Trascini **vertici e lati** e il locale cambia forma; i locali vicini seguono il muro in comune e le porte restano attaccate.
+- Sposti **un locale intero** con i suoi arredi.
+- Aggiungi **porte, finestre, vetrate panoramiche, vetrate scorrevoli e balconi** cliccando sul muro, e le trasformi poi dal pannello (tipo, larghezza, verso).
+- Disegni **più piani a mano**: quello vicino compare come guida tratteggiata e puoi partire dai suoi locali.
+- Un contorno che si incrocia viene rifiutato, e tutto si annulla con Ctrl/Cmd+Z.
+
+### 🏠 Casa su più piani, giardino e scala esterna
+
+<div align="center">
+  <img src="docs/media/giro-casa-giardino.gif" alt="Casa rialzata con giardino e scala esterna" width="640" /><br />
+  <sub>Casa al primo piano su pilastri, scala esterna che scende nel giardino. <a href="docs/media/giro-casa-giardino.mp4">Guarda il video</a></sub>
+</div>
+
+<br />
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/render-casa-giardino-alto.jpg" alt="Casa e giardino dall'alto" /></td>
+    <td width="50%"><img src="docs/media/render-casa-scala-giardino.jpg" alt="Scala esterna e pianerottolo" /></td>
+  </tr>
+</table>
+
+- **Livello del piano** cambiabile in un clic: la casa può stare al primo piano sopra il giardino.
+- **Scala esterna al giardino** con pianerottolo davanti alla porta, rampa verso il giardino o lungo la facciata, larghezza e dislivello regolabili.
+- **Sostegno sotto la casa rialzata:** pilastri, basamento pieno o niente.
+- **Il giardino segue la scala** e si sposta come vuoi (lungo la facciata, in distanza e in quota) con scatto a 25 cm e aggancio a centro casa, bordi, scala e portoncino; **cancello carrabile, cancellino e camminamento** si spostano a parte.
+- Garage interrato con rampa, **balconi** con parapetto di vetro e terrazzi.
+
+### 🧊 3D, render e video
+
+- **3D navigabile** in tempo reale con **tetto acceso o spento**, muri bassi, vista esplosa, sezioni e livelli del loft.
+- **Render fotorealistico** con luce del giorno, tramonto o notte; sfondo bianco, cielo o contesto; inquadrature automatiche (tre quarti, fronte dal lato del portoncino, pianta dall'alto, interni e giardino).
+- **Tour 360°** per ogni locale e video del giro della casa; **path tracing** per le immagini più curate.
+- **Materiali veri** (texture PBR CC0): facciata, tetto, pareti e pavimenti a scelta, **struttura in legno** con pilastri, travi a vista, portico e travetti sotto la gronda.
+- **Colore e materiale per ogni locale e per ogni muro**, oltre a sei stili di interni.
+- Esporta in **GLB** (Blender), **DXF 3D** e **IFC**.
+
+<div align="center">
+  <img src="docs/media/render-interno-balcone.jpg" alt="Il balcone visto da dentro" width="560" /><br />
+  <sub>Il balcone con il parapetto di vetro, visto dall'interno.</sub>
+</div>
+
+### ⚡ Impianti, norme e computo
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/tavola-elettrica.png" alt="Tavola dell'impianto elettrico" /></td>
+    <td width="50%">
+      <ul>
+        <li><b>Impianto elettrico</b> secondo i livelli CEI 64-8: punti luce, comandi, prese, circuiti e quadro, con una tavola a parte. I punti luce si <b>trascinano</b> e restano dove li metti, anche in 3D.</li>
+        <li><b>Impianto idraulico</b> con tubazioni, scarichi e collettore.</li>
+        <li><b>Allarme:</b> sensori e verifica della copertura.</li>
+        <li><b>Verifica normativa</b> (rapporti aeroilluminanti, altezze, scale).</li>
+        <li><b>Computo e preventivo</b> dei materiali, con una <b>libreria</b> caricabile da CSV.</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+### 📐 Tavole in scala
+
+<table>
+  <tr>
+    <td width="60%"><img src="docs/media/tavola-tecnica.png" alt="Tavola tecnica A3 con cartiglio" /></td>
+    <td width="40%">
+      <ul>
+        <li><b>PDF</b> (un foglio per piano) o <b>DXF</b> con cornice e cartiglio, a scala vera (1:50, 1:100…).</li>
+        <li><b>Modelli salvabili</b> nel progetto e nel browser: formato, orientamento, margini, cornice, spessore delle linee, bianco e nero, carattere.</li>
+        <li><b>Impaginazione:</b> colonna a destra o a sinistra, cartiglio in alto o in basso, nord, elenco dei locali e abaco dei serramenti.</li>
+        <li>Cartiglio con studio, committente, progettista, pratica, titolo e note.</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+### 🔁 Importa, condividi, salva
+
+| | |
+|---|---|
+| **Importa** | DXF di studio (con scelta dei layer), PDF esportati da un CAD e planimetrie catastali scansionate (riconoscimento con OpenCV). |
+| **Esporta** | PNG, SVG, JSON, PDF, DXF, GLB, IFC. |
+| **Condividi** | Link di sola lettura: il progetto sta nell'indirizzo e non passa da nessun server. |
+| **Salva** | Cronologia nel browser (con la stella un progetto non si cancella mai) e sincronizzazione nel cloud con Supabase. |
+| **Privacy** | Banner di consenso; statistiche anonime solo se le accetti. |
+
+---
+
+<a id="come-funziona"></a>
+
+## 🧠 Come funziona
+
+```mermaid
+flowchart LR
+    A["🎲 Parametri<br/>🖊️ Schizzo<br/>📥 DXF · PDF · catasto"] --> B["🐍 Motore Python<br/>FastAPI"]
+    A --> C["🌐 Schizzo nel browser<br/>(funziona anche offline)"]
+    B --> D[("Pianta JSON<br/>muri · aperture · arredi")]
+    C --> D
+    D --> E["⚛️ React<br/>pianta SVG e modifica"]
+    D --> F["🧊 Three.js<br/>3D e render"]
+    D --> G["📄 Tavole PDF · DXF"]
+    D --> H["⚡ Impianti · norme · computo"]
+```
+
+**Il motore (Python).** Una pipeline in cinque passi:
+
+1. **Layout:** divide il lotto in locali secondo la tipologia.
+2. **Muri:** li ricava dai confini delle zone.
+3. **Porte:** analizza le adiacenze e garantisce che ogni locale sia raggiungibile.
+4. **Finestre e vetrate:** sui muri esterni, scegliendo dove una vetrata panoramica ci sta.
+5. **Arredi:** una classe `Placer` posiziona letti, divani, cucine, sanitari e decori senza collisioni.
+
+Genera più varianti e ne sceglie una col punteggio di progetto più alto; lo stesso seed dà la stessa pianta.
+
+**L'interfaccia (React).** Disegna la pianta in SVG vettoriale (quote, cartiglio, temi chiaro e scuro), costruisce la scena Three.js dallo stesso JSON, e ricalcola impianti, norme e computo a ogni modifica.
+
+---
+
+<a id="avvio-rapido"></a>
+
+## 🚀 Avvio rapido
+
+Servono Python 3.11+ e Node.js. Backend e interfaccia si avviano separatamente.
+
+**1. Motore (API)**
 
 ```bash
-# Installa le dipendenze (FastAPI e Uvicorn)
-pip install fastapi uvicorn pydantic
-
-# Avvia il server di sviluppo
+pip install -r requirements.txt
 uvicorn main:app --reload
+```
+
+L'API risponde su `http://localhost:8000` (controllo: `/health`).
+
+**2. Interfaccia**
+
+```bash
+cd floorplan-app
+npm install
+npm run dev
+```
+
+Apri `http://localhost:5173` e, in **Connessione**, indica l'indirizzo del motore (oppure imposta `VITE_BACKEND_URL` in un file `.env`). Senza motore il disegno a mano funziona comunque.
+
+**Variabili d'ambiente (facoltative)**
+
+| Variabile | A cosa serve |
+|---|---|
+| `VITE_BACKEND_URL` | Indirizzo del motore Python. |
+| `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY` | Accesso e sincronizzazione nel cloud. |
+
+**Docker** · il `Dockerfile` impacchetta il motore e funziona su Hugging Face Spaces e su Render. L'interfaccia è pronta per Vercel (`floorplan-app/vercel.json`).
+
+---
+
+<a id="test"></a>
+
+## 🧪 Test
+
+```bash
+# Interfaccia e logica (Node)
+cd floorplan-app
+for f in tests/*.test.mjs; do node --import ./tests/loader.mjs "$f" || echo "FALLITO $f"; done
+
+# Motore (Python)
+python3 tests/test_interior.py        # oppure: python3 -m pytest tests
+
+# Interfaccia nel browser (Playwright)
+npm run test:ui
+```
+
+---
+
+## 🗂️ Struttura del progetto
+
+```text
+planify/
+├─ main.py                 API FastAPI
+├─ planner.py              motore: layout, muri, porte, finestre, arredi, giardino, garage
+├─ dxf_import.py · pdf_import.py · catasto_import.py · curves.py
+├─ floorplan-app/          interfaccia React + Vite
+│  ├─ src/components/      pianta SVG, editor, pannelli, 3D
+│  ├─ src/lib/             scena 3D, render, impianti, tavole, schizzo, esportazioni
+│  ├─ tests/               test della logica (Node)
+│  └─ e2e/                 test dell'interfaccia (Playwright)
+├─ tests/                  test del motore (Python)
+├─ docs/                   piani di lavoro e specifiche
+│  └─ media/               immagini e video di questo README
+└─ supabase/               modelli email e configurazione cloud
+```
+
+---
+
+<a id="documentazione"></a>
+
+## 📚 Documentazione
+
+Le specifiche e i piani di lavoro stanno in [`docs/`](docs):
+
+- [Funzioni: nord, sezioni, tetto, touch](docs/PIANO_FUNZIONI.md)
+- [Multipiano, scale e giardino](docs/PIANO_MULTIPIANO.md)
+- [Stili 3D e materiali](docs/PIANO_STILI_3D.md)
+- [Impianti e 3D](docs/PIANO_IMPIANTI_3D.md)
+- [Regole da interior designer](docs/PIANO_INTERIOR.md)
+- [Normativa](docs/PIANO_NORMATIVA.md)
+- [Copertura e allarme](docs/PIANO_COPERTURA.md)
+
+---
+
+<div align="center">
+  <sub>Texture PBR di <a href="https://ambientcg.com">ambientCG</a> (CC0) · Icone <a href="https://lucide.dev">Lucide</a> · Fatto con cura per chi progetta casa.</sub>
+</div>

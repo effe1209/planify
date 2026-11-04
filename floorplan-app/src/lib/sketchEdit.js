@@ -45,7 +45,8 @@ function place(plan, a, b, t, w, kind, old = null, type = undefined) {
   };
 }
 
-const wallLinesFor = (plan, rooms, doors, windows) => cutWalls(rooms.map((r) => r.poly), [...doors, ...windows].map((o) => chordOf(plan, o)));
+// il balcone non ha muri propri (solo il parapetto): il muro verso la casa è già nel contorno del locale accanto
+const wallLinesFor = (plan, rooms, doors, windows) => cutWalls(rooms.filter((r) => r.kind !== 'balcony').map((r) => r.poly), [...doors, ...windows].map((o) => chordOf(plan, o)));
 
 function selfCrosses(poly) {
   const e = G.edges(poly);

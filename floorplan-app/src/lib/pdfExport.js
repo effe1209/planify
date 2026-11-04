@@ -519,8 +519,8 @@ async function technicalPage(doc, floor, codes, extra, ctx) {
   doc.setFont(FONT, 'bold').setFontSize(8).setTextColor(ACC).text('N', cx, 14.8 + sh, { align: 'center' });
   // scala grafica alla scala di stampa: 0-1-2-5 m, o più corta se la colonna non basta (1:50 e 1:20)
   const mm = 1000 / fit.n;
-  const bx = x0 + 17;
-  const marks = 5 * mm <= LEGEND_W - 22 ? [0, 1, 2, 5] : 2 * mm <= LEGEND_W - 22 ? [0, 1, 2] : [0, 0.5, 1];
+  const bx = x0 + 22;   // a destra della rosa dei venti
+  const marks = 5 * mm <= LEGEND_W - 27 ? [0, 1, 2, 5] : 2 * mm <= LEGEND_W - 27 ? [0, 1, 2] : [0, 0.5, 1];
   doc.setFont(FONT, 'normal').setFontSize(6.5).setTextColor(ACC);
   marks.slice(1).forEach((m1, i) => {
     doc.setFillColor(i % 2 ? '#ffffff' : ACC).setDrawColor(ACC).setLineWidth(0.2).rect(bx + marks[i] * mm, 22 + sh, (m1 - marks[i]) * mm, 2, 'FD');
