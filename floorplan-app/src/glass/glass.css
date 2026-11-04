@@ -123,6 +123,12 @@
 .pf-dialog .lg-button.pf-gb.is-accent { color: var(--accent-text); font-weight: 600; }
 .pf-app .lg-button.pf-gb.is-accent:disabled, .pf-app .lg-button.pf-gb.pf-tool-accent:disabled { opacity: 0.45; }
 .pf-app .lg-button.pf-gb.pf-btn-add { width: 100%; min-height: 34px; font-size: 13px; font-weight: 600; color: var(--accent-ink, #172100); }
+/* «Modifica pianta» attiva: pieno nel colore dell'app con testo scuro, ben distinto dal vetro (il grigio di selezione sbiadiva il testo) */
+.pf-app .lg-button.pf-gb.pf-editbtn.is-on, .pf-app .lg-button.pf-gb.pf-editbtn[aria-pressed="true"] {
+  background-color: var(--accent); color: var(--accent-ink, #172100); font-weight: 700;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.pf-app .lg-button.pf-gb.pf-editbtn.is-on:hover, .pf-app .lg-button.pf-gb.pf-editbtn[aria-pressed="true"]:hover { background-color: var(--accent-hover, var(--accent)); }
 .pf-app .lg-button.pf-gb[data-variant="filled"] { --lg-button-fill: var(--accent); color: var(--accent-ink, #172100); }
 .pf-app .lg-button.pf-gb.pf-mini { min-height: 24px; padding: 3px 9px; font-size: 11px; }
 .pf-app .lg-button.pf-gb.pf-btn-icon, .pf-app .lg-button.pf-gb.pf-minibtn.is-icon { width: 26px; min-height: 26px; padding: 0; }
