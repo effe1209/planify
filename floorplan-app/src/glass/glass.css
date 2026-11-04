@@ -32,20 +32,29 @@
   --pf-glass-strong: rgba(40, 40, 46, 0.78);
   --pf-rim: rgba(255, 255, 255, 0.16);
 }
-.pf-app .pf-top,
-.pf-app .pf-rail,
-.pf-app .pf-inspector {
+.pf-app .pf-top {
   background: var(--pf-glass);
   -webkit-backdrop-filter: var(--pf-blur);
   backdrop-filter: var(--pf-blur);
+  box-shadow: var(--shadow-float), inset 0 1px 0 var(--pf-rim), inset 0 0 0 0.5px var(--pf-rim);
+}
+/* Prestazioni: la sfocatura si ricalcola a ogni fotogramma di ciò che sta dietro. I pannelli laterali stanno accanto alla pianta, non sopra:
+   dietro hanno solo lo sfondo, quindi vetro senza sfocatura (costo zero). La sfocatura resta sulla barra in alto e sulle barre che galleggiano sulla pianta. */
+.pf-app .pf-rail,
+.pf-app .pf-inspector {
+  background: linear-gradient(180deg, var(--pf-glass-strong), var(--pf-glass));
   box-shadow: var(--shadow-float), inset 0 1px 0 var(--pf-rim), inset 0 0 0 0.5px var(--pf-rim);
 }
 .pf-app .pf-sec {
   background: var(--pf-glass-strong);
   border: 1px solid var(--hairline);
   box-shadow: inset 0 1px 0 var(--pf-rim);
-  backdrop-filter: blur(10px) saturate(1.4);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+}
+/* i pulsanti e i controlli dentro i pannelli non sfocano nulla: restano il riempimento e il bordo di vetro */
+.pf-app .pf-rail .lg-glass, .pf-app .pf-inspector .lg-glass, .pf-dialog .lg-glass, .pf-cookie-banner .lg-glass,
+.pf-app .pf-rail [class*="lg-"], .pf-app .pf-inspector [class*="lg-"], .pf-dialog [class*="lg-"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .pf-dialog {
   background: var(--pf-glass-strong, rgba(255, 255, 255, 0.78));
@@ -109,6 +118,10 @@
 }
 .pf-app .lg-button.pf-gb.pf-sq { width: 30px; padding: 0; }
 .pf-app .lg-button.pf-gb.is-danger { color: var(--lg-destructive); }
+/* voci «accent»: testo nel colore dell'app, leggibile sul vetro in tema chiaro e scuro */
+.pf-app .lg-button.pf-gb.is-accent, .pf-app .lg-button.pf-gb.pf-tool-accent,
+.pf-dialog .lg-button.pf-gb.is-accent { color: var(--accent-text); font-weight: 600; }
+.pf-app .lg-button.pf-gb.is-accent:disabled, .pf-app .lg-button.pf-gb.pf-tool-accent:disabled { opacity: 0.45; }
 .pf-app .lg-button.pf-gb.pf-btn-add { width: 100%; min-height: 34px; font-size: 13px; font-weight: 600; color: var(--accent-ink, #172100); }
 .pf-app .lg-button.pf-gb[data-variant="filled"] { --lg-button-fill: var(--accent); color: var(--accent-ink, #172100); }
 .pf-app .lg-button.pf-gb.pf-mini { min-height: 24px; padding: 3px 9px; font-size: 11px; }

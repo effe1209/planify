@@ -9,9 +9,10 @@ export { Glass, Menu, SearchField, SegmentedControl, TabBar };
 
 const cx = (...a) => a.filter(Boolean).join(' ');
 
-/* Pulsante: «filled» per le azioni principali (accent), rosso per quelle che eliminano; il resto è vetro chiaro. */
+/* Pulsante: «filled» solo per le azioni principali (pf-primary, pf-btn-add), rosso per quelle che eliminano; il resto è vetro chiaro.
+   Le voci «accent» delle barre (is-accent, pf-tool-accent) restano vetro con il testo nel colore dell'app, come nel disegno originale. */
 export const GButton = forwardRef(function GButton({ className = '', ...rest }, ref) {
-  const filled = /\b(is-accent|pf-primary|pf-btn-add|pf-tool-accent)\b/.test(className);
+  const filled = /\b(pf-primary|pf-btn-add)\b/.test(className);
   const destructive = /\bis-danger\b/.test(className);
   return <Button ref={ref} variant={filled ? 'filled' : 'glass'} destructive={destructive} className={cx('pf-gb', className)} {...rest} />;
 });
