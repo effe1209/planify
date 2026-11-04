@@ -169,3 +169,64 @@
 @media (prefers-reduced-transparency: reduce) {
   .pf-app .pf-top, .pf-app .pf-rail, .pf-app .pf-inspector, .pf-app .pf-sec, .pf-dialog { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-panel); }
 }
+
+/* ── Progetti salvati: schede, cestino, stella, nuvola, «Svuota», elenco cloud ──────────────────────────────────────────────
+   Vetro senza sfocatura (i pannelli laterali non sfocano): riempimento chiaro, bordo interno e un'ombra corta; si animano solo
+   trasformazione e opacità, che il browser fa sulla scheda grafica senza ridisegnare. */
+.pf-app .pf-thumb {
+  position: relative; contain: layout paint; padding: 0; border: 0; border-radius: 18px;
+  background: var(--pf-glass-strong); box-shadow: inset 0 0 0 0.5px var(--pf-rim), 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: transform 160ms var(--ease-out, ease-out);
+}
+.pf-app .pf-thumb:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 0.5px var(--pf-rim), 0 3px 10px rgba(0, 0, 0, 0.14); }
+.pf-app .pf-thumb.is-on { box-shadow: inset 0 0 0 1.5px var(--accent), 0 2px 8px rgba(0, 0, 0, 0.12); }
+.pf-app .pf-thumb-open { padding: 8px 8px 6px; border-radius: 18px; }
+.pf-app .pf-thumb-open > svg { border-radius: 12px; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12); }
+.pf-app .pf-thumb-title { font-size: 11.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding: 0 2px 2px; }
+
+/* pulsanti tondi sopra il foglio bianco: bianco pieno con icona scura (contrasto alto in entrambi i temi), nessuna sfocatura */
+.pf-app .pf-thumb-actions { top: 10px; right: 10px; gap: 6px; }
+.pf-app .pf-thumb-btn {
+  width: 28px; height: 28px; border: 0; color: #2a2a2e; background: rgba(255, 255, 255, 0.97);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 140ms var(--ease-out, ease-out), background-color 100ms linear, color 100ms linear;
+}
+.pf-app .pf-thumb-btn:hover { transform: scale(1.1); background: #fff; }
+.pf-app .pf-thumb-btn:active { transform: scale(0.92); }
+.pf-app .pf-thumb-btn.is-star.is-on { background: #ffcc00; color: #2a2a2e; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(255, 190, 0, 0.55); }
+.pf-app .pf-thumb-btn.is-delete:hover { background: #ff3b30; color: #fff; }
+.pf-app .pf-thumb-actions .is-delete { transition: opacity 140ms linear, transform 140ms var(--ease-out, ease-out), background-color 100ms linear; }
+
+/* nuvola: etichetta in vetro in basso a sinistra sulla miniatura (prima era una piccola icona nel titolo) */
+.pf-app .pf-thumb-cloud {
+  position: absolute; top: 10px; left: 10px; z-index: 2; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 999px; color: #0a6cff; background: rgba(255, 255, 255, 0.97);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.2); pointer-events: none;
+}
+
+/* «Svuota»: pillola rossa in vetro, come le azioni che eliminano */
+.pf-app .pf-clear-btn {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 11px; border: 0; border-radius: 999px;
+  font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; color: var(--lg-destructive, #ff383c);
+  background: color-mix(in srgb, var(--lg-destructive, #ff383c) 12%, transparent);
+  transition: background-color 100ms linear, transform 120ms var(--ease-out, ease-out);
+}
+.pf-app .pf-clear-btn:hover { background: color-mix(in srgb, var(--lg-destructive, #ff383c) 22%, transparent); }
+.pf-app .pf-clear-btn:active { transform: scale(0.95); }
+
+/* elenco «Sul cloud»: righe in vetro con nuvola, nome, data e «Apri» */
+.pf-app .pf-cloud-list { gap: 6px; }
+.pf-app .pf-cloud-list li {
+  gap: 10px; padding: 8px 8px 8px 12px; border-radius: 14px; background: var(--pf-glass-strong);
+  box-shadow: inset 0 0 0 0.5px var(--pf-rim), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.pf-app .pf-cloud-ico { flex: none; color: var(--lg-fill, #0a84ff); }
+.pf-app .pf-cloud-list li > span { font-size: 12.5px; }
+.pf-app .pf-cloud-list em { display: block; font-size: 11px; color: var(--text-muted); }
+.pf-app .pf-open-btn {
+  flex: none; min-height: 28px; padding: 0 14px; border: 0; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--accent-ink, #172100); background: var(--accent); transition: background-color 100ms linear, transform 120ms var(--ease-out, ease-out);
+}
+.pf-app .pf-open-btn:hover { background: var(--accent-hover, var(--accent)); }
+.pf-app .pf-open-btn:active { transform: scale(0.95); }

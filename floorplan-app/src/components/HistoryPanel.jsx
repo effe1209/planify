@@ -4,7 +4,6 @@ import { SHAPE_NAME, TYPE_NAME } from '../constants';
 import { fmtM } from '../lib/utils';
 import PlanSvg from './PlanSvg';
 import { activeFloor } from '../lib/project';
-import { GButton } from '../glass';
 
 const THUMB_LAYERS = { furniture: false, labels: false, dims: false, grid: false };
 
@@ -32,8 +31,9 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
           <button type="button" className="pf-thumb-open" onClick={() => onOpen(e)}
             title={`${entryTitle(e)} · ${fmtM(activeFloor(e).plan.dimensions.width)} × ${fmtM(activeFloor(e).plan.dimensions.length)} m`}>
             <ThumbSvg plan={activeFloor(e).plan} style={activeFloor(e).meta?.style} />
-            <span>{e.cloudId && <Cloud size={11} aria-label="Sul cloud" />} {entryTitle(e)}</span>
+            <span className="pf-thumb-title">{entryTitle(e)}</span>
           </button>
+          {e.cloudId && <span className="pf-thumb-cloud" title="Sincronizzato sul cloud" role="img" aria-label="Sul cloud"><Cloud size={12} strokeWidth={2.3} /></span>}
           <div className="pf-thumb-actions">
             <button type="button" className="pf-thumb-btn is-delete" onClick={() => onRemove(e.id)}
               title="Elimina dalla cronologia" aria-label="Elimina dalla cronologia">
@@ -59,8 +59,9 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
           <ul className="pf-cloud-list">
             {cloudItems.map((it) => (
               <li key={it.id}>
+                <Cloud size={14} strokeWidth={2.2} className="pf-cloud-ico" aria-hidden="true" />
                 <span><strong>{it.name || 'Senza nome'}</strong> <em>{new Date(it.updated_at).toLocaleDateString('it-IT')}</em></span>
-                <GButton type="button" className="pf-mini" onClick={() => onOpenCloud?.(it.id)}>Apri</GButton>
+                <button type="button" className="pf-open-btn" onClick={() => onOpenCloud?.(it.id)}>Apri</button>
               </li>
             ))}
           </ul>
@@ -77,7 +78,7 @@ export default function HistoryPanel({ entries, currentId, persistent, onOpen, o
           <div className="pf-history-head">
             <h2>Cronologia</h2>
             <button type="button" className="pf-clear-btn" onClick={onClear} title="Elimina le planimetrie non salvate">
-              <Trash2 size={13} strokeWidth={2.2} /> Svuota
+              <Trash2 size={12} strokeWidth={2.3} /> Svuota
             </button>
           </div>
           {grid(recent)}
